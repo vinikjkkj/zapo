@@ -1986,8 +1986,9 @@ export class WaCallMediaSession {
     }
 
     /**
-     * The peer device that won a call we placed: the `<relay><participant>` of its `<accept>`,
-     * else the device the accept came from. `pid` is the participant's, as on the wire.
+     * The peer device that won a call we placed: the `<relay><participant>` of its `<accept>`
+     * when it is a device of the called user, else the device the accept came from. `pid` is
+     * the participant's, as on the wire. No pn/lid mapping: another domain falls back too.
      */
     private readAnsweringDevice(
         accept: BinaryNode,
@@ -1997,6 +1998,14 @@ export class WaCallMediaSession {
             for (const participant of getNodeChildrenByTag(relay, 'participant')) {
                 const jid = participant.attrs?.jid
                 if (!jid) continue
+                if (!this.isCalledUser(jid)) {
+                    this.logger.debug('accept participant not of the called user, ignored', {
+                        callId: this.info.callId,
+                        participant: jid,
+                        from: fromJid
+                    })
+                    continue
+                }
                 const pid = Number(participant.attrs.pid)
                 return {
                     jid: this.toAddressedJid(jid),
@@ -2005,6 +2014,18 @@ export class WaCallMediaSession {
             }
         }
         return { jid: fromJid }
+    }
+
+    private isCalledUser(jid: string): boolean {
+        try {
+            return toUserJid(jid) === toUserJid(this.info.peerJid)
+        } catch (err) {
+            this.logger.trace('unreadable jid, not the called user', {
+                jid,
+                message: toError(err).message
+            })
+            return false
+        }
     }
 
     /** The form stanzas are addressed to and arrive from: device 0 bare. */

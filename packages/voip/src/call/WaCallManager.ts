@@ -87,7 +87,9 @@ export class WaCallManager extends EventEmitter {
         this.mediaMode = config.mediaMode ?? 'local'
     }
 
+    /** Throws once the manager is destroyed, even mid-way: no offer goes out after `destroy`. */
     async startCall(options: CallOfferOptions): Promise<string> {
+        this.throwIfDestroyed()
         if (this.activeCallCount >= this.maxConcurrentCalls) {
             throw new Error(`max concurrent calls reached (${this.maxConcurrentCalls})`)
         }
@@ -97,6 +99,7 @@ export class WaCallManager extends EventEmitter {
         const creds = this.deps.authClient.getCurrentCredentials()
         const callCreator = creds?.meLid || creds?.meJid || ''
         const peerJid = await this.resolvePeerLid(options.peerJid)
+        this.throwIfDestroyed()
 
         const info = CallInfo.newOutgoing(callId, peerJid, callCreator, mediaType)
         const callKey = generateCallKey()
@@ -110,6 +113,7 @@ export class WaCallManager extends EventEmitter {
 
             const selfLid = creds?.meLid || creds?.meJid || ''
             await session.initMedia(selfLid, peerJid)
+            this.throwIfDestroyed()
 
             const offerStanza = await buildOfferStanza(
                 this.deps,
@@ -120,8 +124,10 @@ export class WaCallManager extends EventEmitter {
                 options.isVideo ?? false,
                 this.logger.child({ component: 'signaling' })
             )
+            this.throwIfDestroyed()
 
             await this.deps.lowLevelCoordinator.sendNode(offerStanza)
+            this.throwIfDestroyed()
         } catch (err) {
             session.cleanup()
             this.calls.delete(callId)
@@ -500,6 +506,10 @@ export class WaCallManager extends EventEmitter {
         this.calls.clear()
         this.terminatedBeforeOffer.clear()
         this.removeAllListeners()
+    }
+
+    private throwIfDestroyed(): void {
+        if (this.destroyed) throw new Error('call manager destroyed')
     }
 
     /** Whether a terminate already ended this call before its offer was handled; consumes it. */

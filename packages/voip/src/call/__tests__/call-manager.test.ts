@@ -11,6 +11,7 @@ import { routeCallStanza } from '../../signaling/bridge.js'
 import { CallState, EndCallReason, type WaVoipDeps, type WaVoipStores } from '../../types.js'
 import { type CallInfo } from '../call-state.js'
 import { WaCallManager } from '../WaCallManager.js'
+import { WaCallMediaSession } from '../WaCallMediaSession.js'
 
 function createMockDeps(
     credentials: { meJid: string; meLid: string } = {
@@ -814,6 +815,38 @@ test('the caller takes the answering device and its pid from the accept particip
     assert.equal(manager.getCall(callId)?.relayData?.peerPid, 3)
 })
 
+test('an accept participant outside the called user is ignored, pid and all, for the sender', async () => {
+    const answered = '2222222222:88@lid'
+    for (const participant of ['3333333333:5@lid', '5511999990000:88@s.whatsapp.net']) {
+        const { deps, stores } = createMockDeps()
+        const manager = new WaCallManager({
+            deps,
+            stores,
+            maxConcurrentCalls: 1,
+            mediaMode: 'remote'
+        })
+        const callId = await manager.startCall({ peerJid: '2222222222@lid', isVideo: true })
+        await manager.handleCallAck(
+            buildOfferAckNode(callId, ['2222222222:0@lid', '2222222222:87@lid', answered])
+        )
+
+        await routeCallStanza(
+            manager,
+            deps,
+            buildAcceptNode(callId, answered, '1111111111@lid', [acceptRelayNode(participant, '9')])
+        )
+
+        const plan = planOf(manager, callId)
+        assert.equal(plan.ssrcs?.peerAudio, generateSecureSsrc(callId, answered), participant)
+        assert.deepEqual(
+            plan.ssrcs?.peerStreams,
+            streamsOf(callId, answered, WA_VIDEO_CALL_SSRC_SLOTS),
+            participant
+        )
+        assert.equal(manager.getCall(callId)?.relayData?.peerPid, 2, participant)
+    }
+})
+
 test('an accept from the primary keys on it and sends accepted_elsewhere only to its companions', async () => {
     const primary = '2222222222:0@lid'
     const companions = ['2222222222:87@lid', '2222222222:88@lid']
@@ -945,6 +978,48 @@ test('an offer that resumes after the manager is destroyed makes no call and sen
         assert.equal(manager.getCall(callId), null, stage)
         assert.deepEqual(manager.getCalls(), [], stage)
         assert.deepEqual(tagsSentFor(sent, callId), [], stage)
+    }
+})
+
+/** A client torn down while placing a call must not ring the peer for it afterwards. */
+test('a call being placed when the manager is destroyed sends no offer and reports nothing', async (t) => {
+    for (const stage of ['initMedia', 'buildOfferStanza'] as const) {
+        const { deps, stores, sent } = createMockDeps()
+        let release = (): void => {}
+        if (stage === 'buildOfferStanza') {
+            release = holdDeviceSync(deps)
+        } else {
+            const gate = new Promise<void>((resolve) => {
+                release = resolve
+            })
+            const initMedia = WaCallMediaSession.prototype.initMedia
+            t.mock.method(
+                WaCallMediaSession.prototype,
+                'initMedia',
+                async function (this: WaCallMediaSession, selfLid: string, peerJid: string) {
+                    await gate
+                    return initMedia.call(this, selfLid, peerJid)
+                }
+            )
+        }
+        const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
+        const emitted: string[] = []
+        const emit = manager.emit.bind(manager)
+        manager.emit = (event: string | symbol, ...args: unknown[]): boolean => {
+            emitted.push(String(event))
+            return emit(event, ...args)
+        }
+
+        const placing = manager.startCall({ peerJid: '2222222222@lid' })
+        await settle()
+        manager.destroy()
+        release()
+
+        await assert.rejects(placing, /destroyed/, stage)
+        assert.deepEqual(findByInnerTag(sent, 'offer'), [], stage)
+        assert.deepEqual(emitted, [], stage)
+        assert.deepEqual(manager.getCalls(), [], stage)
+        t.mock.restoreAll()
     }
 })
 

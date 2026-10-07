@@ -182,5 +182,5 @@ test('killing the leg the callee sends on recovers by following the peer, not by
 
     const after = recovery(net, killedAt)
     assert.ok(after.caller <= 100, `the caller heard the callee again after ${after.caller} ms`)
-    assert.ok(after.callee <= 1_000, `the callee heard the caller again after ${after.callee} ms`)
+    assert.ok(after.callee <= 500, `the callee heard the caller again after ${after.callee} ms`)
 })
