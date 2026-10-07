@@ -12,6 +12,7 @@ import { WaAudioEngine } from '../media/WaAudioEngine.js'
 import { parseRelayFromAck } from '../relay/relay-ack.js'
 import {
     buildOfferStanza,
+    buildTerminateStanza,
     decryptCallKey,
     extractNodeInfo,
     generateCallId,
@@ -127,6 +128,7 @@ export class WaCallManager extends EventEmitter {
             this.throwIfDestroyed()
 
             await this.deps.lowLevelCoordinator.sendNode(offerStanza)
+            if (this.destroyed) await this.withdrawOffer(info)
             this.throwIfDestroyed()
         } catch (err) {
             session.cleanup()
@@ -510,6 +512,20 @@ export class WaCallManager extends EventEmitter {
 
     private throwIfDestroyed(): void {
         if (this.destroyed) throw new Error('call manager destroyed')
+    }
+
+    /** Terminates an offer that left while `destroy` ran; best effort, the socket may be closing. */
+    private async withdrawOffer(info: CallInfo): Promise<void> {
+        try {
+            await this.deps.lowLevelCoordinator.sendNode(
+                buildTerminateStanza(info.peerJid, info.callId, info.callCreator)
+            )
+        } catch (err) {
+            this.logger.warn('terminate of an offer sent during destroy failed', {
+                callId: info.callId,
+                message: toError(err).message
+            })
+        }
     }
 
     /** Whether a terminate already ended this call before its offer was handled; consumes it. */
