@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { createNoopLogger, type Logger } from 'zapo-js'
 import type { BinaryNode } from 'zapo-js/transport'
 
 import type { WaCallMediaPlan } from '@zapo-js/voip-media'
@@ -1086,11 +1087,27 @@ test('an offer already sent when the manager is destroyed is withdrawn with a te
     assert.deepEqual(manager.getCalls(), [])
 })
 
+/** A logger whose warnings, its children's included, are kept with their bound context. */
+function recordWarnings(
+    bindings: Readonly<Record<string, unknown>> = {},
+    warnings: Array<[string, Record<string, unknown>]> = []
+): { logger: Logger; warnings: Array<[string, Record<string, unknown>]> } {
+    const logger: Logger = {
+        ...createNoopLogger(),
+        warn: (message, context) => {
+            warnings.push([message, { ...bindings, ...context }])
+        },
+        child: (more) => recordWarnings({ ...bindings, ...more }, warnings).logger
+    }
+    return { logger, warnings }
+}
+
 test('a withdrawing terminate that fails to send is logged, not thrown, and the call is cleaned up', async (t) => {
     const { deps, stores, sent } = createMockDeps()
     const { offered, release } = holdOfferSend(deps, sent, true)
     const cleanup = t.mock.method(WaCallMediaSession.prototype, 'cleanup')
-    const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
+    const { logger, warnings } = recordWarnings()
+    const manager = new WaCallManager({ deps, stores, logger, maxConcurrentCalls: 1 })
 
     const placing = manager.startCall({ peerJid: '2222222222@lid' })
     await offered
@@ -1099,7 +1116,11 @@ test('a withdrawing terminate that fails to send is logged, not thrown, and the 
     release()
 
     await assert.rejects(placing, /call manager destroyed/)
+    const callId = callIdOf(findByInnerTag(sent, 'offer')[0])
     assert.equal(findByInnerTag(sent, 'terminate').length, 1)
+    assert.deepEqual(warnings, [
+        ['terminate of an offer sent during destroy failed', { callId, message: 'socket closing' }]
+    ])
     assert.equal(cleanup.mock.callCount(), cleanedByDestroy + 1)
     assert.deepEqual(manager.getCalls(), [])
 })
