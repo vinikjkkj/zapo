@@ -1,6 +1,6 @@
 {
     "name": "@zapo-js/voip-media",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "WhatsApp call media plane for zapo-js – relay transport, STUN, SRTP, RTP/RTCP and the MLow codec, with a Node host and a browser host",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",

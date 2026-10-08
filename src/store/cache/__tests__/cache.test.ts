@@ -11,6 +11,7 @@ import { WaIdentityMemoryStore } from '@store/memory/identity.store'
 import { WaPrivacyTokenMemoryStore } from '@store/memory/privacy-token.store'
 import { SenderKeyMemoryStore } from '@store/memory/sender-key.store'
 import { WaSessionMemoryStore } from '@store/memory/session.store'
+import { IdleSweepClock } from '@util/collections'
 
 /** Wraps a real store, counting calls to the named methods, leaving the rest delegating. */
 function spy<T extends object>(
@@ -181,4 +182,65 @@ test('privacy-token cache: upsert invalidates so the merged backend record is re
     // write-through of the partial would have dropped tcToken; invalidate-on-write keeps both
     assert.ok(merged?.tcToken)
     assert.ok(merged?.nctSalt)
+})
+
+test('session cache: an expired L1 entry is re-read from the backend, a used one stays a hit', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const { store: backend, counts } = spy(new WaSessionMemoryStore(), 'getSession')
+    await backend.setSession(addr('idle'), sess(1))
+    const cache = withSessionCache(backend, undefined, {
+        clock: new IdleSweepClock(1_000),
+        ttlMs: 1_000
+    })
+
+    await cache.setSession(addr('hot'), sess(2))
+    await cache.getSession(addr('idle')) // populate L1
+    assert.equal(counts.get('getSession'), 1)
+
+    t.mock.timers.tick(1_000)
+    await cache.getSession(addr('hot')) // L1 hit refreshes the entry
+    t.mock.timers.tick(1_000) // 'idle' untouched for two ticks, 'hot' for one
+
+    assert.deepEqual(await cache.getSession(addr('hot')), sess(2))
+    assert.equal(counts.get('getSession'), 1)
+    assert.deepEqual(await cache.getSession(addr('idle')), sess(1))
+    assert.equal(counts.get('getSession'), 2) // backend still has it: expiry never touches rows
+    await cache.destroy?.()
+})
+
+test('identity, sender-key and privacy-token caches re-read expired L1 entries', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const expiry = { clock: new IdleSweepClock(1_000), ttlMs: 1_000 }
+    const identity = spy(new WaIdentityMemoryStore(), 'getRemoteIdentity')
+    const senderKey = spy(new SenderKeyMemoryStore(), 'getDeviceSenderKey')
+    const privacyToken = spy(new WaPrivacyTokenMemoryStore(), 'getByJid')
+    await identity.store.setRemoteIdentity(addr('a'), new Uint8Array([7]))
+    await senderKey.store.upsertSenderKey(skRecord('g', 'a'))
+    await privacyToken.store.upsert(tok('j', { tcToken: new Uint8Array([1]) }))
+    const identityCache = withIdentityCache(identity.store, undefined, expiry)
+    const senderKeyCache = withSenderKeyCache(senderKey.store, undefined, expiry)
+    const privacyTokenCache = withPrivacyTokenCache(privacyToken.store, undefined, expiry)
+
+    const readAll = async (): Promise<void> => {
+        assert.ok(await identityCache.getRemoteIdentity(addr('a')))
+        assert.ok(await senderKeyCache.getDeviceSenderKey('g', addr('a')))
+        assert.ok(await privacyTokenCache.getByJid('j'))
+    }
+    const backendReads = (): number[] => [
+        identity.counts.get('getRemoteIdentity') ?? 0,
+        senderKey.counts.get('getDeviceSenderKey') ?? 0,
+        privacyToken.counts.get('getByJid') ?? 0
+    ]
+
+    await readAll()
+    await readAll()
+    assert.deepEqual(backendReads(), [1, 1, 1])
+
+    t.mock.timers.tick(2_000)
+    await readAll()
+    assert.deepEqual(backendReads(), [2, 2, 2])
+
+    await identityCache.destroy?.()
+    await senderKeyCache.destroy?.()
+    await privacyTokenCache.destroy?.()
 })

@@ -1,5 +1,17 @@
 # zapo-js
 
+## 1.10.0
+
+### Minor Changes
+
+- Add an opt-in idle TTL to the `cacheLayer` L1. The L1 only evicted through its entry cap (8192 per domain per session by default), so a long-lived multi-session process kept every peer seen since boot and memory grew toward the cap times the number of sessions. `cacheLayer.ttlMs` takes a per-domain idle time (`sessionMs`, `identityMs`, `senderKeyMs`, `privacyTokenMs`): an L1 entry neither read nor written for that long is dropped by a periodic sweep and re-read from the backend on next use, and backend rows are never touched. Idle time is counted in ticks of one sweep clock per store, whose period is the smallest `ttlMs / 2` clamped to [1 s, 60 s], so wall-clock steps never expire or keep an entry; with a TTL set the cap evicts by LRU. Values must be safe integers of at least 1000, and a TTL on a domain without an L1 warns. The exported memory stores keep their API - the TTL lives in the cache wrappers only. Unset keeps today's behavior.
+
+### Patch Changes
+
+- Send a group list message as media next to its `<biz>` node. A list to a group was nacked with 479 while the same message went through in a direct chat, because the guard that came with the `<biz><list>` companion forced `type=text` and dropped `enc.mediatype` whenever a `<biz>` node rode the stanza. Measured against the live server, a group takes the list only when `type=media`, `mediatype=list` and `<biz><list>` travel together; a direct send keeps the flat text shape, and buttons and native flow are unchanged.
+- Never let `ignoreKey` drop `category='peer'` messages from our own devices. Those carry protocol traffic between the account's devices - app-state key shares, history sync, PDO responses - so a filter that ignored our own JID dropped the key share, the app-state collections stayed blocked on a missing key and every sync re-requested it. The exemption applies only when the sender is our own account, resolved from both `meJid` and `meLid`, so a foreign stanza cannot dodge a filter by stamping the attribute.
+- Correct the media reupload contract for re-keyed answers. The v1.8.0 notes stated that on `result: 'success'` only the `directPath` changes; that does not always hold. Some primaries re-encrypt the file on every re-upload, so the answer is `success` with a fresh path but the re-served blob no longer matches the original `fileEncSha256` and `downloadBytes()` throws a MAC mismatch. Nothing in the round-trip carries key material for the new ciphertext, so the message is unrecoverable through this API, and the docs now say so instead of promising the original key still works.
+
 ## 1.9.0
 
 ### Minor Changes

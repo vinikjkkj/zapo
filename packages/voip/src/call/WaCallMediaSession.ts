@@ -1,5 +1,5 @@
 import type { Logger } from 'zapo-js'
-import { toUserJid } from 'zapo-js/protocol'
+import { normalizeDeviceJid, toUserJid } from 'zapo-js/protocol'
 import { type BinaryNode, getFirstNodeChild, getNodeChildrenByTag } from 'zapo-js/transport'
 import { toError, uint8TimingSafeEqual } from 'zapo-js/util'
 
@@ -39,7 +39,6 @@ import {
     buildPreacceptStanza,
     buildRaiseHandStanza,
     buildRejectStanza,
-    buildRelaylatencyForwardStanza,
     buildRelayLatencyStanza,
     buildTerminateStanza,
     buildTransportStanza,
@@ -91,6 +90,9 @@ const MAX_TRACKED_RAISED_HANDS = 32
 
 /** Same kind of guard as {@link MAX_TRACKED_RAISED_HANDS}, one per peer device. */
 const MAX_TRACKED_PEER_APP_DATA_SSRCS = 32
+
+/** Same kind of guard again, one per relay the peer names. */
+const MAX_TRACKED_PEER_RELAY_LATENCIES = 32
 
 /** Sections and keys of `<voip_settings>` that describe the app-data stream. */
 const VOIP_SETTINGS_OPTIONS_SECTION = 'options'
@@ -161,6 +163,13 @@ function toMediaRelay(endpoint: RelayEndpoint): WaCallMediaRelay {
     }
 }
 
+/** One relay as our `<te>` names it. */
+interface OwnRelayLatency {
+    readonly relayName: string
+    readonly latency: number
+    readonly addressBytes: Uint8Array
+}
+
 /**
  * An upgrade request sent from this side and not yet answered. `settle` resolves the
  * promise `requestVideoUpgrade` handed back; dropping the attempt is what keeps the
@@ -216,6 +225,11 @@ export class WaCallMediaSession {
     private readonly media: WaCallMediaLink
     private initialTransportSent = false
     private outgoingPreacceptSent = false
+    /** Relays our own `<relaylatency>` already named; bounded by the relays the server lists. */
+    private readonly announcedRelayNames = new Set<string>()
+    /** The peer's last `latency` per relay name, as sent; kept for the relay election, unused yet. */
+    private readonly peerRelayLatencies = new Map<string, number>()
+    private peerRelayLatencyReports = 0
 
     /** The SSRC lists of the plan as last derived; published whole as `ssrcs` on any change. */
     private selfStreamSsrcs: number[] = []
@@ -306,12 +320,17 @@ export class WaCallMediaSession {
         return this.info.callId
     }
 
+    /**
+     * Drops an `accepted_elsewhere` from a peer device other than the one that answered a call
+     * we placed. Never on an incoming call: there the caller sends it about our own devices.
+     */
     shouldIgnoreTerminate(peerJid: string | undefined, reason: string | undefined): boolean {
         return Boolean(
+            this.info.direction === CallDirection.Outgoing &&
             reason === 'accepted_elsewhere' &&
             peerJid &&
             this.acceptedByJid &&
-            peerJid !== this.acceptedByJid
+            !this.isSameDevice(peerJid, this.acceptedByJid)
         )
     }
 
@@ -671,42 +690,34 @@ export class WaCallMediaSession {
         }
     }
 
-    /** One send per relay, stopping once the call has ended: it can end between two sends. */
-    async sendIncomingRelayLatency(): Promise<void> {
+    /**
+     * One `<relaylatency>` per relay we dial, each once per call: every device of the peer
+     * preaccepts, and a name is claimed before its send yields. Stops once the call has ended.
+     */
+    async sendRelayLatency(): Promise<void> {
         if (!this.info.relayData) return
 
         const meId = this.deps.authClient.getCurrentCredentials()?.meJid ?? ''
-        const callId = this.info.callId
-        const callCreator = this.info.callCreator
         const destinationJids = this.info.relayData.participantJids || []
-        const seenRelayNames = new Set<string>()
 
-        for (const ep of this.info.relayData.endpoints) {
+        for (const relay of this.dialableRelayLatencies()) {
             if (this.info.isEnded) return
-            const name = ep.relayName || ''
-            if (!name || seenRelayNames.has(name)) continue
-            seenRelayNames.add(name)
-
+            if (this.announcedRelayNames.has(relay.relayName)) continue
+            this.announcedRelayNames.add(relay.relayName)
             try {
-                const relayData = [
-                    {
-                        relayName: name,
-                        latency: ep.c2rRtt || 0,
-                        addressBytes: ep.addressBytes
-                    }
-                ]
                 const relayLatencyNode = buildRelayLatencyStanza(
                     this.info.peerJid,
-                    callId,
-                    callCreator,
-                    relayData,
+                    this.info.callId,
+                    this.info.callCreator,
+                    [relay],
                     destinationJids,
                     meId
                 )
                 await this.deps.lowLevelCoordinator.sendNode(relayLatencyNode)
             } catch (err: unknown) {
-                this.logger.error('error sending incoming relaylatency', {
-                    relayName: name,
+                this.announcedRelayNames.delete(relay.relayName)
+                this.logger.error('error sending relaylatency', {
+                    relayName: relay.relayName,
                     message: toError(err).message
                 })
             }
@@ -714,17 +725,47 @@ export class WaCallMediaSession {
     }
 
     /**
-     * On a call this device is receiving, an `<accept>` is another device of this account
-     * picking it up: a ringing call ends here as accepted elsewhere and nothing is sent.
+     * What `<te>` may say about our relays: only the ones we dial, once per name, with our
+     * own latency and address. Naming another makes the peer elect a relay we are not on.
+     */
+    private dialableRelayLatencies(): OwnRelayLatency[] {
+        const seen = new Set<string>()
+        const relays: OwnRelayLatency[] = []
+        for (const ep of dialableRelayEndpoints(this.info.relayData?.endpoints ?? [])) {
+            if (!ep.relayName || !ep.addressBytes || seen.has(ep.relayName)) continue
+            seen.add(ep.relayName)
+            relays.push({
+                relayName: ep.relayName,
+                latency: ep.c2rRtt || 0,
+                addressBytes: ep.addressBytes
+            })
+        }
+        return relays
+    }
+
+    /**
+     * On an incoming call only another device of this account can accept: that ends it while
+     * ringing, as accepted elsewhere, sending nothing. An accept from any other account is dropped.
      */
     async handleCallAccept(node: BinaryNode, peerJid: string): Promise<void> {
         if (this.info.direction === CallDirection.Incoming) {
+            if (!this.isOwnAccountJid(peerJid)) {
+                this.logger.warn('accept from another account on an incoming call, ignored', {
+                    callId: this.info.callId,
+                    from: peerJid
+                })
+                return
+            }
             if (this.info.isRinging) this.handleCallTerminate('accepted_elsewhere')
             return
         }
 
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
+
+        const answering = this.readAnsweringDevice(nodeInfo.innerNode, peerJid)
+        const acceptingDeviceJid = answering.jid
+        const acceptedPeerDeviceJid = this.ensureDeviceJid(acceptingDeviceJid)
 
         /**
          * A call we offered as video holds our video from the peer's accept: before anything
@@ -764,14 +805,14 @@ export class WaCallMediaSession {
                                 return jBase === ourBase && /:\d+@/.test(jid)
                             }) || ourCredJid
 
-                        if (ourDeviceJid && peerJid) {
+                        if (ourDeviceJid) {
                             try {
                                 keys = this.versionKeys(
                                     derivePerJidSrtpKey(
                                         ourCallKey,
                                         this.ensureDeviceJid(ourDeviceJid)
                                     ),
-                                    derivePerJidSrtpKey(peerCallKey, this.ensureDeviceJid(peerJid))
+                                    derivePerJidSrtpKey(peerCallKey, acceptedPeerDeviceJid)
                                 )
                                 this.logger.debug('srtp re-initialized with peer call_key', {
                                     callId: this.info.callId
@@ -804,23 +845,13 @@ export class WaCallMediaSession {
         const ourBase = ourJid ? toUserJid(ourJid) : ''
         const callId = this.info.callId
         const callCreator = this.info.callCreator
-        const acceptingDeviceJid =
-            this.info.mediaType === CallMediaType.Video && !/:\d+@/.test(peerJid)
-                ? peerJid
-                : this.info.mediaType === CallMediaType.Video
-                  ? this.info.relayData?.participantJids?.find((jid) => {
-                        const jidBase = toUserJid(jid)
-                        return jidBase !== ourBase && /:[1-9]\d*@/.test(jid)
-                    }) || peerJid
-                  : peerJid
 
         this.acceptedByJid = acceptingDeviceJid
+        if (answering.pid !== undefined && this.info.relayData) {
+            this.info.relayData.peerPid = answering.pid
+        }
 
-        /**
-         * The derived SSRC is signaling's guess at the answering device. A stream of
-         * the peer already seen on the wire outranks it, and the media keeps that one.
-         */
-        const acceptedPeerDeviceJid = this.ensureDeviceJid(acceptingDeviceJid)
+        /** A stream of the peer already seen on the wire outranks this, and the media keeps it. */
         this.peerAudioSsrc = this.ssrcOf(acceptedPeerDeviceJid)
         this.logger.debug('accept ssrc assigned', {
             callId,
@@ -831,7 +862,7 @@ export class WaCallMediaSession {
             this.ssrcOf(acceptedPeerDeviceJid, slot)
         )
         if (this.info.mediaType === CallMediaType.Audio) {
-            const peerBase = toUserJid(peerJid)
+            const peerBase = toUserJid(acceptingDeviceJid)
             const peerDevices = (this.info.relayData?.participantJids || [])
                 .filter((jid) => toUserJid(jid) === peerBase)
                 .map((jid) => this.ensureDeviceJid(jid))
@@ -845,7 +876,7 @@ export class WaCallMediaSession {
 
         if (this.info.relayData?.participantJids) {
             const otherDevices = this.info.relayData.participantJids.filter((jid) => {
-                if (jid === acceptingDeviceJid) return false
+                if (this.isSameDevice(jid, acceptingDeviceJid)) return false
                 const jidBase = toUserJid(jid)
                 if (jidBase === ourBase) return false
                 return true
@@ -917,38 +948,7 @@ export class WaCallMediaSession {
             const callId = this.info.callId
             const callCreator = this.info.callCreator
 
-            const destinationJids = this.info.relayData.participantJids || []
-            const seenRelayNames = new Set<string>()
-
-            for (const ep of this.info.relayData.endpoints) {
-                const name = ep.relayName || ''
-                if (!name || seenRelayNames.has(name)) continue
-                seenRelayNames.add(name)
-
-                try {
-                    const relayData = [
-                        {
-                            relayName: name,
-                            latency: ep.c2rRtt || 0,
-                            addressBytes: ep.addressBytes
-                        }
-                    ]
-                    const relayLatencyNode = buildRelayLatencyStanza(
-                        this.info.peerJid,
-                        callId,
-                        callCreator,
-                        relayData,
-                        destinationJids,
-                        meId
-                    )
-                    await this.deps.lowLevelCoordinator.sendNode(relayLatencyNode)
-                } catch (err: unknown) {
-                    this.logger.error('error sending relaylatency', {
-                        relayName: name,
-                        message: toError(err).message
-                    })
-                }
-            }
+            await this.sendRelayLatency()
 
             if (!this.initialTransportSent) {
                 try {
@@ -1042,29 +1042,39 @@ export class WaCallMediaSession {
             )
             this.selfDeviceJid = ourDeviceJid
 
-            const peerJids = participantJids.filter((jid) => {
-                const jidBase = toUserJid(jid)
-                return jidBase !== ourBase
-            })
-            const peerCandidate =
-                peerJids.find((jid) => /:\d+@/.test(jid) && !/:0@/.test(jid)) || peerJids[0]
-            const peerDeviceJid = peerCandidate ? this.ensureDeviceJid(peerCandidate) : undefined
+            /**
+             * Until an accept names the answering device, every device of the peer is
+             * subscribed and none is taken for the answering one.
+             */
+            const peerDevices = this.acceptedByJid
+                ? [this.ensureDeviceJid(this.acceptedByJid)]
+                : Array.from(
+                      new Set(
+                          participantJids
+                              .filter((jid) => toUserJid(jid) !== ourBase)
+                              .map((jid) => this.ensureDeviceJid(jid))
+                      )
+                  )
 
             if (this.info.mediaType === CallMediaType.Video) {
                 this.selfStreamSsrcs = WA_VIDEO_CALL_SSRC_SLOTS.map((slot) =>
                     this.ssrcOf(ourDeviceJid, slot)
                 )
-                if (peerDeviceJid) {
-                    this.peerStreamSsrcs = WA_VIDEO_CALL_SSRC_SLOTS.map((slot) =>
-                        this.ssrcOf(peerDeviceJid, slot)
+                if (peerDevices.length > 0) {
+                    this.peerStreamSsrcs = Array.from(
+                        new Set(
+                            peerDevices.flatMap((jid) =>
+                                WA_VIDEO_CALL_SSRC_SLOTS.map((slot) => this.ssrcOf(jid, slot))
+                            )
+                        )
                     )
                 }
+            } else if (!this.acceptedByJid && peerDevices.length > 0) {
+                this.peerStreamSsrcs = this.audioStreamsOf(peerDevices)
             }
 
-            if (peerDeviceJid) {
-                this.peerAudioSsrc = this.ssrcOf(peerDeviceJid)
-                this.trackPeerAppDataSsrcs([peerDeviceJid])
-            }
+            if (this.acceptedByJid) this.peerAudioSsrc = this.ssrcOf(peerDevices[0])
+            this.trackPeerAppDataSsrcs(peerDevices)
 
             let keys: WaCallMediaKeys | null = null
             if (this.info.encryptionKey) {
@@ -1097,54 +1107,33 @@ export class WaCallMediaSession {
     }
 
     /**
-     * Answers only for relays we dial too, with our own latency and address: echoing the
-     * peer's `<te>` makes the caller elect a relay we are not on, and its media never arrives.
+     * Records the peer's relay latencies and sends nothing back: answering every one made two
+     * clients that both answer bounce it between them forever.
      */
-    async handleCallRelaylatency(node: BinaryNode, peerJid: string): Promise<void> {
+    handleCallRelaylatency(node: BinaryNode, peerJid: string): void {
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
 
-        const inner = nodeInfo.innerNode
-        const callId = inner.attrs?.['call-id'] || this.info.callId
-        const callCreator = inner.attrs?.['call-creator'] || this.info.callCreator
-
-        const ownByName = new Map<string, { latency: number; address: Uint8Array }>()
-        for (const ep of dialableRelayEndpoints(this.info.relayData?.endpoints ?? [])) {
-            if (!ep.relayName || !ep.addressBytes || ownByName.has(ep.relayName)) continue
-            ownByName.set(ep.relayName, { latency: ep.c2rRtt || 0, address: ep.addressBytes })
-        }
-        const teNodes: BinaryNode[] = []
-        for (const te of getNodeChildrenByTag(inner, 'te')) {
+        this.peerRelayLatencyReports++
+        for (const te of getNodeChildrenByTag(nodeInfo.innerNode, 'te')) {
             const name = te.attrs?.relay_name
-            const own = name ? ownByName.get(name) : undefined
-            if (!name || !own) continue
-            teNodes.push({
-                tag: 'te',
-                attrs: { relay_name: name, latency: String(0x2000000 + own.latency) },
-                content: own.address
-            })
-        }
-
-        if (teNodes.length === 0) return
-
-        const destinationJids = this.info.relayData?.participantJids || []
-        if (destinationJids.length > 0) {
-            const forwardNode = buildRelaylatencyForwardStanza(
-                peerJid,
-                callId,
-                callCreator,
-                teNodes,
-                destinationJids
-            )
-
-            try {
-                await this.deps.lowLevelCoordinator.sendNode(forwardNode)
-            } catch (err: unknown) {
-                this.logger.error('error forwarding relaylatency', {
-                    message: toError(err).message
-                })
+            const latency = Number(te.attrs?.latency)
+            if (!name || !Number.isSafeInteger(latency)) continue
+            if (
+                !this.peerRelayLatencies.has(name) &&
+                this.peerRelayLatencies.size >= MAX_TRACKED_PEER_RELAY_LATENCIES
+            ) {
+                continue
             }
+            this.peerRelayLatencies.set(name, latency)
         }
+
+        this.logger.trace('peer relay latencies recorded', {
+            callId: this.info.callId,
+            from: peerJid,
+            reports: this.peerRelayLatencyReports,
+            relays: this.peerRelayLatencies.size
+        })
     }
 
     handleRelayElection(node: BinaryNode): void {
@@ -1991,6 +1980,67 @@ export class WaCallMediaSession {
         return jid.replace('@', ':0@')
     }
 
+    /** Device 0 travels both bare and as `:0`, so device jids compare in one form. */
+    private isSameDevice(left: string, right: string): boolean {
+        return this.ensureDeviceJid(left) === this.ensureDeviceJid(right)
+    }
+
+    /**
+     * The peer device that won a call we placed: the `<relay><participant>` of its `<accept>`
+     * when it is a device of the called user, else the device the accept came from. `pid` is
+     * the participant's, as on the wire. No pn/lid mapping: another domain falls back too.
+     */
+    private readAnsweringDevice(
+        accept: BinaryNode,
+        fromJid: string
+    ): { jid: string; pid?: number } {
+        for (const relay of getNodeChildrenByTag(accept, 'relay')) {
+            for (const participant of getNodeChildrenByTag(relay, 'participant')) {
+                const jid = participant.attrs?.jid
+                if (!jid) continue
+                if (!this.isCalledUser(jid)) {
+                    this.logger.debug('accept participant not of the called user, ignored', {
+                        callId: this.info.callId,
+                        participant: jid,
+                        from: fromJid
+                    })
+                    continue
+                }
+                const pid = Number(participant.attrs.pid)
+                return {
+                    jid: this.toAddressedJid(jid),
+                    pid: participant.attrs.pid && Number.isSafeInteger(pid) ? pid : undefined
+                }
+            }
+        }
+        return { jid: fromJid }
+    }
+
+    private isCalledUser(jid: string): boolean {
+        try {
+            return toUserJid(jid) === toUserJid(this.info.peerJid)
+        } catch (err) {
+            this.logger.trace('unreadable jid, not the called user', {
+                jid,
+                message: toError(err).message
+            })
+            return false
+        }
+    }
+
+    /** The form stanzas are addressed to and arrive from: device 0 bare. */
+    private toAddressedJid(jid: string): string {
+        try {
+            return normalizeDeviceJid(jid)
+        } catch (err) {
+            this.logger.trace('device jid kept as received', {
+                jid,
+                message: toError(err).message
+            })
+            return jid
+        }
+    }
+
     /**
      * Derives the SRTP keys from the call key: ours to send, the answering device's to receive.
      * `null` without a call key or on failure, leaving the media's keys as they were.
@@ -2015,15 +2065,7 @@ export class WaCallMediaSession {
             }) || ourCredJid
         )
 
-        let rawPeerJid = this.acceptedByJid || this.info.peerJid
-        if (!this.acceptedByJid) {
-            const peerFromParticipants = participants.find((jid) => {
-                const jBase = toUserJid(jid)
-                return jBase !== ourBase
-            })
-            if (peerFromParticipants) rawPeerJid = peerFromParticipants
-        }
-        const peerDeviceJid = this.ensureDeviceJid(rawPeerJid)
+        const peerDeviceJid = this.ensureDeviceJid(this.acceptedByJid || this.info.peerJid)
 
         try {
             const keys = this.versionKeys(

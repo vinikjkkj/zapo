@@ -4,7 +4,7 @@ import { concatBytes, EMPTY_BYTES, readUInt32BE, toArrayBuffer } from '../bytes.
 import { setBoundedMapEntry } from '../collections.js'
 import type { WaMediaCrypto } from '../crypto/primitives.js'
 import { randomBytes } from '../crypto/random.js'
-import { SrtcpContext, SrtcpSession, SrtpSession } from '../crypto/srtp.js'
+import { SrtcpContext, SrtcpSession, SrtpError, SrtpSession } from '../crypto/srtp.js'
 import { toError } from '../errors.js'
 import type { WaMediaHost } from '../host.js'
 import { createNoopLogger, type Logger } from '../logger.js'
@@ -276,7 +276,14 @@ export interface WaCallMediaStats {
      */
     readonly audioCaptureSkewMs: number
     readonly audioReceived: number
+    /** Inbound RTP dropped on an exception in the receive path: the sum of the three below. */
     readonly srtpErrors: number
+    /** Packets already received, as is every copy after the first that another relay leg delivers. */
+    readonly srtpReplays: number
+    /** Packets whose SRTP auth tag did not verify. */
+    readonly srtpAuthFailures: number
+    /** Any other failure: a malformed packet, or an exception past decryption. */
+    readonly srtpOtherErrors: number
     readonly videoFramesSent: number
     readonly videoPacketsReceived: number
     readonly videoFecDiscarded: number
@@ -399,7 +406,9 @@ export class WaCallMediaPlane {
      * SSRC.
      */
     private reedSolomonFecPackets = 0
-    private srtpErrorCount = 0
+    private srtpReplayCount = 0
+    private srtpAuthFailureCount = 0
+    private srtpOtherErrorCount = 0
     private relayPacketCount = 0
 
     private encodeBufferA: Float32Array | null = null
@@ -532,9 +541,10 @@ export class WaCallMediaPlane {
             crypto: options.crypto,
             createPeerConnection: options.createPeerConnection,
             createRawUdpLeg: options.createRawUdpLeg,
+            now: options.now,
             onConnected: () => this.onRelayConnected(),
             onLost: (reason) => this.onRelayLost(reason),
-            onReceive: (data) => this.onRelayData(data)
+            onReceive: (data, connectionId) => this.onRelayData(data, connectionId)
         })
     }
 
@@ -811,7 +821,7 @@ export class WaCallMediaPlane {
                 firstPacket ? receiverEstimate : 0
             )
             const encrypted = this.srtpSession.protect(packet)
-            this.sctpRelay.broadcast(toArrayBuffer(encrypted))
+            this.sctpRelay.sendMedia(toArrayBuffer(encrypted))
             this.videoPacketCount++
             this.videoOctetCount += payloads[index].length
         }
@@ -863,7 +873,10 @@ export class WaCallMediaPlane {
             audioFramesShed: this.audioFramesShed,
             audioCaptureSkewMs: (this.audioCaptureSkewTicks * 1000) / AUDIO_CLOCK_RATE,
             audioReceived: this.audioRecvCount,
-            srtpErrors: this.srtpErrorCount,
+            srtpErrors: this.srtpReplayCount + this.srtpAuthFailureCount + this.srtpOtherErrorCount,
+            srtpReplays: this.srtpReplayCount,
+            srtpAuthFailures: this.srtpAuthFailureCount,
+            srtpOtherErrors: this.srtpOtherErrorCount,
             videoFramesSent: this.videoSendFrames,
             videoPacketsReceived: this.videoRecvPackets,
             videoFecDiscarded: this.reedSolomonFecPackets,
@@ -885,6 +898,9 @@ export class WaCallMediaPlane {
             relayPackets: stats.relayPackets,
             recvOk: stats.audioReceived,
             srtpErrors: stats.srtpErrors,
+            srtpReplays: stats.srtpReplays,
+            srtpAuthFailures: stats.srtpAuthFailures,
+            srtpOtherErrors: stats.srtpOtherErrors,
             sent: stats.audioSent,
             dropped: stats.audioDropped,
             timelineResyncs: stats.audioTimelineResyncs,
@@ -1225,7 +1241,7 @@ export class WaCallMediaPlane {
             }
 
             const srtpData = this.srtpSession.protect(rtpPacket)
-            this.sctpRelay.broadcast(toArrayBuffer(srtpData))
+            this.sctpRelay.sendMedia(toArrayBuffer(srtpData))
 
             this.audioSendCount++
             this.audioOctetCount += rtpPayload.length
@@ -1265,7 +1281,7 @@ export class WaCallMediaPlane {
             // and the stream keeps the reaction buffered for the next attempt.
             sendPacket: (packet) => {
                 if (!this.srtpSession) return false
-                return this.sctpRelay.broadcast(toArrayBuffer(this.srtpSession.protect(packet)))
+                return this.sctpRelay.sendMedia(toArrayBuffer(this.srtpSession.protect(packet)))
             }
         })
         this.appDataStream.setSframe(this.appDataSframeRequired, null)
@@ -1275,20 +1291,23 @@ export class WaCallMediaPlane {
      * Reads one inbound app-data packet and hands the reactions in it over; it was
      * recognized by SSRC, so its payload type is whatever the peer chose.
      */
-    private onAppDataPacket(data: Uint8Array, payloadType: number, ssrc: number): void {
+    private onAppDataPacket(
+        data: Uint8Array,
+        payloadType: number,
+        ssrc: number,
+        connectionId: string | undefined
+    ): void {
         const stream = this.appDataStream
         if (!stream || !this.srtpSession) return
 
         let reactions: readonly WaCallReaction[]
         try {
             const packet = this.srtpSession.unprotect(data)
+            this.notePeerMedia(connectionId)
             stream.observeInboundPayloadType(payloadType)
             reactions = stream.receive(packet.payload, ssrc)
         } catch (err: unknown) {
-            this.logger.debug('app data packet dropped', {
-                payloadType,
-                message: toError(err).message
-            })
+            this.countReceiveError(err, data)
             return
         }
 
@@ -1318,6 +1337,7 @@ export class WaCallMediaPlane {
         this.playout.reset()
         this.flowing = true
         this.silenceWarmup = false
+        this.sctpRelay.setMediaFlowing()
         if (!this.subscriptionRefreshTimer) {
             this.subscriptionRefreshTimer = setInterval(() => {
                 this.sctpRelay.resendSubscriptions()
@@ -1344,7 +1364,12 @@ export class WaCallMediaPlane {
         this.events.onRelayLost?.(reason)
     }
 
-    private onRelayData(data: Uint8Array): void {
+    /** Peer media that authenticated on a relay leg, which the relay follows; see `notePeerMedia`. */
+    private notePeerMedia(connectionId: string | undefined): void {
+        if (connectionId !== undefined) this.sctpRelay.notePeerMedia(connectionId)
+    }
+
+    private onRelayData(data: Uint8Array, connectionId?: string): void {
         this.relayPacketCount++
 
         if (isStunPacket(data)) return
@@ -1353,6 +1378,7 @@ export class WaCallMediaPlane {
             if (!this.srtcpRecvSession) return
             try {
                 const rtcp = this.srtcpRecvSession.unprotect(data)
+                this.notePeerMedia(connectionId)
                 const arrivedAt = Date.now()
                 this.audioReception.observeSenderReport(rtcp, arrivedAt)
                 this.videoReception.observeSenderReport(rtcp, arrivedAt)
@@ -1381,13 +1407,14 @@ export class WaCallMediaPlane {
             // Demultiplexed before the peer's media SSRC is latched: latching this one
             // would resubscribe the call to a stream of the same peer carrying no audio.
             if (this.peerAppDataSsrcs.has(ssrc)) {
-                this.onAppDataPacket(data, pt, ssrc)
+                this.onAppDataPacket(data, pt, ssrc, connectionId)
                 return
             }
         }
 
         try {
             const rtpPacket = this.srtpSession.unprotect(data)
+            this.notePeerMedia(connectionId)
             if (pt !== PayloadType.WhatsAppOpus) {
                 if (pt === PayloadType.WhatsAppH264) {
                     this.onVideoPacket(rtpPacket.header, rtpPacket.payload, pt)
@@ -1439,15 +1466,25 @@ export class WaCallMediaPlane {
                 })
             }
         } catch (err: unknown) {
-            this.srtpErrorCount++
-            if (this.srtpErrorCount <= 5) {
-                const ssrc = data.length >= 12 ? readUInt32BE(data, 8) : 0
-                this.logger.debug('srtp recv error', {
-                    errorCount: this.srtpErrorCount,
-                    message: toError(err).message,
-                    ssrc: `0x${ssrc.toString(16)}`
-                })
-            }
+            this.countReceiveError(err, data)
+        }
+    }
+
+    /** Counts an inbound RTP packet the receive path dropped: a replay, a bad auth tag, or else. */
+    private countReceiveError(err: unknown, data: Uint8Array): void {
+        const type = err instanceof SrtpError ? err.type : null
+        let errorCount: number
+        if (type === 'replay') errorCount = ++this.srtpReplayCount
+        else if (type === 'auth_failed') errorCount = ++this.srtpAuthFailureCount
+        else errorCount = ++this.srtpOtherErrorCount
+        if (errorCount <= 5) {
+            const ssrc = data.length >= 12 ? readUInt32BE(data, 8) : 0
+            this.logger.debug('srtp recv error', {
+                type: type ?? 'other',
+                errorCount,
+                message: toError(err).message,
+                ssrc: `0x${ssrc.toString(16)}`
+            })
         }
     }
 
@@ -1570,9 +1607,9 @@ export class WaCallMediaPlane {
         if (!this.srtcpContext || !this.videoRtpSession) return
         const senderSsrc = this.videoRtpSession.getSsrc()
         const pli = buildPictureLossIndication(senderSsrc, mediaSsrc, true)
-        this.sctpRelay.broadcast(toArrayBuffer(this.srtcpContext.protect(pli, senderSsrc)))
+        this.sctpRelay.sendMedia(toArrayBuffer(this.srtcpContext.protect(pli, senderSsrc)))
         const fir = buildFullIntraRequest(senderSsrc, mediaSsrc, this.videoFirSequence++)
-        this.sctpRelay.broadcast(toArrayBuffer(this.srtcpContext.protect(fir, senderSsrc)))
+        this.sctpRelay.sendMedia(toArrayBuffer(this.srtcpContext.protect(fir, senderSsrc)))
         this.logger.debug('video key frame requested', {
             mediaSsrc: `0x${mediaSsrc.toString(16)}`
         })
@@ -1674,7 +1711,7 @@ export class WaCallMediaPlane {
                 true,
                 whatsappVideoProfile
             )
-            this.sctpRelay.broadcast(toArrayBuffer(srtcpContext.protect(report, senderSsrc)))
+            this.sctpRelay.sendMedia(toArrayBuffer(srtcpContext.protect(report, senderSsrc)))
         } catch (err: unknown) {
             this.logger.trace('sender report send failed', {
                 senderSsrc: `0x${senderSsrc.toString(16)}`,
@@ -1748,7 +1785,7 @@ export class WaCallMediaPlane {
         const senderSsrc = videoRtpSession.getSsrc()
         try {
             const remb = buildReceiverEstimatedMaxBitrate(senderSsrc, mediaSsrc, bitrate)
-            this.sctpRelay.broadcast(toArrayBuffer(srtcpContext.protect(remb, senderSsrc)))
+            this.sctpRelay.sendMedia(toArrayBuffer(srtcpContext.protect(remb, senderSsrc)))
             this.logger.trace('receiver estimate sent', {
                 mediaSsrc: `0x${mediaSsrc.toString(16)}`,
                 bitrate

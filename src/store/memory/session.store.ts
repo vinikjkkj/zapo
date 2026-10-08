@@ -11,7 +11,7 @@ export interface WaSessionMemoryStoreOptions {
 }
 
 export class WaSessionMemoryStore implements WaSessionStoreContract {
-    private readonly signalSessions: Map<string, SignalSessionRecord>
+    protected readonly signalSessions: Map<string, SignalSessionRecord>
     private readonly maxSessions: number
 
     public constructor(options: WaSessionMemoryStoreOptions = {}) {
@@ -24,19 +24,29 @@ export class WaSessionMemoryStore implements WaSessionStoreContract {
     }
 
     public async hasSession(address: SignalAddress): Promise<boolean> {
-        return this.signalSessions.has(signalAddressKey(address))
+        const key = signalAddressKey(address)
+        if (!this.signalSessions.has(key)) return false
+        this.onEntryAccess(key)
+        return true
     }
 
     public async hasSessions(addresses: readonly SignalAddress[]): Promise<readonly boolean[]> {
         const result = new Array<boolean>(addresses.length)
         for (let i = 0; i < addresses.length; i += 1) {
-            result[i] = this.signalSessions.has(signalAddressKey(addresses[i]))
+            const key = signalAddressKey(addresses[i])
+            const found = this.signalSessions.has(key)
+            if (found) this.onEntryAccess(key)
+            result[i] = found
         }
         return result
     }
 
     public async getSession(address: SignalAddress): Promise<SignalSessionRecord | null> {
-        return this.signalSessions.get(signalAddressKey(address)) ?? null
+        const key = signalAddressKey(address)
+        const session = this.signalSessions.get(key)
+        if (session === undefined) return null
+        this.onEntryAccess(key)
+        return session
     }
 
     public async getSessionsBatch(
@@ -44,18 +54,22 @@ export class WaSessionMemoryStore implements WaSessionStoreContract {
     ): Promise<readonly (SignalSessionRecord | null)[]> {
         const result = new Array<SignalSessionRecord | null>(addresses.length)
         for (let i = 0; i < addresses.length; i += 1) {
-            result[i] = this.signalSessions.get(signalAddressKey(addresses[i])) ?? null
+            const key = signalAddressKey(addresses[i])
+            const session = this.signalSessions.get(key)
+            if (session === undefined) {
+                result[i] = null
+            } else {
+                this.onEntryAccess(key)
+                result[i] = session
+            }
         }
         return result
     }
 
     public async setSession(address: SignalAddress, session: SignalSessionRecord): Promise<void> {
-        setBoundedMapEntry(
-            this.signalSessions,
-            signalAddressKey(address),
-            session,
-            this.maxSessions
-        )
+        const key = signalAddressKey(address)
+        setBoundedMapEntry(this.signalSessions, key, session, this.maxSessions, this.onEvict)
+        this.onEntryAccess(key)
     }
 
     public async setSessionsBatch(
@@ -66,20 +80,35 @@ export class WaSessionMemoryStore implements WaSessionStoreContract {
     ): Promise<void> {
         for (let index = 0; index < entries.length; index += 1) {
             const entry = entries[index]
+            const key = signalAddressKey(entry.address)
             setBoundedMapEntry(
                 this.signalSessions,
-                signalAddressKey(entry.address),
+                key,
                 entry.session,
-                this.maxSessions
+                this.maxSessions,
+                this.onEvict
             )
+            this.onEntryAccess(key)
         }
     }
 
     public async deleteSession(address: SignalAddress): Promise<void> {
-        this.signalSessions.delete(signalAddressKey(address))
+        const key = signalAddressKey(address)
+        if (this.signalSessions.delete(key)) this.onEntryRemove(key)
     }
 
     public async clear(): Promise<void> {
         this.signalSessions.clear()
+        this.onEntriesClear()
     }
+
+    /** Runs with the key of every read hit and write. No-op unless a subclass tracks access. */
+    protected onEntryAccess(key: string): void {}
+
+    /** Runs with the key of every deleted or cap-evicted entry. */
+    protected onEntryRemove(key: string): void {}
+
+    protected onEntriesClear(): void {}
+
+    private readonly onEvict = (key: string): void => this.onEntryRemove(key)
 }

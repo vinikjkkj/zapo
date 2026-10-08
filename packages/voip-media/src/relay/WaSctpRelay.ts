@@ -29,19 +29,29 @@ type PeerConnectionClass = RTCPeerConnection
 type DataChannelClass = RTCDataChannel
 
 /**
- * The port a web client's relay media rides on.
+ * The port a web client's relay media rides on, unless the advertised one is dialled.
  *
- * Candidates are dialled here rather than on the port the relay advertises,
- * which is often 3478: a relay reached on 3478 completes the handshake and
- * accepts the uplink but never forwards the peer's stream back, so the call is
- * silently one way.
+ * Which of the two a relay answers on follows the account class the server assigns:
+ * measured, a mobile primary's legs open only here and a companion's only on the port
+ * the `<te2>` advertises (3478 in every offer seen). An unanswered leg is redialled on
+ * the other one; see `RelayInfo.fallbackPort`.
  */
 export const TRUE_WEB_CLIENT_RELAY_PORT = 3480
 
 const CONFIG = {
     TRUE_WEB_CLIENT_RELAY_PORT,
     CONNECTION_TIMEOUT: 20000,
-    KEEPALIVE_INTERVAL_MS: 1100,
+    /** `relay_ping_interval` while the call sets up, then once it is accepted. */
+    PING_SETUP_INTERVAL_MS: 5000,
+    PING_INTERVAL_MS: 1000,
+    /** `relay_unresponsive_timeout`: a leg with a ping unanswered this long leaves the election. */
+    UNRESPONSIVE_TIMEOUT_MS: 4000,
+    /**
+     * How long our media leg may go without the peer's media before media arriving on another
+     * leg takes it over. Above the gaps of a peer's stream even in DTX, so a peer that sends
+     * through every leg never moves it; short, so following a peer that moved costs half a second.
+     */
+    RX_ELECTION_HOLD_MS: 400,
     ICE_DISCONNECT_GRACE_MS: 4000,
     FIXED_FINGERPRINT:
         'sha-256 F9:CA:0C:98:A3:CC:71:D6:42:CE:5A:E2:53:D2:15:20:D3:1B:BA:D8:57:A4:F0:AF:BE:0B:FB:F3:6B:0C:A0:68'
@@ -57,6 +67,16 @@ const CONFIG = {
  * datagram.
  */
 const REGISTRATION_RETRY_DELAYS_MS = [50, 150, 500, 3_000]
+
+/** How long an open leg may go unanswered before it is redialled on the other port: the burst's last replay gets a second to be answered. */
+const PORT_FALLBACK_AFTER_OPEN_MS =
+    REGISTRATION_RETRY_DELAYS_MS[REGISTRATION_RETRY_DELAYS_MS.length - 1] + 1_000
+
+/**
+ * How long a leg may take to open before it is redialled on the other port. ICE, DTLS and SCTP
+ * take a few round trips, about a second at relay latencies; ICE itself gives up only at 20 s.
+ */
+const PORT_FALLBACK_UNOPENED_MS = 5_000
 
 enum ConnectionState {
     None = 'None',
@@ -102,6 +122,11 @@ export interface RelayInfo {
     relayId: number
     name?: string
     authTokenId?: string
+    /**
+     * The other of the web client port and the advertised one, tried once if the relay never
+     * answers on `port`: which of the two answers follows the account class the server assigns.
+     */
+    fallbackPort?: number
 }
 
 export interface Connection {
@@ -124,6 +149,12 @@ export interface Connection {
      */
     abortDial: (() => void) | null
     hasReceivedFirstPacket: boolean
+    /** When the peer's media last authenticated on this leg, or `null` if it never has. */
+    peerMediaAt: number | null
+    /** When the oldest ping no pong has answered went out, or `null` with none pending. */
+    pingUnansweredSince: number | null
+    /** Out of the media election until a pong arrives; the leg itself stays up. */
+    unresponsive: boolean
     localUfrag: string
     stableRoutingConnId: bigint
     /** Born with the connection, and used by every STUN message it emits. */
@@ -151,8 +182,13 @@ export interface WaSctpRelayOptions {
     readonly onConnected?: () => void
     /** The call has no leg left, open or dialling; see `announceLastLegLost`. */
     readonly onLost?: (reason: string) => void
-    /** A packet arrived from a relay, STUN and media alike, before any parsing. */
-    readonly onReceive?: (data: Uint8Array) => void
+    /**
+     * A packet arrived from a relay, STUN and media alike, before any parsing. `connectionId`
+     * names the leg, for {@link WaSctpRelay.notePeerMedia}.
+     */
+    readonly onReceive?: (data: Uint8Array, connectionId: string) => void
+    /** Monotonic time source, in ms; `performance.now()` by default. */
+    readonly now?: () => number
 }
 
 export class WaSctpRelay {
@@ -163,6 +199,7 @@ export class WaSctpRelay {
     private readonly onConnected: WaSctpRelayOptions['onConnected']
     private readonly onLost: WaSctpRelayOptions['onLost']
     private readonly onReceive: WaSctpRelayOptions['onReceive']
+    private readonly now: () => number
     private connections = new Map<string, Connection>()
     private relayMap = new Map<string, RelayInfo>()
     private stats = {
@@ -177,6 +214,9 @@ export class WaSctpRelay {
     private peerStreamSsrcs: number[] = []
     private selfPid = 0
     private peerPid = 0
+    /** The one leg media goes out on; see {@link sendMedia}. */
+    private mediaLeg: Connection | null = null
+    private pingIntervalMs = CONFIG.PING_SETUP_INTERVAL_MS
 
     constructor(options: WaSctpRelayOptions) {
         this.logger = options.logger ?? createNoopLogger()
@@ -186,6 +226,7 @@ export class WaSctpRelay {
         this.onConnected = options.onConnected
         this.onLost = options.onLost
         this.onReceive = options.onReceive
+        this.now = options.now ?? (() => performance.now())
     }
 
     setSsrc(ssrc: number): void {
@@ -350,6 +391,9 @@ export class WaSctpRelay {
             connectionTimeout: null,
             abortDial: null,
             hasReceivedFirstPacket: false,
+            peerMediaAt: null,
+            pingUnansweredSince: null,
+            unresponsive: false,
             localUfrag: '',
             stableRoutingConnId: 0n,
             stunTransactionId: createStunTransactionId(),
@@ -364,6 +408,13 @@ export class WaSctpRelay {
     private async startConnection(conn: Connection): Promise<Connection | null> {
         const connectionId = conn.id
         const relayInfo = conn.relayInfo
+
+        this.armPortFallback(
+            conn,
+            PORT_FALLBACK_UNOPENED_MS,
+            'relay_port_unopened',
+            () => conn.state === ConnectionState.Connecting
+        )
 
         /**
          * The transport is chosen here, once, when the leg is dialled, and it is
@@ -546,6 +597,7 @@ export class WaSctpRelay {
                 }
 
                 this.sendStunAllocateOnOpen(conn, relayInfo)
+                this.armAnswerFallback(conn)
 
                 this.startKeepalive(connectionId, conn)
 
@@ -623,6 +675,8 @@ export class WaSctpRelay {
     private failConnection(conn: Connection, reason: string): void {
         if (!conn || conn.state === ConnectionState.Failed) return
         const current = this.connections.get(conn.id) === conn
+        /** Registered before the leg leaves, so the call is not announced lost in between. */
+        const redial = current ? this.registerOnFallbackPort(conn, reason) : null
 
         this.logger.warn('sctp connection failed', { connectionId: conn.id, reason })
         if (current) this.releaseConnected(conn)
@@ -639,6 +693,61 @@ export class WaSctpRelay {
         this.stopKeepalive(conn.id)
         this.connections.delete(conn.id)
         this.announceLastLegLost(reason)
+        if (redial) void this.startConnection(redial)
+    }
+
+    /** Fails `conn`, which redials it on the other port, if `afterMs` from now it is still in the call and `waiting()`. */
+    private armPortFallback(
+        conn: Connection,
+        afterMs: number,
+        reason: string,
+        waiting: () => boolean
+    ): void {
+        if (conn.relayInfo.fallbackPort === undefined) return
+        unrefTimer(
+            setTimeout(() => {
+                if (this.connections.get(conn.id) === conn && waiting()) {
+                    this.failConnection(conn, reason)
+                }
+            }, afterMs)
+        )
+    }
+
+    /** Armed when a leg opens, since its registration burst starts there. */
+    private armAnswerFallback(conn: Connection): void {
+        this.armPortFallback(
+            conn,
+            PORT_FALLBACK_AFTER_OPEN_MS,
+            'relay_port_unanswered',
+            () => !conn.hasReceivedFirstPacket
+        )
+    }
+
+    /** Registers, once, a redial on the other port of a leg the relay never answered. */
+    private registerOnFallbackPort(conn: Connection, reason: string): Connection | null {
+        const port = conn.relayInfo.fallbackPort
+        if (port === undefined || conn.hasReceivedFirstPacket) return null
+
+        const relayInfo: RelayInfo = { ...conn.relayInfo, port, fallbackPort: undefined }
+        if (
+            this.connections.has(this.makeConnectionId(relayInfo.ip, port, relayInfo.authTokenId))
+        ) {
+            return null
+        }
+        this.logger.warn('relay leg unanswered, redialling on the other port', {
+            connectionId: conn.id,
+            port,
+            reason
+        })
+        return this.registerConnection(relayInfo)
+    }
+
+    /** Whether the configured relay `relayKey` already has a leg, on either port. */
+    private hasLegFor(relayKey: string): boolean {
+        for (const conn of this.connections.values()) {
+            if (conn.relayInfo.id === relayKey) return true
+        }
+        return false
     }
 
     /**
@@ -699,7 +808,7 @@ export class WaSctpRelay {
 
     /**
      * Opens a raw UDP leg to the relay and wires it into the same connection
-     * bookkeeping every other leg uses, so `broadcast`, the keepalive and the
+     * bookkeeping every other leg uses, so `sendMedia`, the keepalive and the
      * receive path treat it as one more connection.
      *
      * A failure here takes down this leg and nothing else: the connection
@@ -734,6 +843,7 @@ export class WaSctpRelay {
                 })
 
                 this.sendRawAllocate(conn, relayInfo, 'initial')
+                this.armAnswerFallback(conn)
                 for (const delayMs of REGISTRATION_RETRY_DELAYS_MS) {
                     /**
                      * Unreferenced: a replay of a registration the relay has
@@ -951,8 +1061,7 @@ export class WaSctpRelay {
     private startKeepalive(connectionId: string, conn: Connection): void {
         this.stopKeepalive(connectionId)
 
-        const firstPing = buildWhatsAppPing(conn.stunTransactionId)
-        this.sendToChannel(conn, toArrayBuffer(firstPing))
+        this.sendPing(conn)
         this.logger.debug('keepalive first ping sent', { connectionId })
 
         let keepaliveCount = 0
@@ -961,8 +1070,8 @@ export class WaSctpRelay {
                 this.stopKeepalive(connectionId)
                 return
             }
-            const ping = buildWhatsAppPing(conn.stunTransactionId)
-            this.sendToChannel(conn, toArrayBuffer(ping))
+            this.checkResponsive(conn)
+            this.sendPing(conn)
             keepaliveCount++
 
             if (keepaliveCount % 3 === 0) {
@@ -997,13 +1106,49 @@ export class WaSctpRelay {
                     bufferedAmount
                 })
             }
-        }, CONFIG.KEEPALIVE_INTERVAL_MS)
+        }, this.pingIntervalMs)
 
         this.keepaliveTimers.set(connectionId, timer)
         this.logger.debug('keepalive started', {
             connectionId,
-            intervalMs: CONFIG.KEEPALIVE_INTERVAL_MS
+            intervalMs: this.pingIntervalMs
         })
+    }
+
+    private sendPing(conn: Connection): void {
+        if (this.sendToChannel(conn, toArrayBuffer(buildWhatsAppPing(conn.stunTransactionId)))) {
+            conn.pingUnansweredSince ??= this.now()
+        }
+    }
+
+    /** Takes a leg whose oldest unanswered ping is `UNRESPONSIVE_TIMEOUT_MS` old out of the election. */
+    private checkResponsive(conn: Connection): void {
+        const since = conn.pingUnansweredSince
+        if (conn.unresponsive || since === null) return
+        if (this.now() - since < CONFIG.UNRESPONSIVE_TIMEOUT_MS) return
+        conn.unresponsive = true
+        this.logger.warn('relay leg unresponsive, out of the media election', {
+            connectionId: conn.id,
+            elected: conn === this.mediaLeg
+        })
+    }
+
+    private onPong(conn: Connection): void {
+        conn.pingUnansweredSince = null
+        if (!conn.unresponsive) return
+        conn.unresponsive = false
+        this.logger.debug('relay leg answering again, back in the media election', {
+            connectionId: conn.id
+        })
+    }
+
+    /** Moves every leg's keepalive to the cadence of an accepted call; later legs start on it. */
+    setMediaFlowing(): void {
+        if (this.pingIntervalMs === CONFIG.PING_INTERVAL_MS) return
+        this.pingIntervalMs = CONFIG.PING_INTERVAL_MS
+        for (const conn of this.connections.values()) {
+            if (this.keepaliveTimers.has(conn.id)) this.startKeepalive(conn.id, conn)
+        }
     }
 
     private stopKeepalive(connectionId: string): void {
@@ -1128,7 +1273,10 @@ export class WaSctpRelay {
 
         if (!conn.hasReceivedFirstPacket) {
             conn.hasReceivedFirstPacket = true
-            this.logger.trace('first packet received from relay', { connectionId: conn.id })
+            this.logger.debug('relay leg answered', {
+                connectionId: conn.id,
+                port: conn.relayInfo.port
+            })
         }
 
         const shouldLog =
@@ -1151,6 +1299,7 @@ export class WaSctpRelay {
             const stunInfo = parseStunResponse(data)
             if (stunInfo) {
                 if (stunInfo.method === 'wa-pong') {
+                    this.onPong(conn)
                     this.pongCount++
                     if (this.pongCount <= 3 || this.pongCount % 20 === 0) {
                         this.logger.trace('stun pong received', {
@@ -1239,7 +1388,7 @@ export class WaSctpRelay {
             })
         }
 
-        this.onReceive?.(data)
+        this.onReceive?.(data, conn.id)
     }
 
     private isPong(data: Uint8Array): boolean {
@@ -1285,6 +1434,10 @@ export class WaSctpRelay {
                 : webClientPort
 
             const connectionId = this.makeConnectionId(relay.ip, port, relay.authTokenId)
+            const otherPort =
+                port === CONFIG.TRUE_WEB_CLIENT_RELAY_PORT
+                    ? relay.originalPort
+                    : CONFIG.TRUE_WEB_CLIENT_RELAY_PORT
 
             const relayInfo: RelayInfo = {
                 id: connectionId,
@@ -1297,7 +1450,8 @@ export class WaSctpRelay {
                 key: relay.key,
                 relayId: relay.relayId,
                 name: relay.name || 'unknown',
-                authTokenId: relay.authTokenId
+                authTokenId: relay.authTokenId,
+                fallbackPort: otherPort !== port ? otherPort : undefined
             }
 
             this.relayMap.set(connectionId, relayInfo)
@@ -1306,13 +1460,8 @@ export class WaSctpRelay {
         this.logger.debug('sctp relays registered', { count: this.relayMap.size })
 
         const legs: Connection[] = []
-        for (const [, relayInfo] of this.relayMap) {
-            const connId = this.makeConnectionId(
-                relayInfo.ip,
-                relayInfo.port,
-                relayInfo.authTokenId
-            )
-            if (!this.connections.has(connId)) {
+        for (const [relayKey, relayInfo] of this.relayMap) {
+            if (!this.hasLegFor(relayKey)) {
                 legs.push(this.registerConnection(relayInfo))
             }
         }
@@ -1322,7 +1471,92 @@ export class WaSctpRelay {
         this.logger.debug('sctp relay configuration done', { connected: this.stats.connected })
     }
 
-    /** Sends to every open connection and reports whether any of them took it. */
+    /**
+     * Sends on the one leg elected for media and reports whether it took it; with no leg open
+     * nothing goes out. Allocates and keepalives keep reaching every leg, so any can take over.
+     */
+    sendMedia(data: ArrayBuffer): boolean {
+        const leg = this.electMediaLeg()
+        return leg !== null && this.sendToChannel(leg, data)
+    }
+
+    /**
+     * Records that the peer's media authenticated on a leg, and follows the peer there: when
+     * our media leg has not heard the peer for `RX_ELECTION_HOLD_MS`, this leg takes it over.
+     */
+    notePeerMedia(connectionId: string): void {
+        const conn = this.connections.get(connectionId)
+        if (!conn) return
+        const now = this.now()
+        conn.peerMediaAt = now
+
+        const current = this.mediaLeg
+        if (conn === current || conn.unresponsive || !this.isConnOpen(conn)) return
+        if (
+            current &&
+            this.isElectable(current) &&
+            current.peerMediaAt !== null &&
+            now - current.peerMediaAt < CONFIG.RX_ELECTION_HOLD_MS
+        ) {
+            return
+        }
+
+        this.mediaLeg = conn
+        this.logger.debug('sctp media leg follows the peer', {
+            connectionId,
+            relayId: conn.relayInfo.relayId,
+            replaces: current?.id
+        })
+    }
+
+    private isElectable(conn: Connection): boolean {
+        return this.connections.get(conn.id) === conn && this.isConnOpen(conn) && !conn.unresponsive
+    }
+
+    /**
+     * Keeps the leg in use while it is open and answering pings, since the peer's stream
+     * returns where our media leaves. Else the first such leg in dial order, off the dropped
+     * leg's relay, which never re-points; with none answering, any open leg.
+     */
+    private electMediaLeg(): Connection | null {
+        const current = this.mediaLeg
+        if (current && this.isElectable(current)) return current
+
+        let elected: Connection | null = null
+        let sameRelay: Connection | null = null
+        let unresponsive: Connection | null = null
+        for (const conn of this.connections.values()) {
+            if (!this.isConnOpen(conn)) continue
+            if (conn.unresponsive) {
+                unresponsive ??= conn
+                continue
+            }
+            if (current && conn.relayInfo.relayId === current.relayInfo.relayId) {
+                sameRelay ??= conn
+                continue
+            }
+            elected = conn
+            break
+        }
+        elected ??= sameRelay ?? unresponsive
+
+        this.mediaLeg = elected
+        if (elected && elected !== current) {
+            this.logger.debug('sctp media leg elected', {
+                connectionId: elected.id,
+                relayId: elected.relayInfo.relayId,
+                replaces: current?.id
+            })
+        } else if (!elected && current) {
+            this.logger.debug('sctp media leg lost, no open leg left', { connectionId: current.id })
+        }
+        return elected
+    }
+
+    /**
+     * Sends to every open connection and reports whether any of them took it. Not for media:
+     * the peer's SRTP replay window is per SSRC, so every copy past the first is dropped.
+     */
     broadcast(data: ArrayBuffer): boolean {
         let sent = false
         for (const conn of this.connections.values()) {
@@ -1378,6 +1612,8 @@ export class WaSctpRelay {
         this.peerStreamSsrcs = []
         this.selfPid = 0
         this.peerPid = 0
+        this.mediaLeg = null
+        this.pingIntervalMs = CONFIG.PING_SETUP_INTERVAL_MS
         this.pongCount = 0
         this.rtpRecvCount = 0
         this.unknownRecvCount = 0

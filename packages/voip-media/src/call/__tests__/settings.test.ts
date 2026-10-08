@@ -61,7 +61,8 @@ interface PlaneInternals {
     }
     srtcpContext: { protect: (rtcp: Uint8Array, senderSsrc: number) => Uint8Array }
     sctpRelay: {
-        broadcast: (data: ArrayBuffer) => void
+        setMediaFlowing: () => void
+        sendMedia: (data: ArrayBuffer) => void
         hasConnection: () => boolean
         cleanup: () => void
         setSubscriptionSsrc: (ssrc: number) => void
@@ -108,7 +109,8 @@ async function createPlane(
 
     const internals = plane as unknown as PlaneInternals
     internals.sctpRelay = {
-        broadcast: (data) => {
+        setMediaFlowing: () => {},
+        sendMedia: (data) => {
             sent.push(new Uint8Array(data))
         },
         hasConnection: () => true,

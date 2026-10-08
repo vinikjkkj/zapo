@@ -378,7 +378,7 @@ not been confirmed against a two-sided wire capture yet.
 | `getCalls()`                                                 | All tracked calls                                                          |
 | `on` / `off` / `once`                                        | Manager-level events                                                       |
 
-Plugin options: `maxConcurrentCalls?: number` (default `1`), `logLevel?: LogLevel` (caps VOIP diagnostics; defaults to the host client's level), `useOriginalRelayPort?: boolean` (default `false`, see below).
+Plugin options: `maxConcurrentCalls?: number` (default `1`), `logLevel?: LogLevel` (caps VOIP diagnostics; defaults to the host client's level), `useOriginalRelayPort?: boolean` (default by session, see below).
 
 ## Mute
 
@@ -416,9 +416,9 @@ so a reaction can go out before the peer has sent any.
 
 ## Relay port
 
-Relay endpoints advertise a port each, and the connection is made on the web client port (3480) rather than on the advertised one, which is what WhatsApp Web does. A relay reached on 3478 completes the handshake and carries the uplink but never forwards the peer's stream back, so the call is silently one way.
+A relay can be reached on the web client port (3480) or on the port its `<te2>` endpoint advertises, and the wire does not say which one answers. Measured: a companion's legs open only on the advertised port, a mobile primary's only on 3480. So `useOriginalRelayPort` defaults to `true` on a companion and `false` on a mobile primary, read per call, and an explicit value wins.
 
-`useOriginalRelayPort: true` dials the advertised port instead. Against WhatsApp's own relays that is the wrong choice, for the reason above; it exists for a relay deployment that answers on the port it advertises.
+Either way, a leg that does not open within 5 s, or opens and gets no answer within 4 s, is redialled once on the other port, when there is one: an endpoint that already advertises 3480 has none.
 
 ```ts
 plugins: [voipPlugin({ useOriginalRelayPort: true })]

@@ -15,8 +15,8 @@ export interface WaSenderKeyMemoryStoreOptions {
 }
 
 export class SenderKeyMemoryStore implements WaSenderKeyStoreContract {
-    private readonly senderKeys: Map<string, SenderKeyRecord>
-    private readonly senderDistributions: Map<string, SenderKeyDistributionRecord>
+    protected readonly senderKeys: Map<string, SenderKeyRecord>
+    protected readonly senderDistributions: Map<string, SenderKeyDistributionRecord>
     private readonly maxSenderKeys: number
     private readonly maxSenderDistributions: number
 
@@ -36,33 +36,36 @@ export class SenderKeyMemoryStore implements WaSenderKeyStoreContract {
     }
 
     public async upsertSenderKey(record: SenderKeyRecord): Promise<void> {
-        setBoundedMapEntry(
-            this.senderKeys,
-            this.makeKey(record.groupId, record.sender),
-            record,
-            this.maxSenderKeys
-        )
+        const key = this.makeKey(record.groupId, record.sender)
+        setBoundedMapEntry(this.senderKeys, key, record, this.maxSenderKeys, this.onSenderKeyEvict)
+        this.onEntryAccess(this.senderKeys, key)
     }
 
     public async upsertSenderKeyDistribution(record: SenderKeyDistributionRecord): Promise<void> {
+        const key = this.makeKey(record.groupId, record.sender)
         setBoundedMapEntry(
             this.senderDistributions,
-            this.makeKey(record.groupId, record.sender),
+            key,
             record,
-            this.maxSenderDistributions
+            this.maxSenderDistributions,
+            this.onDistributionEvict
         )
+        this.onEntryAccess(this.senderDistributions, key)
     }
 
     public async upsertSenderKeyDistributions(
         records: readonly SenderKeyDistributionRecord[]
     ): Promise<void> {
         for (const record of records) {
+            const key = this.makeKey(record.groupId, record.sender)
             setBoundedMapEntry(
                 this.senderDistributions,
-                this.makeKey(record.groupId, record.sender),
+                key,
                 record,
-                this.maxSenderDistributions
+                this.maxSenderDistributions,
+                this.onDistributionEvict
             )
+            this.onEntryAccess(this.senderDistributions, key)
         }
     }
 
@@ -95,8 +98,11 @@ export class SenderKeyMemoryStore implements WaSenderKeyStoreContract {
         groupId: string,
         sender: SignalAddress
     ): Promise<SenderKeyRecord | null> {
-        const record = this.senderKeys.get(this.makeKey(groupId, sender))
-        return record ?? null
+        const key = this.makeKey(groupId, sender)
+        const record = this.senderKeys.get(key)
+        if (record === undefined) return null
+        this.onEntryAccess(this.senderKeys, key)
+        return record
     }
 
     public async getDeviceSenderKeyDistributions(
@@ -105,8 +111,14 @@ export class SenderKeyMemoryStore implements WaSenderKeyStoreContract {
     ): Promise<readonly (SenderKeyDistributionRecord | null)[]> {
         const records = new Array<SenderKeyDistributionRecord | null>(senders.length)
         for (let index = 0; index < senders.length; index += 1) {
-            records[index] =
-                this.senderDistributions.get(this.makeKey(groupId, senders[index])) ?? null
+            const key = this.makeKey(groupId, senders[index])
+            const record = this.senderDistributions.get(key)
+            if (record === undefined) {
+                records[index] = null
+            } else {
+                this.onEntryAccess(this.senderDistributions, key)
+                records[index] = record
+            }
         }
         return records
     }
@@ -134,7 +146,25 @@ export class SenderKeyMemoryStore implements WaSenderKeyStoreContract {
     public async clear(): Promise<void> {
         this.senderKeys.clear()
         this.senderDistributions.clear()
+        this.onEntriesClear()
     }
+
+    /**
+     * Runs with the map and key of every point-read hit and write (the group
+     * scan does not count). No-op unless a subclass tracks access.
+     */
+    protected onEntryAccess(entries: Map<string, unknown>, key: string): void {}
+
+    /** Runs with the map and key of every deleted or cap-evicted entry. */
+    protected onEntryRemove(entries: Map<string, unknown>, key: string): void {}
+
+    protected onEntriesClear(): void {}
+
+    private readonly onSenderKeyEvict = (key: string): void =>
+        this.onEntryRemove(this.senderKeys, key)
+
+    private readonly onDistributionEvict = (key: string): void =>
+        this.onEntryRemove(this.senderDistributions, key)
 
     private deleteMatching<T extends { groupId: string; sender: SignalAddress }>(
         map: Map<string, T>,
@@ -148,6 +178,7 @@ export class SenderKeyMemoryStore implements WaSenderKeyStoreContract {
             const sameAddress = signalAddressKey(record.sender) === targetAddressKey
             if (sameGroup && sameAddress) {
                 map.delete(key)
+                this.onEntryRemove(map, key)
                 deleted += 1
             }
         }

@@ -10,7 +10,6 @@ import {
     buildOfferStanza,
     buildRaiseHandStanza,
     buildRejectStanza,
-    buildRelaylatencyForwardStanza,
     buildTerminateStanza,
     buildVideoStateStanza,
     extractNodeInfo,
@@ -206,33 +205,6 @@ test('buildTerminateStanza includes reason and duration attributes', () => {
     assert.equal(inner.attrs.reason, 'accepted_elsewhere')
     assert.equal(inner.attrs.duration, '1500')
     assert.equal(inner.attrs.audio_duration, '1500')
-})
-
-test('buildRelaylatencyForwardStanza wraps te nodes and destinations under the user jid', () => {
-    const teNodes: BinaryNode[] = [{ tag: 'te', attrs: { latency: '1' }, content: undefined }]
-    const node = buildRelaylatencyForwardStanza(
-        '12345:7@s.whatsapp.net',
-        'CID',
-        'creator@lid',
-        teNodes,
-        ['a@lid', 'b@lid']
-    )
-
-    assert.equal(node.tag, 'call')
-    assert.equal(node.attrs.to, '12345@s.whatsapp.net')
-
-    const relaylatency = (node.content as BinaryNode[])[0]
-    assert.equal(relaylatency.tag, 'relaylatency')
-    assert.equal(relaylatency.attrs['call-id'], 'CID')
-
-    const children = relaylatency.content as BinaryNode[]
-    assert.equal(children[0].tag, 'te')
-    const destination = children[children.length - 1]
-    assert.equal(destination.tag, 'destination')
-    assert.deepEqual(
-        (destination.content as BinaryNode[]).map((child) => child.attrs.jid),
-        ['a@lid', 'b@lid']
-    )
 })
 
 /**

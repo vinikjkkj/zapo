@@ -39,8 +39,11 @@ import {
     tryAsString
 } from '@util/coercion'
 import {
+    IdleExpiryIndex,
+    IdleSweepClock,
     normalizeQueryLimit,
     resolveCleanupIntervalMs,
+    resolveIdleSweepPeriodMs,
     setBoundedMapEntry
 } from '@util/collections'
 import { longToNumber, toError, toSafeNumber } from '@util/primitives'
@@ -176,6 +179,140 @@ test('collections helpers enforce bounds and limits', () => {
 
     assert.deepEqual([...map.keys()], ['b', 'c'])
     assert.deepEqual(evicted, ['a'])
+})
+
+test('idle sweep period is the smallest ttl / 2, clamped to [1 s, 60 s]', () => {
+    assert.equal(resolveIdleSweepPeriodMs([1_000]), 1_000)
+    assert.equal(resolveIdleSweepPeriodMs([1_999]), 1_000)
+    assert.equal(resolveIdleSweepPeriodMs([5_000]), 2_500)
+    assert.equal(resolveIdleSweepPeriodMs([30 * 60_000]), 60_000)
+    assert.equal(resolveIdleSweepPeriodMs([30 * 60_000, 9_000, 5_001]), 2_500)
+})
+
+test('idle sweep clock runs one timer while sweeps are registered, and its tick only grows', (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const setIntervalSpy = t.mock.method(globalThis, 'setInterval')
+    const clock = new IdleSweepClock(1_000)
+    const seen: number[] = []
+
+    t.mock.timers.tick(5_000)
+    assert.equal(setIntervalSpy.mock.callCount(), 0)
+    assert.equal(clock.tick, 0)
+
+    const stopFirst = clock.register((tick) => seen.push(tick))
+    const stopSecond = clock.register(() => undefined)
+    assert.equal(setIntervalSpy.mock.callCount(), 1)
+    t.mock.timers.tick(2_000)
+    assert.deepEqual(seen, [1, 2])
+
+    stopFirst()
+    t.mock.timers.tick(1_000)
+    assert.equal(clock.tick, 3)
+    assert.deepEqual(seen, [1, 2])
+
+    stopSecond()
+    t.mock.timers.tick(5_000)
+    assert.equal(clock.tick, 3)
+
+    const stopThird = clock.register((tick) => seen.push(tick))
+    assert.equal(setIntervalSpy.mock.callCount(), 2)
+    t.mock.timers.tick(1_000)
+    assert.deepEqual(seen, [1, 2, 4])
+    stopThird()
+})
+
+test('idle expiry index drops a key only after it sat untouched for the full ttl', (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const clock = new IdleSweepClock(1_000)
+    const data = new Map<string, number>()
+    const index = new IdleExpiryIndex(data, { clock, ttlMs: 1_000 })
+    data.set('early', 1)
+    index.touch('early')
+    t.mock.timers.tick(999)
+    data.set('late', 2)
+    index.touch('late') // same tick as 'early', 999 ms later
+    data.set('refreshed', 3)
+    index.touch('refreshed')
+
+    t.mock.timers.tick(1) // t=1_000: 'late' has idled 1 ms
+    assert.deepEqual([...data.keys()], ['early', 'late', 'refreshed'])
+    index.touch('refreshed')
+
+    t.mock.timers.tick(1_000) // t=2_000
+    assert.deepEqual([...data.keys()], ['refreshed'])
+    t.mock.timers.tick(1_000) // t=3_000
+    assert.deepEqual([...data.keys()], [])
+    index.detach()
+})
+
+test('idle expiry index honours each ttl on a clock shared with a shorter one', (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const clock = new IdleSweepClock(2_500)
+    const shortData = new Map([['k', 1]])
+    const longData = new Map([['k', 1]])
+    const short = new IdleExpiryIndex(shortData, { clock, ttlMs: 5_000 })
+    const long = new IdleExpiryIndex(longData, { clock, ttlMs: 120_000 })
+    short.touch('k')
+    long.touch('k')
+
+    t.mock.timers.tick(5_000)
+    assert.equal(shortData.size, 1)
+    t.mock.timers.tick(2_500) // t=7_500
+    assert.equal(shortData.size, 0)
+
+    t.mock.timers.tick(120_000 - 7_500)
+    assert.equal(longData.size, 1)
+    t.mock.timers.tick(2_500) // t=122_500
+    assert.equal(longData.size, 0)
+    short.detach()
+    long.detach()
+})
+
+test('idle expiry index keeps data in access order, one move per key per tick', (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const clock = new IdleSweepClock(1_000)
+    const data = new Map([
+        ['a', 1],
+        ['b', 2],
+        ['c', 3]
+    ])
+    const index = new IdleExpiryIndex(data, { clock, ttlMs: 60_000 })
+    for (const key of ['a', 'b', 'c']) index.touch(key)
+
+    index.touch('a')
+    assert.deepEqual([...data.keys()], ['a', 'b', 'c'])
+    t.mock.timers.tick(1_000)
+    index.touch('a')
+    assert.deepEqual([...data.keys()], ['b', 'c', 'a'])
+    index.detach()
+})
+
+test('idle expiry index stops tracking deleted and cleared keys, and stops on detach', (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const clock = new IdleSweepClock(1_000)
+    const data = new Map([
+        ['deleted', 1],
+        ['kept', 2]
+    ])
+    const index = new IdleExpiryIndex(data, { clock, ttlMs: 1_000 })
+    index.touch('deleted')
+    index.touch('kept')
+    index.delete('deleted')
+    t.mock.timers.tick(2_000)
+    assert.deepEqual([...data.keys()], ['deleted'])
+
+    data.set('cleared', 3)
+    index.touch('cleared')
+    index.clear()
+    t.mock.timers.tick(2_000)
+    assert.deepEqual([...data.keys()], ['deleted', 'cleared'])
+
+    data.set('detached', 4)
+    index.touch('detached')
+    index.detach()
+    t.mock.timers.tick(10_000)
+    assert.equal(clock.tick, 4)
+    assert.ok(data.has('detached'))
 })
 
 test('base64 wrappers enforce required field semantics', () => {

@@ -1,3 +1,4 @@
+import type { Logger } from '@infra/log/types'
 import { withIdentityCache } from '@store/cache/identity.cache'
 import { withPrivacyTokenCache } from '@store/cache/privacy-token.cache'
 import { withSenderKeyCache } from '@store/cache/sender-key.cache'
@@ -68,6 +69,7 @@ import type {
     WaStoreSession
 } from '@store/types'
 import { resolvePositive } from '@util/coercion'
+import { type IdleExpiry, IdleSweepClock, resolveIdleSweepPeriodMs } from '@util/collections'
 import { toError } from '@util/primitives'
 
 interface Destroyable {
@@ -96,6 +98,12 @@ const REQUIRED_PROVIDER_DOMAINS = [
     'privacyToken'
 ] as const
 
+const CACHE_LAYER_DOMAINS = ['session', 'identity', 'senderKey', 'privacyToken'] as const
+
+type WaCacheLayerDomain = (typeof CACHE_LAYER_DOMAINS)[number]
+
+const MIN_CACHE_LAYER_TTL_MS = 1_000
+
 function hasDestroy(value: unknown): value is Destroyable {
     return (
         !!value &&
@@ -112,6 +120,41 @@ async function destroyIfSupported(value: unknown): Promise<void> {
 
 function usesBackend(provider: string | undefined): boolean {
     return !!provider && provider !== 'memory' && provider !== 'none'
+}
+
+/**
+ * Validates `cacheLayer.ttlMs` and hands each domain that gets an L1 its idle
+ * expiry, all on one clock. A TTL on a domain without an L1 is warned and dropped.
+ */
+function resolveCacheLayerExpiry(
+    cacheLayer: NonNullable<WaCreateStoreOptions['cacheLayer']>,
+    providers: NonNullable<WaCreateStoreOptions['providers']>,
+    logger: Logger | undefined
+): Partial<Record<WaCacheLayerDomain, IdleExpiry>> {
+    const ttls: { readonly domain: WaCacheLayerDomain; readonly ttlMs: number }[] = []
+    for (const domain of CACHE_LAYER_DOMAINS) {
+        const ttlMs = cacheLayer.ttlMs?.[`${domain}Ms` as const]
+        if (ttlMs === undefined) continue
+        if (!Number.isSafeInteger(ttlMs) || ttlMs < MIN_CACHE_LAYER_TTL_MS) {
+            throw new Error(
+                `cacheLayer.ttlMs.${domain}Ms must be a safe integer >= ${MIN_CACHE_LAYER_TTL_MS}`
+            )
+        }
+        if (cacheLayer[domain] && usesBackend(providers[domain])) {
+            ttls.push({ domain, ttlMs })
+            continue
+        }
+        logger?.warn('cacheLayer ttl ignored: domain has no L1', {
+            domain,
+            cached: cacheLayer[domain] === true,
+            provider: providers[domain] ?? 'memory'
+        })
+    }
+    const expiry: Partial<Record<WaCacheLayerDomain, IdleExpiry>> = {}
+    if (ttls.length === 0) return expiry
+    const clock = new IdleSweepClock(resolveIdleSweepPeriodMs(ttls.map((entry) => entry.ttlMs)))
+    for (const { domain, ttlMs } of ttls) expiry[domain] = { clock, ttlMs }
+    return expiry
 }
 
 function resolveStore<T>(
@@ -254,6 +297,7 @@ export function createStore(options?: WaCreateStoreOptions): WaStore {
             'memory.cacheTtlMs.messageSecretMs'
         )
     } as const)
+    const cacheLayerExpiry = resolveCacheLayerExpiry(cacheLayer, providers, storeLogger)
     const sessions = new Map<string, WaStoreSession>()
     const pendingSessionDestroys = new Set<Promise<void>>()
     let storeDestroyed = false
@@ -485,17 +529,29 @@ export function createStore(options?: WaCreateStoreOptions): WaStore {
             const preKeyStore = withPreKeyLock(rawPreKey)
             const sessionStore = withSessionLock(
                 cacheLayer.session && usesBackend(providers.session)
-                    ? withSessionCache(rawSession, cacheLayer.limits?.session)
+                    ? withSessionCache(
+                          rawSession,
+                          cacheLayer.limits?.session,
+                          cacheLayerExpiry.session
+                      )
                     : rawSession
             )
             const identityStore = withIdentityLock(
                 cacheLayer.identity && usesBackend(providers.identity)
-                    ? withIdentityCache(rawIdentity, cacheLayer.limits?.identity)
+                    ? withIdentityCache(
+                          rawIdentity,
+                          cacheLayer.limits?.identity,
+                          cacheLayerExpiry.identity
+                      )
                     : rawIdentity
             )
             const senderKeyStore = withSenderKeyLock(
                 cacheLayer.senderKey && usesBackend(providers.senderKey)
-                    ? withSenderKeyCache(rawSenderKey, cacheLayer.limits?.senderKey)
+                    ? withSenderKeyCache(
+                          rawSenderKey,
+                          cacheLayer.limits?.senderKey,
+                          cacheLayerExpiry.senderKey
+                      )
                     : rawSenderKey
             )
             const appStateStore = withAppStateLock(rawAppState)
@@ -504,7 +560,11 @@ export function createStore(options?: WaCreateStoreOptions): WaStore {
             const contactStore = withContactLock(rawContacts)
             const privacyTokenStore = withPrivacyTokenLock(
                 cacheLayer.privacyToken && usesBackend(providers.privacyToken)
-                    ? withPrivacyTokenCache(rawPrivacyToken, cacheLayer.limits?.privacyToken)
+                    ? withPrivacyTokenCache(
+                          rawPrivacyToken,
+                          cacheLayer.limits?.privacyToken,
+                          cacheLayerExpiry.privacyToken
+                      )
                     : rawPrivacyToken
             )
 

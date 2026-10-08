@@ -1,10 +1,46 @@
+import type { SenderKeyDistributionRecord, SenderKeyRecord } from '@signal/types'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
 import { SenderKeyMemoryStore } from '@store/memory/sender-key.store'
 import type { WithDestroyLifecycle } from '@store/types'
+import { type IdleExpiry, IdleExpiryIndex } from '@util/collections'
+
+/** L1 with idle expiry; hits keep both maps in access order, so the caps evict LRU entries. */
+class IdleSenderKeyMemoryStore extends SenderKeyMemoryStore {
+    private readonly idleSenderKeys: IdleExpiryIndex<string, SenderKeyRecord>
+    private readonly idleDistributions: IdleExpiryIndex<string, SenderKeyDistributionRecord>
+
+    public constructor(maxEntries: number | undefined, expiry: IdleExpiry) {
+        super({ maxSenderKeys: maxEntries, maxSenderDistributions: maxEntries })
+        this.idleSenderKeys = new IdleExpiryIndex(this.senderKeys, expiry)
+        this.idleDistributions = new IdleExpiryIndex(this.senderDistributions, expiry)
+    }
+
+    public detach(): void {
+        this.idleSenderKeys.detach()
+        this.idleDistributions.detach()
+    }
+
+    protected override onEntryAccess(entries: Map<string, unknown>, key: string): void {
+        this.indexFor(entries).touch(key)
+    }
+
+    protected override onEntryRemove(entries: Map<string, unknown>, key: string): void {
+        this.indexFor(entries).delete(key)
+    }
+
+    protected override onEntriesClear(): void {
+        this.idleSenderKeys.clear()
+        this.idleDistributions.clear()
+    }
+
+    private indexFor(entries: Map<string, unknown>): IdleExpiryIndex<string, unknown> {
+        return entries === this.senderKeys ? this.idleSenderKeys : this.idleDistributions
+    }
+}
 
 /**
  * Read-through / write-through in-process cache for a persistent sender-key
- * backend. Reuses {@link SenderKeyMemoryStore} as the bounded-LRU L1 so the
+ * backend. Reuses {@link SenderKeyMemoryStore} as the bounded L1 so the
  * per-(group, sender) lookups repeated across a group fan-out skip the
  * backend round-trip.
  *
@@ -15,16 +51,20 @@ import type { WithDestroyLifecycle } from '@store/types'
  * (`deleteDeviceSenderKey`/`markForgetSenderKey`) run on the backend for the
  * authoritative count and then invalidate the matching L1 entries via the
  * memory store's own sweep. See {@link withSessionCache} for the shared
- * coherence model and the single-writer-per-session assumption.
+ * coherence model, the single-writer-per-session assumption and the eviction
+ * with and without `expiry`.
  */
 export function withSenderKeyCache(
     backend: WaSenderKeyStore,
-    maxEntries?: number
+    maxEntries?: number,
+    expiry?: IdleExpiry
 ): WithDestroyLifecycle<WaSenderKeyStore> {
-    const l1 = new SenderKeyMemoryStore({
-        maxSenderKeys: maxEntries,
-        maxSenderDistributions: maxEntries
-    })
+    const l1 = expiry
+        ? new IdleSenderKeyMemoryStore(maxEntries, expiry)
+        : new SenderKeyMemoryStore({
+              maxSenderKeys: maxEntries,
+              maxSenderDistributions: maxEntries
+          })
     let generation = 0
 
     return {
@@ -102,6 +142,7 @@ export function withSenderKeyCache(
             await l1.clear()
         },
         destroy: async () => {
+            if (l1 instanceof IdleSenderKeyMemoryStore) l1.detach()
             await l1.clear()
             await (backend as WithDestroyLifecycle<WaSenderKeyStore>).destroy?.()
         }

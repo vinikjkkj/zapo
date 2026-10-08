@@ -23,14 +23,13 @@ export interface WaVoipCoordinatorOptions {
     readonly logLevel?: LogLevel
     /**
      * Dial each relay on the port its `<te2>` endpoint advertises instead of on
-     * {@link TRUE_WEB_CLIENT_RELAY_PORT}. Defaults to `false`, which is what
-     * WhatsApp Web does unless its own `shouldUseOriginalRelayPort` gate is set.
+     * `TRUE_WEB_CLIENT_RELAY_PORT` (3480). Defaults by session, read per call: `true`
+     * on a companion, `false` on a mobile primary.
      *
-     * Against WhatsApp's own relays this is the wrong choice and the call goes
-     * silently one way: the endpoints advertise a mix of ports, and one reached
-     * on 3478 completes the handshake and carries the uplink without ever
-     * forwarding the peer's stream back. It exists for a relay deployment that
-     * answers on the port it advertises.
+     * The wire does not say which port a relay answers on: measured, a companion's legs
+     * open only on the advertised port and a primary's only on 3480. A leg the relay never
+     * answers is redialled once on the other port, when there is one: an endpoint that
+     * already advertises 3480 has none.
      */
     readonly useOriginalRelayPort?: boolean
     /**

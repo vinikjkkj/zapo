@@ -1,12 +1,42 @@
+import type { SignalSessionRecord } from '@signal/types'
 import type { WaSessionStore } from '@store/contracts/session.store'
 import { WaSessionMemoryStore } from '@store/memory/session.store'
 import type { WithDestroyLifecycle } from '@store/types'
+import { type IdleExpiry, IdleExpiryIndex } from '@util/collections'
+
+/** L1 with idle expiry; hits keep it in access order, so the cap evicts the LRU entry. */
+class IdleSessionMemoryStore extends WaSessionMemoryStore {
+    private readonly idle: IdleExpiryIndex<string, SignalSessionRecord>
+
+    public constructor(maxSessions: number | undefined, expiry: IdleExpiry) {
+        super({ maxSessions })
+        this.idle = new IdleExpiryIndex(this.signalSessions, expiry)
+    }
+
+    public detach(): void {
+        this.idle.detach()
+    }
+
+    protected override onEntryAccess(key: string): void {
+        this.idle.touch(key)
+    }
+
+    protected override onEntryRemove(key: string): void {
+        this.idle.delete(key)
+    }
+
+    protected override onEntriesClear(): void {
+        this.idle.clear()
+    }
+}
 
 /**
  * Read-through / write-through in-process cache for a persistent session
- * backend. Reuses {@link WaSessionMemoryStore} as the bounded-LRU L1 so that
+ * backend. Reuses {@link WaSessionMemoryStore} as the bounded L1 so that
  * repeated reads of the same peer on the send/recv path skip the backend
- * round-trip.
+ * round-trip. Without `expiry` the cap evicts the least recently written
+ * entry; with it, the least recently used, and entries idle past the TTL
+ * leave the L1 (never the backend) and are re-read on next use.
  *
  * Coherence model (single process):
  * - every mutation (set/delete/clear) writes the backend then the L1 in
@@ -24,9 +54,12 @@ import type { WithDestroyLifecycle } from '@store/types'
  */
 export function withSessionCache(
     backend: WaSessionStore,
-    maxEntries?: number
+    maxEntries?: number,
+    expiry?: IdleExpiry
 ): WithDestroyLifecycle<WaSessionStore> {
-    const l1 = new WaSessionMemoryStore({ maxSessions: maxEntries })
+    const l1 = expiry
+        ? new IdleSessionMemoryStore(maxEntries, expiry)
+        : new WaSessionMemoryStore({ maxSessions: maxEntries })
     let generation = 0
 
     return {
@@ -90,6 +123,7 @@ export function withSessionCache(
             await l1.clear()
         },
         destroy: async () => {
+            if (l1 instanceof IdleSessionMemoryStore) l1.detach()
             await l1.clear()
             await (backend as WithDestroyLifecycle<WaSessionStore>).destroy?.()
         }
