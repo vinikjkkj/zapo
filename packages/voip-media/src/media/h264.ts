@@ -3,6 +3,8 @@ const START_CODE = new Uint8Array([0, 0, 0, 1])
 /** Coded slice of an IDR picture: the only NAL type that makes a key frame. */
 const NAL_TYPE_IDR = 5
 const NAL_TYPE_SPS = 7
+const NAL_TYPE_PPS = 8
+const NAL_TYPE_STAP_A = 24
 
 export interface H264AccessUnit {
     readonly timestamp: number
@@ -10,8 +12,53 @@ export interface H264AccessUnit {
     readonly keyFrame: boolean
 }
 
+/** Largest unit a STAP-A can carry: its size field is 16 bits. */
+const STAP_A_MAX_UNIT = 0xffff
+
 /**
- * Packetizes an Annex-B access unit into RFC 6184 single-NAL/FU-A payloads.
+ * An SPS immediately followed by a PPS, both with the forbidden bit clear and
+ * small enough for the STAP-A size field. Only that pair is aggregated;
+ * anything else keeps its own payload.
+ */
+function isParameterSetPair(sps: Uint8Array, pps: Uint8Array | undefined): pps is Uint8Array {
+    return (
+        pps !== undefined &&
+        (sps[0] & 0x9f) === NAL_TYPE_SPS &&
+        (pps[0] & 0x9f) === NAL_TYPE_PPS &&
+        sps.length <= STAP_A_MAX_UNIT &&
+        pps.length <= STAP_A_MAX_UNIT
+    )
+}
+
+/**
+ * One STAP-A (RFC 6184 section 5.7.1) holding the SPS then the PPS: NRI is the
+ * larger of the two, F is clear, and each unit is preceded by its 16-bit
+ * big-endian size.
+ */
+function stapA(sps: Uint8Array, pps: Uint8Array): Uint8Array {
+    const payload = new Uint8Array(5 + sps.length + pps.length)
+    payload[0] = Math.max(sps[0] & 0x60, pps[0] & 0x60) | NAL_TYPE_STAP_A
+    payload[1] = sps.length >>> 8
+    payload[2] = sps.length & 0xff
+    payload.set(sps, 3)
+    const at = 3 + sps.length
+    payload[at] = pps.length >>> 8
+    payload[at + 1] = pps.length & 0xff
+    payload.set(pps, at + 2)
+    return payload
+}
+
+/**
+ * Packetizes an Annex-B access unit into RFC 6184 payloads: single-NAL, FU-A
+ * for units larger than `maxPayload`, and one STAP-A for an SPS followed by
+ * its PPS.
+ *
+ * The parameter sets travel together because a phone answering a call we
+ * placed never renders a key frame whose SPS and PPS arrive as two single-NAL
+ * packets: it receives the stream without loss and keeps asking for a key
+ * frame. With the same frames sent as STAP-A(SPS, PPS) it renders from the
+ * first IDR and asks for none.
+ *
  * Single-NAL payloads are views into `data`, not copies, so they stay valid
  * only until the caller reuses that buffer.
  */
@@ -34,7 +81,14 @@ export function packetizeH264AnnexB(data: Uint8Array, maxPayload = 1100): Uint8A
         if (to > from) nals.push(data.subarray(from, to))
     }
     const payloads: Uint8Array[] = []
-    for (const nal of nals) {
+    for (let n = 0; n < nals.length; n++) {
+        const nal = nals[n]
+        const next = nals[n + 1]
+        if (isParameterSetPair(nal, next) && 5 + nal.length + next.length <= maxPayload) {
+            payloads.push(stapA(nal, next))
+            n++
+            continue
+        }
         if (nal.length <= maxPayload) {
             payloads.push(nal)
             continue

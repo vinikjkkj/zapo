@@ -217,3 +217,141 @@ test('does not splice a fragment across a sequence gap even when its NAL type ma
         'a fragment separated from the run in flight by a sequence gap was spliced onto it despite sharing its NAL type, producing a corrupt NAL unit'
     )
 })
+
+const annexB = (...nals: number[][]): Uint8Array => {
+    const bytes: number[] = []
+    for (const nal of nals) bytes.push(0, 0, 0, 1, ...nal)
+    return new Uint8Array(bytes)
+}
+const IDR_SLICE = [0x65, 0x88, 0x84, 0x21]
+
+test('a key frame [SPS, PPS, IDR] goes out as [STAP-A(SPS, PPS), IDR], never [SPS, PPS, IDR]', () => {
+    const payloads = packetizeH264AnnexB(annexB(SPS, PPS, IDR_SLICE), 800)
+    assert.deepEqual(payloads, [
+        stapA(SPS, PPS).map((b, i) => (i === 0 ? 0x60 | 24 : b)),
+        new Uint8Array(IDR_SLICE)
+    ])
+    assert.notDeepEqual(
+        payloads.map((p) => p[0] & 0x1f),
+        [7, 8, 5]
+    )
+})
+
+test('the STAP-A carries each parameter set byte-exact behind its big-endian size', () => {
+    const sps = [0x67, 0x4d, 0x40, 0x1f, ...Array.from({ length: 300 }, (_, i) => (i % 254) + 1)]
+    const pps = [0x68, 0xee, 0x3c, 0x80]
+    const [stap, idr] = packetizeH264AnnexB(annexB(sps, pps, IDR_SLICE), 800)
+    assert.equal(stap[0] & 0x1f, 24)
+    assert.equal(stap[0] & 0x80, 0, 'F clear')
+    assert.equal((stap[1] << 8) | stap[2], sps.length)
+    assert.equal(sps.length, 304, 'a size above 255 exercises both size bytes')
+    assert.deepEqual(stap.subarray(3, 3 + sps.length), new Uint8Array(sps))
+    const at = 3 + sps.length
+    assert.equal((stap[at] << 8) | stap[at + 1], pps.length)
+    assert.deepEqual(stap.subarray(at + 2), new Uint8Array(pps))
+    assert.equal(stap.length, 1 + 2 + sps.length + 2 + pps.length)
+    assert.deepEqual(idr, new Uint8Array(IDR_SLICE))
+})
+
+test('the STAP-A NRI is the larger of the two parameter sets', () => {
+    const [low] = packetizeH264AnnexB(annexB([0x27, 1], [0x48, 2], IDR_SLICE), 800)
+    assert.equal(low[0], 0x40 | 24)
+    const [high] = packetizeH264AnnexB(annexB([0x67, 1], [0x08, 2], IDR_SLICE), 800)
+    assert.equal(high[0], 0x60 | 24)
+})
+
+test('a large IDR still fragments into FU-A behind the STAP-A, within the payload budget', () => {
+    const idr = [0x65, ...Array.from({ length: 2000 }, (_, i) => i & 0xff)]
+    const payloads = packetizeH264AnnexB(annexB(SPS, PPS, idr), 800)
+    assert.equal(payloads[0][0] & 0x1f, 24)
+    const fragments = payloads.slice(1)
+    assert.ok(fragments.length > 1)
+    assert.ok(fragments.every((p) => (p[0] & 0x1f) === 28 && (p[1] & 0x1f) === 5))
+    assert.equal(fragments[0][1] & 0x80, 0x80, 'start bit on the first fragment')
+    assert.equal((fragments.at(-1)?.[1] ?? 0) & 0x40, 0x40, 'end bit on the last fragment')
+    assert.ok(payloads.every((p) => p.length <= 800))
+})
+
+test('units around the pair keep their own payloads and order', () => {
+    const payloads = packetizeH264AnnexB(annexB(SPS, PPS, SEI, IDR_SLICE), 800)
+    assert.deepEqual(
+        payloads.map((p) => p[0] & 0x1f),
+        [24, 6, 5]
+    )
+    assert.deepEqual(payloads[1], new Uint8Array(SEI))
+})
+
+test('a delta or an access unit without the pair is packetized as before', () => {
+    assert.deepEqual(packetizeH264AnnexB(annexB(DELTA_SLICE), 800), [new Uint8Array(DELTA_SLICE)])
+    assert.deepEqual(packetizeH264AnnexB(annexB(SEI, DELTA_SLICE), 800), [
+        new Uint8Array(SEI),
+        new Uint8Array(DELTA_SLICE)
+    ])
+    assert.deepEqual(packetizeH264AnnexB(annexB(IDR_SLICE), 800), [new Uint8Array(IDR_SLICE)])
+})
+
+test('anything but an SPS directly followed by a PPS is not aggregated', () => {
+    const types = (au: Uint8Array): number[] => packetizeH264AnnexB(au, 800).map((p) => p[0] & 0x1f)
+    assert.deepEqual(types(annexB(SPS, IDR_SLICE)), [7, 5], 'lone SPS')
+    assert.deepEqual(types(annexB(PPS, IDR_SLICE)), [8, 5], 'lone PPS')
+    assert.deepEqual(types(annexB(PPS, SPS, IDR_SLICE)), [8, 7, 5], 'PPS before SPS')
+    assert.deepEqual(types(annexB(SPS, SEI, PPS, IDR_SLICE)), [7, 6, 8, 5], 'not adjacent')
+    const forbiddenSps = [0x80 | 0x67, 1]
+    assert.deepEqual(
+        packetizeH264AnnexB(annexB(forbiddenSps, PPS, IDR_SLICE), 800).map((p) => p[0]),
+        [0xe7, PPS[0], IDR_SLICE[0]],
+        'a unit with the forbidden bit set is left alone'
+    )
+})
+
+test('each SPS directly followed by a PPS gets its own STAP-A, and nothing is duplicated or dropped', () => {
+    const types = (au: Uint8Array): number[] => packetizeH264AnnexB(au, 800).map((p) => p[0] & 0x1f)
+    assert.deepEqual(types(annexB(SPS, PPS, SPS, PPS, IDR_SLICE)), [24, 24, 5])
+    assert.deepEqual(types(annexB(SPS, SPS, PPS, IDR_SLICE)), [7, 24, 5])
+    assert.deepEqual(types(annexB(SPS, PPS, PPS, IDR_SLICE)), [24, 8, 5])
+    const original = annexB(SPS, SPS, PPS, PPS, IDR_SLICE)
+    const payloads = packetizeH264AnnexB(original, 800)
+    const depacketizer = new H264Depacketizer()
+    const frames = payloads.flatMap((payload, index) =>
+        depacketizer.push(payload, 322, index === payloads.length - 1, index)
+    )
+    assert.deepEqual(frames[0]?.data, original)
+})
+
+test('a pair that does not fit one payload keeps the single-NAL and FU-A path', () => {
+    // 1 + 2 + 4 + 2 + 4 = 13 bytes would exceed a 12-byte budget.
+    const payloads = packetizeH264AnnexB(annexB(SPS, PPS, IDR_SLICE), 12)
+    assert.deepEqual(
+        payloads.map((p) => p[0] & 0x1f),
+        [7, 8, 5]
+    )
+    assert.ok(packetizeH264AnnexB(annexB(SPS, PPS, IDR_SLICE), 13)[0][0] === (0x60 | 24))
+})
+
+test('a parameter set too large for the 16-bit STAP-A size field is never aggregated', () => {
+    const hugeSps = new Uint8Array(0x10000)
+    hugeSps[0] = 0x67
+    hugeSps.fill(1, 1)
+    const au = new Uint8Array(4 + hugeSps.length + 4 + PPS.length)
+    au.set([0, 0, 0, 1])
+    au.set(hugeSps, 4)
+    au.set([0, 0, 0, 1, ...PPS], 4 + hugeSps.length)
+    const payloads = packetizeH264AnnexB(au, 0x20000)
+    assert.deepEqual(
+        payloads.map((p) => p[0] & 0x1f),
+        [7, 8]
+    )
+    assert.equal(payloads[0].length, hugeSps.length)
+})
+
+test('the STAP-A output round-trips through the depacketizer as the same access unit', () => {
+    const original = annexB(SPS, PPS, IDR_SLICE)
+    const payloads = packetizeH264AnnexB(original, 800)
+    const depacketizer = new H264Depacketizer()
+    const frames = payloads.flatMap((payload, index) =>
+        depacketizer.push(payload, 321, index === payloads.length - 1, index)
+    )
+    assert.equal(frames.length, 1)
+    assert.deepEqual(frames[0].data, original)
+    assert.equal(frames[0].keyFrame, true)
+})
