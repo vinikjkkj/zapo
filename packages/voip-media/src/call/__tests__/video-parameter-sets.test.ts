@@ -54,14 +54,14 @@ async function createPlane(): Promise<{ plane: WaCallMediaPlane; sent: RtpPacket
     return { plane, sent }
 }
 
-test('a key frame leaves as STAP-A(SPS, PPS) then the IDR fragments, one timestamp, marker on the last', async () => {
+test('a key frame over one packet leaves as FU-A typed SPS, one timestamp, marker on the last', async () => {
     const { plane, sent } = await createPlane()
     const count = plane.sendVideoFrame(annexB(SPS, PPS, IDR), 0)
     assert.equal(count, sent.length)
-    assert.equal(sent[0].payload[0] & 0x1f, 24)
+    assert.ok(sent.length > 1)
     assert.deepEqual(
-        sent.slice(1).map((p) => [p.payload[0] & 0x1f, p.payload[1] & 0x1f]),
-        sent.slice(1).map(() => [28, 5])
+        sent.map((p) => [p.payload[0], p.payload[1]]),
+        sent.map((_, i) => [0x7c, 0x07 | (i === 0 ? 0x80 : 0) | (i === sent.length - 1 ? 0x40 : 0)])
     )
     assert.equal(new Set(sent.map((p) => p.header.timestamp)).size, 1)
     assert.deepEqual(
@@ -72,6 +72,19 @@ test('a key frame leaves as STAP-A(SPS, PPS) then the IDR fragments, one timesta
     assert.equal(sent[0].header.extensionData[0], 0x32)
     assert.ok(sent.every((p) => p.header.extensionData[1] === 0x08))
     assert.ok(sent.every((p) => p.payload.length <= 800))
+})
+
+test('a key frame that fits one packet leaves as one marked STAP-A of SPS, PPS and IDR', async () => {
+    const { plane, sent } = await createPlane()
+    const idr = IDR.slice(0, 100)
+    assert.equal(plane.sendVideoFrame(annexB(SPS, PPS, idr), 0), 1)
+    assert.deepEqual(
+        sent[0].payload,
+        new Uint8Array([0x78, 0, SPS.length, ...SPS, 0, PPS.length, ...PPS, 0, idr.length, ...idr])
+    )
+    assert.equal(sent[0].header.marker, true)
+    assert.equal(sent[0].header.extensionData[0], 0x32)
+    assert.equal(sent[0].header.extensionData[1], 0x08)
 })
 
 test('sequence numbers stay consecutive across key and delta frames', async () => {

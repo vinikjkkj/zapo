@@ -19,17 +19,30 @@ const DELTA = new Uint8Array([0x41, 0x9a, 0x02])
 const SPS_TYPED_KEY_FRAME = new Uint8Array([
     0x7c, 0xc7, 0x42, 0xc0, 0, 0, 0, 1, 0x68, 0xce, 0, 0, 0, 1, 0x65, 0x88, 0x84
 ])
+const SPS = [0x67, 0x42, 0xc0, 0x1f]
+const PPS = [0x68, 0xce, 0x3c, 0x80]
+
+/** An Annex-B SPS, PPS and IDR whose slice data runs `sliceBytes` bytes. */
+function keyFrameUnit(sliceBytes: number): Uint8Array {
+    return new Uint8Array([
+        ...[0, 0, 0, 1, ...SPS, 0, 0, 0, 1, ...PPS, 0, 0, 0, 1, 0x65],
+        ...new Uint8Array(sliceBytes).fill(0x2a)
+    ])
+}
 
 interface Harness {
     readonly plane: WaCallMediaPlane
     readonly frames: InboundVideoFrame[]
+    /** Everything the plane handed the relay, as it would go out. */
+    readonly sent: Uint8Array[]
     /** Media SSRCs of the picture loss indications sent (FMT 1 under the 0x10 profile bit). */
     readonly keyFrameRequests: () => number[]
     readonly push: (ssrc: number, payload: Uint8Array) => void
+    readonly relay: (packet: Uint8Array) => void
 }
 
 /** A video plane with pass-through SRTP and SRTCP and a relay that keeps what it sends. */
-async function createPlane(): Promise<Harness> {
+async function createPlane(videoSsrc = SELF_VIDEO_SSRC): Promise<Harness> {
     const sent: Uint8Array[] = []
     const frames: InboundVideoFrame[] = []
     const plane = new WaCallMediaPlane({
@@ -54,14 +67,20 @@ async function createPlane(): Promise<Harness> {
         setSubscriptionSsrc: () => {},
         resendSubscriptions: () => {}
     }
-    internals.srtpSession = { unprotect: (data: Uint8Array) => RtpPacket.decode(data) }
+    internals.srtpSession = {
+        protect: (packet: RtpPacket) => packet.encode(),
+        unprotect: (data: Uint8Array) => RtpPacket.decode(data)
+    }
     internals.srtcpContext = { protect: (rtcp: Uint8Array) => rtcp }
-    internals.videoRtpSession = new RtpSession(SELF_VIDEO_SSRC, 97)
+    internals.videoRtpSession = new RtpSession(videoSsrc, 97)
+    const relay = (packet: Uint8Array): void =>
+        (internals.onRelayData as (data: Uint8Array) => void).call(plane, packet)
 
     const sequences = new Map<number, number>()
     return {
         plane,
         frames,
+        sent,
         keyFrameRequests: () =>
             sent
                 .filter((packet) => packet[1] === 206 && (packet[0] & 0x0f) === 1)
@@ -71,11 +90,9 @@ async function createPlane(): Promise<Harness> {
             sequences.set(ssrc, sequence)
             const header = new RtpHeader(97, sequence, sequence * 3000, ssrc)
             header.marker = true
-            ;(internals.onRelayData as (data: Uint8Array) => void).call(
-                plane,
-                new RtpPacket(header, payload).encode()
-            )
-        }
+            relay(new RtpPacket(header, payload).encode())
+        },
+        relay
     }
 }
 
@@ -129,4 +146,50 @@ test("the official client's key frame stops the key frame requests", async () =>
     assert.equal(harness.frames[0].keyFrame, true)
     assert.deepEqual(harness.keyFrameRequests(), [])
     harness.plane.stop()
+})
+
+/** Sends `unit` from one plane into another and returns the RTP payloads that went out. */
+async function sendKeyFrame(
+    unit: Uint8Array
+): Promise<{ payloads: Uint8Array[]; receiver: Harness }> {
+    const sender = await createPlane(PEER_VIDEO_SSRC)
+    await sender.plane.apply({ accepted: true })
+    const receiver = await createPlane()
+    assert.ok(sender.plane.sendVideoFrame(unit, 0) > 0)
+    const video = sender.sent.filter((packet) => (packet[1] & 0x7f) === 97)
+    for (const packet of video) receiver.relay(packet)
+    sender.plane.stop()
+    return { payloads: video.map((packet) => RtpPacket.decode(packet).payload), receiver }
+}
+
+/** The receiving plane decoded `unit` as its one key frame and asked for none. */
+function assertOpened(receiver: Harness, unit: Uint8Array): void {
+    assert.equal(receiver.frames.length, 1)
+    assert.equal(receiver.frames[0].keyFrame, true)
+    assert.deepEqual(receiver.frames[0].data, unit)
+    assert.deepEqual(receiver.keyFrameRequests(), [])
+    receiver.plane.stop()
+}
+
+test('our key frame that fits one packet leaves as one STAP-A and opens a receiving plane', async () => {
+    const unit = keyFrameUnit(200)
+    const { payloads, receiver } = await sendKeyFrame(unit)
+    assert.deepEqual(payloads, [
+        new Uint8Array([
+            ...[0x78, 0x00, 0x04, ...SPS, 0x00, 0x04, ...PPS, 0x00, 0xc9, 0x65],
+            ...new Uint8Array(200).fill(0x2a)
+        ])
+    ])
+    assertOpened(receiver, unit)
+})
+
+test('our key frame over one packet leaves as FU-A typed SPS and opens a receiving plane', async () => {
+    const unit = keyFrameUnit(2000)
+    const { payloads, receiver } = await sendKeyFrame(unit)
+    assert.deepEqual(
+        payloads.map((payload) => payload.subarray(0, 2)),
+        [new Uint8Array([0x7c, 0x87]), new Uint8Array([0x7c, 0x07]), new Uint8Array([0x7c, 0x47])]
+    )
+    assert.equal(payloads[0][2], 0x42)
+    assertOpened(receiver, unit)
 })

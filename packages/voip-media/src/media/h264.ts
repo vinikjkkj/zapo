@@ -3,8 +3,9 @@ const START_CODE = new Uint8Array([0, 0, 0, 1])
 /** Coded slice of an IDR picture: the only NAL type that makes a key frame. */
 const NAL_TYPE_IDR = 5
 const NAL_TYPE_SPS = 7
-const NAL_TYPE_PPS = 8
 const NAL_TYPE_STAP_A = 24
+/** Largest NAL unit a STAP-A can carry: its size field is 16 bits. */
+const STAP_A_MAX_NAL = 0xffff
 
 export interface H264AccessUnit {
     readonly timestamp: number
@@ -12,55 +13,11 @@ export interface H264AccessUnit {
     readonly keyFrame: boolean
 }
 
-/** Largest unit a STAP-A can carry: its size field is 16 bits. */
-const STAP_A_MAX_UNIT = 0xffff
-
 /**
- * An SPS immediately followed by a PPS, both with the forbidden bit clear and
- * small enough for the STAP-A size field. Only that pair is aggregated;
- * anything else keeps its own payload.
- */
-function isParameterSetPair(sps: Uint8Array, pps: Uint8Array | undefined): pps is Uint8Array {
-    return (
-        pps !== undefined &&
-        (sps[0] & 0x9f) === NAL_TYPE_SPS &&
-        (pps[0] & 0x9f) === NAL_TYPE_PPS &&
-        sps.length <= STAP_A_MAX_UNIT &&
-        pps.length <= STAP_A_MAX_UNIT
-    )
-}
-
-/**
- * One STAP-A (RFC 6184 section 5.7.1) holding the SPS then the PPS: NRI is the
- * larger of the two, F is clear, and each unit is preceded by its 16-bit
- * big-endian size.
- */
-function stapA(sps: Uint8Array, pps: Uint8Array): Uint8Array {
-    const payload = new Uint8Array(5 + sps.length + pps.length)
-    payload[0] = Math.max(sps[0] & 0x60, pps[0] & 0x60) | NAL_TYPE_STAP_A
-    payload[1] = sps.length >>> 8
-    payload[2] = sps.length & 0xff
-    payload.set(sps, 3)
-    const at = 3 + sps.length
-    payload[at] = pps.length >>> 8
-    payload[at + 1] = pps.length & 0xff
-    payload.set(pps, at + 2)
-    return payload
-}
-
-/**
- * Packetizes an Annex-B access unit into RFC 6184 payloads: single-NAL, FU-A
- * for units larger than `maxPayload`, and one STAP-A for an SPS followed by
- * its PPS.
- *
- * The parameter sets travel together because a phone answering a call we
- * placed never renders a key frame whose SPS and PPS arrive as two single-NAL
- * packets: it receives the stream without loss and keeps asking for a key
- * frame. With the same frames sent as STAP-A(SPS, PPS) it renders from the
- * first IDR and asks for none.
- *
- * Single-NAL payloads are views into `data`, not copies, so they stay valid
- * only until the caller reuses that buffer.
+ * Packetizes an Annex-B access unit into RFC 6184 payloads. A key frame leaves as WhatsApp
+ * sends it: the whole unit in one STAP-A when it fits, else from its SPS to the end as one
+ * FU-A typed SPS, inner start codes kept. Single-NAL payloads are views into `data`, not
+ * copies, so they stay valid only until the caller reuses that buffer.
  */
 export function packetizeH264AnnexB(data: Uint8Array, maxPayload = 1100): Uint8Array[] {
     if (maxPayload < 3) throw new Error('H264 RTP payload size must be at least 3 bytes')
@@ -80,32 +37,75 @@ export function packetizeH264AnnexB(data: Uint8Array, maxPayload = 1100): Uint8A
         const to = i + 1 < starts.length ? starts[i + 1].start : data.length
         if (to > from) nals.push(data.subarray(from, to))
     }
+    const keyFrameSps = keyFrameSpsIndex(nals)
+    if (keyFrameSps >= 0) {
+        const aggregated = stapA(nals, maxPayload)
+        if (aggregated) return [aggregated]
+    }
     const payloads: Uint8Array[] = []
-    for (let n = 0; n < nals.length; n++) {
-        const nal = nals[n]
-        const next = nals[n + 1]
-        if (isParameterSetPair(nal, next) && 5 + nal.length + next.length <= maxPayload) {
-            payloads.push(stapA(nal, next))
-            n++
-            continue
-        }
-        if (nal.length <= maxPayload) {
-            payloads.push(nal)
-            continue
-        }
-        const indicator = (nal[0] & 0xe0) | 28
-        const nalType = nal[0] & 0x1f
-        const chunkSize = maxPayload - 2
-        for (let offset = 1; offset < nal.length; offset += chunkSize) {
-            const end = Math.min(nal.length, offset + chunkSize)
-            const payload = new Uint8Array(2 + end - offset)
-            payload[0] = indicator
-            payload[1] = nalType | (offset === 1 ? 0x80 : 0) | (end === nal.length ? 0x40 : 0)
-            payload.set(nal.subarray(offset, end), 2)
-            payloads.push(payload)
-        }
+    const separate = keyFrameSps < 0 ? nals.length : keyFrameSps
+    for (let i = 0; i < separate; i++) {
+        const nal = nals[i]
+        if (nal.length <= maxPayload) payloads.push(nal)
+        else pushFuA(payloads, nal, maxPayload)
+    }
+    if (keyFrameSps >= 0) {
+        const sps = nals[keyFrameSps]
+        pushFuA(payloads, data.subarray(sps.byteOffset - data.byteOffset), maxPayload)
     }
     return payloads
+}
+
+/** Index of the SPS an IDR follows in `nals`, or -1 when no IDR has one ahead of it. */
+function keyFrameSpsIndex(nals: readonly Uint8Array[]): number {
+    let sps = -1
+    for (let i = 0; i < nals.length; i++) {
+        const type = nals[i][0] & 0x1f
+        if (type === NAL_TYPE_IDR) return sps
+        if (type === NAL_TYPE_SPS && sps < 0) sps = i
+    }
+    return -1
+}
+
+/**
+ * All of `nals` in one RFC 6184 STAP-A (F of any unit, the largest NRI), or null when it
+ * exceeds `maxPayload` or a unit exceeds the 16-bit size field.
+ */
+function stapA(nals: readonly Uint8Array[], maxPayload: number): Uint8Array | null {
+    let size = 1
+    let forbidden = 0
+    let nri = 0
+    for (const nal of nals) {
+        size += 2 + nal.length
+        if (nal.length > STAP_A_MAX_NAL || size > maxPayload) return null
+        forbidden |= nal[0] & 0x80
+        nri = Math.max(nri, nal[0] & 0x60)
+    }
+    const payload = new Uint8Array(size)
+    payload[0] = forbidden | nri | NAL_TYPE_STAP_A
+    let at = 1
+    for (const nal of nals) {
+        payload[at] = nal.length >>> 8
+        payload[at + 1] = nal.length & 0xff
+        payload.set(nal, at + 2)
+        at += 2 + nal.length
+    }
+    return payload
+}
+
+/** Appends `unit` as FU-A fragments typed by its first byte, even when it fits in one. */
+function pushFuA(payloads: Uint8Array[], unit: Uint8Array, maxPayload: number): void {
+    const indicator = (unit[0] & 0xe0) | 28
+    const nalType = unit[0] & 0x1f
+    const chunkSize = maxPayload - 2
+    for (let offset = 1; offset < unit.length; offset += chunkSize) {
+        const end = Math.min(unit.length, offset + chunkSize)
+        const payload = new Uint8Array(2 + end - offset)
+        payload[0] = indicator
+        payload[1] = nalType | (offset === 1 ? 0x80 : 0) | (end === unit.length ? 0x40 : 0)
+        payload.set(unit.subarray(offset, end), 2)
+        payloads.push(payload)
+    }
 }
 
 /**
@@ -148,8 +148,8 @@ const SEQUENCE_MODULUS = 0x10000
  * frame it never joined, which keeps the flag correct no matter in what order
  * the packets arrive.
  *
- * WhatsApp sends a key frame as one FU-A typed SPS that carries the PPS and the
- * IDR inside it after Annex-B start codes, so the bytes of an SPS are also scanned.
+ * WhatsApp sends a key frame too large for one STAP-A as one FU-A typed SPS that carries the
+ * PPS and the IDR inside it after Annex-B start codes, so the bytes of an SPS are also scanned.
  */
 export class H264Depacketizer {
     private static readonly MAX_BUFFERED_BYTES = 8 * 1024 * 1024
