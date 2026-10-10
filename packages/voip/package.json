@@ -1,6 +1,6 @@
 {
     "name": "@zapo-js/voip",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "WhatsApp VOIP (calling) plugin for zapo-js — MLow/WASM codec, SRTP, STUN and WebRTC/SCTP relay transport",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
@@ -32,7 +32,7 @@
         "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\""
     },
     "dependencies": {
-        "@zapo-js/voip-media": "^0.1.1"
+        "@zapo-js/voip-media": "^0.1.2"
     },
     "peerDependencies": {
         "@roamhq/wrtc": ">=0.10.0",

@@ -1,5 +1,11 @@
 # @zapo-js/voip
 
+## 1.2.1
+
+### Patch Changes
+
+- Require `@zapo-js/voip-media` 0.1.2, whose H.264 key frames a phone answering our video call can render.
+
 ## 1.2.0
 
 ### Minor Changes
