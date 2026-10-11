@@ -324,7 +324,7 @@ test('with RED a capture pause sends the next frame alone, marked, without a sta
     assert.equal(packets[3].header.timestamp, packets[2].header.timestamp)
 })
 
-test('with in-band RED each packet carries the header, the copy of the frame before, then the frame', async (t) => {
+test('with in-band RED each packet carries the headers, the 0x00, the copy of the frame before, then the frame', async (t) => {
     const harness = await createPlane({ mlowRed: true }, 2)
     t.after(() => harness.plane.stop())
     useInBandRed(harness)
@@ -343,10 +343,12 @@ test('with in-band RED each packet carries the header, the copy of the frame bef
         const { header, payload } = packets[index]
         assert.deepEqual(
             payload,
-            copy ? Uint8Array.from([0xe0, copy.length, ...copy, ...primary]) : primary,
-            '0x80 | 960 / 10 and the copy length, the copy, then the primary last'
+            copy
+                ? Uint8Array.from([0x86, copy.length, 0x00, ...copy, ...primary])
+                : Uint8Array.from([0x00, ...primary]),
+            '0x80 | 60 ms / 10 and the copy length, the 0x00 primary header, the copy, the primary'
         )
-        assert.equal(header.payloadType, 120, 'in band, on the voice payload type')
+        assert.equal(header.payloadType, 121, 'on mlow-red-1, where the official clients take it')
         assert.equal(header.timestamp - base, index * 960, 'stamped on the primary')
         assert.equal(header.marker, index === 0)
         copy = twin.lastSecondary
@@ -384,7 +386,8 @@ for (const layout of ['timestamp', 'official'] as const) {
                 header.sequenceNumber,
                 payload,
                 (pcm) => played.push(...pcm),
-                header.timestamp
+                header.timestamp,
+                header.payloadType === 121 ? 1 : 0
             )
         }
 
@@ -432,7 +435,7 @@ test('with in-band RED a capture pause sends the next frame alone, marked, witho
     assert.equal(packets[3].header.timestamp - packets[2].header.timestamp, 960)
 })
 
-test('with in-band RED at level 2 a 60 ms frame still carries one copy: the older is out of reach', async (t) => {
+test('with in-band RED at level 2 a 60 ms frame carries the two frames before, 120 and 60 ms back', async (t) => {
     const harness = await createPlane({ mlowRed: true })
     t.after(() => harness.plane.stop())
     useInBandRed(harness, 2)
@@ -442,9 +445,11 @@ test('with in-band RED at level 2 a 60 ms frame still carries one copy: the olde
     const bounds = new Int32Array((MLOW_MAX_RED_BLOCKS + 1) * 3)
     const packets = audioPackets(harness.relay)
     assert.equal(packets.length, 4)
-    for (const packet of packets.slice(1)) {
-        assert.equal(readMlowRed(packet.payload, bounds), 1, '1920 back passes the 1279 reach')
-        assert.equal(bounds[2], 960)
+    assert.equal(readMlowRed(packets[1].payload, bounds), 1, 'one frame before the second')
+    for (const { payload } of packets.slice(2)) {
+        assert.deepEqual([payload[0], payload[2], payload[4]], [0x8c, 0x86, 0x00])
+        assert.equal(readMlowRed(payload, bounds), 2)
+        assert.deepEqual([bounds[2], bounds[5]], [1920, 960])
     }
 })
 

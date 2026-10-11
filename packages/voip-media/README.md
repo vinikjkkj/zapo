@@ -85,8 +85,8 @@ timeline at its packet's timestamp plus the durations its TOCs give the sub-fram
 is how the official packets add up. A sub-frame whose stretch already played is a
 redundant copy and is dropped; one that lands where a lost packet left a hole plays in its place.
 Audio a peer sends on PT 121 (`mlow-red-1`) plays on the same timeline, its sequence numbers kept
-apart from PT 120's, so a slot both carry plays once; a PT 121 packet that does not parse as MLow
-is dropped and counted in `audioRedDiscarded`.
+apart from PT 120's, so a slot both carry plays once; a PT 121 packet that parses neither as MLow
+nor as in-band RED is dropped and counted in `audioRedDiscarded`.
 
 Once per RTCP interval the plane sends a REMB (PSFB 206, FMT 15) on the peer's audio stream: the
 peer's audio quality control stays in its 15 kbps probing state until one arrives. The value is an
@@ -105,9 +105,12 @@ Two options on the plane, also accepted by `WaCallMediaReceiver` on a remote hos
 - `mlowRed`: sends RED as a plain two-frame multiframe, the low-rate copy of the previous frame
   then the frame, stamped with the copy's timestamp. The copy lands on the slot the previous
   packet filled, so a receiver that orders by timestamp drops it unless that packet was lost.
-  Against WA Web it kept concealment at 3.1% under about 18% loss; an in-band layout was
-  rejected by the official clients. Off by default; it turns DTX off, which
-  RED requires.
+  Against WA Web it kept concealment at 3.1% under about 18% loss, with no negotiation. The
+  official in-band layout, a compact RFC 2198 with a `0x00` primary header and each
+  copy counted back in 10 ms steps, stays internal: an official client takes it only on PT 121 and
+  behind its RX gate (`enable_red_pt_support_rx`), which the server sets, and rejects it on
+  PT 120. The receive side reads it on PT 121. Off by default; it turns DTX off, which RED
+  requires.
 
 ```ts
 const plane = new WaCallMediaPlane({

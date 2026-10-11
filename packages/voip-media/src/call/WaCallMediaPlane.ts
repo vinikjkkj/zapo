@@ -19,6 +19,7 @@ import {
     type MLowCompanionModelSource,
     mlowPacketSamples,
     type MLowRedOptions,
+    readMlowRed,
     writeMlowRed
 } from '../media/mlow-codec.js'
 import {
@@ -104,12 +105,12 @@ const DEFAULT_FRAME_SAMPLES = 960
 const MAX_AUDIO_FRAMES_PER_PACKET = 2
 
 /**
- * RED layout sent: `timestamp`, the copy-first multiframe stamped on the copy, the one the official
- * clients accept, or the experimental `official`, the in-band headers of {@link writeMlowRed}.
+ * RED layout sent: `timestamp`, the copy-first multiframe stamped on the copy, which interoperates
+ * without negotiation, or the experimental `official` on PT 121, see {@link writeMlowRed}.
  */
 const MLOW_RED_LAYOUT: 'official' | 'timestamp' = 'timestamp'
-/** Room for a primary behind the most copies a RED packet carries, each 2 header bytes and 255 at most. */
-const RED_PACKET_BYTES = MLOW_MAX_PACKET_BYTES + MLOW_MAX_RED_BLOCKS * (2 + 0xff)
+/** Room for the primary header and primary behind the most copies, each 2 header bytes and 255 at most. */
+const RED_PACKET_BYTES = 1 + MLOW_MAX_PACKET_BYTES + MLOW_MAX_RED_BLOCKS * (2 + 0xff)
 
 /**
  * How far a frame's capture instant may drift from the stream's timeline: 120 ms. Later
@@ -465,7 +466,7 @@ export class WaCallMediaPlane {
     private audioDropCount = 0
     private audioRecvCount = 0
     private audioRedDiscardCount = 0
-    /** Sub-frame bounds of the PT 121 packet being checked. */
+    /** Sub-frame or in-band RED bounds of the PT 121 packet being checked; fits both. */
     private readonly redPayloadBounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
     private recvRealCount = 0
     private recvDtxCount = 0
@@ -1376,8 +1377,8 @@ export class WaCallMediaPlane {
     }
 
     /**
-     * Experimental in-band RED, rejected by the official clients.
-     * At frame n's timestamp: the copies of up to `redLevel` frames before, then frame n.
+     * Experimental in-band RED, every packet framed on PT 121 with copies 10 ms units back: needs
+     * the receiver's RX gate (`enable_red_pt_support_rx`), set by the server, or it is rejected.
      */
     private packetizeRedInBand(
         codec: MLowCodec,
@@ -1389,12 +1390,15 @@ export class WaCallMediaPlane {
         const copies = this.redCopies
         const stamps = this.redCopyTimestamps
         if (marker) this.clearRedCopies()
-        let payload = frame
-        if (copies.length > 0) {
-            const target = (this.redScratch ??= new Uint8Array(RED_PACKET_BYTES))
-            payload = target.subarray(0, writeMlowRed(target, frame, timestamp, copies, stamps))
-        }
-        this.sendOpusFrame(payload, timestamp, marker, captureMs)
+        const target = (this.redScratch ??= new Uint8Array(RED_PACKET_BYTES))
+        const length = writeMlowRed(target, frame, timestamp, copies, stamps)
+        this.sendOpusFrame(
+            target.subarray(0, length),
+            timestamp,
+            marker,
+            captureMs,
+            PayloadType.WhatsAppMlowRed
+        )
 
         const secondary = codec.lastSecondary
         if (!secondary) return
@@ -1451,7 +1455,8 @@ export class WaCallMediaPlane {
         opusFrame: Uint8Array,
         timestamp: number,
         marker: boolean,
-        captureMs: number
+        captureMs: number,
+        payloadType: number = PayloadType.WhatsAppOpus
     ): void {
         if (!this.rtpSession || !this.srtpSession) return
 
@@ -1467,6 +1472,7 @@ export class WaCallMediaPlane {
             }
 
             const rtpPacket = this.rtpSession.createPacketAtTimestamp(rtpPayload, timestamp, marker)
+            rtpPacket.header.payloadType = payloadType
 
             rtpPacket.header.extension = true
             rtpPacket.header.extensionProfile = WA_RTP_EXTENSION_PROFILE
@@ -1658,7 +1664,11 @@ export class WaCallMediaPlane {
             if (pt === PayloadType.WhatsAppOpus) {
                 this.onAudioPacket(rtpPacket.header, rtpPacket.payload, 0)
             } else if (pt === PayloadType.WhatsAppMlowRed) {
-                if (mlowPacketSamples(rtpPacket.payload, this.redPayloadBounds) > 0) {
+                const payload = rtpPacket.payload
+                if (
+                    mlowPacketSamples(payload, this.redPayloadBounds) > 0 ||
+                    readMlowRed(payload, this.redPayloadBounds) >= 0
+                ) {
                     this.onAudioPacket(rtpPacket.header, rtpPacket.payload, 1)
                 } else {
                     this.discardRedAudio(rtpPacket.payload, rtpPacket.header.ssrc)

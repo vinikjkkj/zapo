@@ -838,7 +838,7 @@ test('MLowCodec resets the Companion where the inbound sequence restarts', async
 /** `[offset, length, Δts]` per copy, then the primary's `[offset, length]`. */
 const RED_BOUNDS_LENGTH = (MLOW_MAX_RED_BLOCKS + 1) * 3
 
-test('writeMlowRed puts a 2-byte header per copy, the copies, then the primary last', () => {
+test('writeMlowRed puts every copy header, the 0x00 primary header, the copies, then the primary', () => {
     const target = new Uint8Array(64)
     const primary = Uint8Array.from([0x50, 1, 2, 3])
     const older = Uint8Array.from([0x48, 9, 9])
@@ -848,66 +848,118 @@ test('writeMlowRed puts a 2-byte header per copy, the copies, then the primary l
 
     assert.deepEqual(
         target.subarray(0, length),
-        Uint8Array.from([0xc0, 3, 0xa0, 2, 0x48, 9, 9, 0x48, 7, 0x50, 1, 2, 3]),
-        '0x80 | Δts / 10 then the length, per copy: 640 and 320 samples back'
+        Uint8Array.from([0x84, 3, 0x82, 2, 0x00, 0x48, 9, 9, 0x48, 7, 0x50, 1, 2, 3]),
+        'F=1 headers 40 and 20 ms back in 10 ms units, the F=0 primary header, then the bodies'
     )
 })
 
-test('writeMlowRed stamps a 60 ms copy 960 samples back as 0xe0, across a timestamp wrap', () => {
+test('writeMlowRed frames a 33-byte copy of the 60 ms before as 86 21, then the 0x00', () => {
+    const target = new Uint8Array(128)
+    const copy = new Uint8Array(33).fill(0x54)
+    const primary = Uint8Array.from([0x50, 5])
+
+    const length = writeMlowRed(target, primary, 1920, [copy], [960])
+
+    assert.deepEqual(target.subarray(0, 3), Uint8Array.from([0x86, 0x21, 0x00]))
+    assert.deepEqual(target.subarray(3, 36), copy)
+    assert.deepEqual(target.subarray(36, length), primary)
+})
+
+test('writeMlowRed stamps a copy 60 ms back as 0x86 across a timestamp wrap', () => {
     const target = new Uint8Array(16)
     const copy = Uint8Array.from([0x50])
     const length = writeMlowRed(target, Uint8Array.from([0x50, 5]), 200, [copy], [0xffff_fd08])
-    assert.deepEqual(target.subarray(0, length), Uint8Array.from([0xe0, 1, 0x50, 0x50, 5]))
+    assert.deepEqual(target.subarray(0, length), Uint8Array.from([0x86, 1, 0x00, 0x50, 0x50, 5]))
 })
 
-test('writeMlowRed leaves out a copy over 255 bytes, empty, or out of the header reach', () => {
+test('writeMlowRed leaves out a copy over 255 bytes, empty, or out of the 10 ms reach', () => {
     const target = new Uint8Array(1024)
     const primary = Uint8Array.from([0x50, 1])
+    const edge = Uint8Array.from([0x50, 3])
     const fits = Uint8Array.from([0x50, 2])
-    const copies = [new Uint8Array(256).fill(0x50), new Uint8Array(0), fits, fits, fits, fits]
-    const stamps = [9_040, 9_040, 8_720, 10_000, 9_995, 9_040]
+    const copies = [new Uint8Array(256).fill(0x50), new Uint8Array(0), fits, fits, fits, edge, fits]
+    const stamps = [29_040, 29_040, 9_520, 30_000, 29_000, 9_680, 29_040]
 
-    const length = writeMlowRed(target, primary, 10_000, copies, stamps)
+    const length = writeMlowRed(target, primary, 30_000, copies, stamps)
 
     assert.deepEqual(
         target.subarray(0, length),
-        Uint8Array.from([0xe0, 2, 0x50, 2, 0x50, 1]),
-        'only the copy 960 back fits: 1280 back, the same slot and 5 back are left out too'
+        Uint8Array.from([0xff, 2, 0x86, 2, 0x00, 0x50, 3, 0x50, 2, 0x50, 1]),
+        '1270 ms back is the last 7-bit step; 1280 ms, the same slot and 62.5 ms are left out'
     )
-    const alone = writeMlowRed(target, primary, 10_000, [], [])
-    assert.deepEqual(target.subarray(0, alone), primary, 'no copy, no header')
+    const alone = writeMlowRed(target, primary, 30_000, [], [])
+    assert.deepEqual(
+        target.subarray(0, alone),
+        Uint8Array.from([0x00, 0x50, 1]),
+        'level 0 still frames the primary'
+    )
 })
 
-test('readMlowRed splits the headers, the copies and the primary', () => {
-    const packet = Uint8Array.from([0xc0, 3, 0xa0, 2, 0x48, 9, 9, 0x48, 7, 0x50, 1, 2, 3])
+test('readMlowRed reads the headers while F is set, the 0x00, the copies, then the primary', () => {
+    const packet = Uint8Array.from([0x84, 3, 0x82, 2, 0x00, 0x48, 9, 9, 0x48, 7, 0x50, 1, 2, 3])
     const bounds = new Int32Array(RED_BOUNDS_LENGTH)
 
     assert.equal(readMlowRed(packet, bounds), 2)
-    assert.deepEqual([...bounds.subarray(0, 8)], [4, 3, 640, 7, 2, 320, 9, 4])
+    assert.deepEqual(
+        [...bounds.subarray(0, 8)],
+        [5, 3, 640, 8, 2, 320, 10, 4],
+        'Δ in 10 ms units placed at 160 samples each on the 16 kHz clock'
+    )
+
+    assert.equal(readMlowRed(Uint8Array.from([0x86, 1, 0x00, 0x50, 0x50, 5]), bounds), 1)
+    assert.equal(bounds[2], 960, '0x86 is the frame 60 ms before')
+
+    assert.equal(readMlowRed(Uint8Array.from([0x00, 0x50, 1]), bounds), 0, 'level 0')
+    assert.deepEqual([...bounds.subarray(0, 2)], [1, 2])
 })
 
-test('readMlowRed takes a plain frame, a multiframe or a broken header for no RED', async () => {
+test('readMlowRed takes a plain frame or a broken header for no RED', async () => {
     const bounds = new Int32Array(RED_BOUNDS_LENGTH)
-    for (const { payload } of OFFICIAL_MLOW_PACKETS) {
-        assert.equal(readMlowRed(payload, bounds), 0, 'the official 92 02 multiframe')
-    }
     const codec = await MLowCodec.create()
     try {
-        const frame = codec.encode(voicedFrame())
-        assert.equal(readMlowRed(frame, bounds), 0, 'a single frame opens on its TOC')
-        assert.equal(readMlowRed(codec.packFrames([frame, frame]), bounds), 0)
+        assert.equal(
+            readMlowRed(codec.encode(voicedFrame()), bounds),
+            -1,
+            'a frame opens on its TOC'
+        )
     } finally {
         codec.destroy()
     }
-    assert.equal(readMlowRed(Uint8Array.from([0x08]), bounds), 0, 'a DTX frame')
-    assert.equal(readMlowRed(Uint8Array.from([0xe0, 200, 0x50, 1]), bounds), 0, 'copy past the end')
-    assert.equal(readMlowRed(Uint8Array.from([0xe0, 2, 0x50, 1]), bounds), 0, 'no primary left')
-    assert.equal(readMlowRed(Uint8Array.from([0xe0, 0, 0x50, 1]), bounds), 0, 'empty copy')
+    assert.equal(readMlowRed(Uint8Array.from([0x08]), bounds), -1, 'a DTX frame')
     assert.equal(
-        readMlowRed(Uint8Array.from([0xe0, 1, 0x50, 0xe0, 1]), bounds),
-        0,
-        'a primary that does not open on a TOC'
+        readMlowRed(Uint8Array.from([0x86, 2, 0x50, 1, 0x50, 9]), bounds),
+        -1,
+        'the copy right behind its header, with no 0x00'
     )
+    assert.equal(
+        readMlowRed(Uint8Array.from([0x86, 200, 0x00, 0x50, 1]), bounds),
+        -1,
+        'copy past the end'
+    )
+    assert.equal(readMlowRed(Uint8Array.from([0x86, 1, 0x00, 0x50]), bounds), -1, 'no primary left')
+    assert.equal(readMlowRed(Uint8Array.from([0x86, 0, 0x00, 0x50, 1]), bounds), -1, 'empty copy')
+    assert.equal(readMlowRed(Uint8Array.from([0x00]), bounds), -1, 'a lone primary header')
+})
+
+test('MLowCodec reads in-band RED on PT 121 only, and a multiframe there stays plain MLow', async () => {
+    const packets = await officialRedPackets(2)
+    const receiver = await MLowCodec.create()
+    try {
+        for (const { sequenceNumber, payload, timestamp } of OFFICIAL_MLOW_PACKETS) {
+            receiver.decodeSequenced(sequenceNumber, payload, () => {}, timestamp, 1)
+        }
+        assert.equal(receiver.getStats().redundant, 0, 'the 92 02 packets decode whole')
+        assert.equal(receiver.getStats().errors, 0)
+
+        receiver.resetSequence()
+        const before = receiver.getStats().redundant
+        for (const { sequenceNumber, payload, timestamp } of packets) {
+            receiver.decodeSequenced(sequenceNumber, payload, () => {}, timestamp)
+        }
+        assert.equal(receiver.getStats().redundant, before, 'PT 120 never unwraps a RED copy')
+    } finally {
+        receiver.destroy()
+    }
 })
 
 /** Official in-band RED: the copy of the frame before behind its header, then the frame, on its slot. */
@@ -920,11 +972,10 @@ async function officialRedPackets(count: number): Promise<RedundantPacket[]> {
         for (let index = 0; index < count; index++) {
             const primary = sender.encode(voicedFrame(index * 960))
             const timestamp = index * 960
-            let payload = primary
-            if (copy) {
-                const length = writeMlowRed(target, primary, timestamp, [copy], [timestamp - 960])
-                payload = target.slice(0, length)
-            }
+            const length = copy
+                ? writeMlowRed(target, primary, timestamp, [copy], [timestamp - 960])
+                : writeMlowRed(target, primary, timestamp, [], [])
+            const payload = target.slice(0, length)
             packets.push({ sequenceNumber: index + 1, timestamp, payload, primary, copy })
             copy = sender.lastSecondary
         }
@@ -945,7 +996,8 @@ test('MLowCodec drops every official RED copy whose slot already played', async 
                 sequenceNumber,
                 payload,
                 (pcm) => played.push(...pcm),
-                timestamp
+                timestamp,
+                1
             )
         }
 
@@ -974,7 +1026,8 @@ test('MLowCodec plays an official RED copy in place of the packet that was lost'
                 sequenceNumber,
                 payload,
                 (pcm) => played.push(...pcm),
-                timestamp
+                timestamp,
+                1
             )
         }
 
@@ -1013,7 +1066,8 @@ test('MLowCodec conceals only the hole an official RED copy cannot cover', async
                 sequenceNumber,
                 payload,
                 (pcm) => lengths.push(pcm.length),
-                timestamp
+                timestamp,
+                1
             )
         }
 
@@ -1034,7 +1088,13 @@ test('MLowCodec decodes only the primary of an official RED packet without a tim
     try {
         const played: number[] = []
         for (const { sequenceNumber, payload } of packets) {
-            receiver.decodeSequenced(sequenceNumber, payload, (pcm) => played.push(...pcm))
+            receiver.decodeSequenced(
+                sequenceNumber,
+                payload,
+                (pcm) => played.push(...pcm),
+                undefined,
+                1
+            )
         }
 
         const expected: number[] = []

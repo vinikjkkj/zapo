@@ -8,6 +8,7 @@ import {
     buildAcceptStanza,
     buildMuteV2Stanza,
     buildOfferStanza,
+    buildPreacceptStanza,
     buildRaiseHandStanza,
     buildRejectStanza,
     buildTerminateStanza,
@@ -20,7 +21,8 @@ import {
     parseMuteV2,
     parseRaiseHandState,
     parseVideoStateNode,
-    WA_VIDEO_STATE
+    WA_VIDEO_STATE,
+    withMlowRedCapability
 } from '../signaling.js'
 
 test('generateCallId / generateCallStanzaId produce 32-char uppercase hex', () => {
@@ -206,6 +208,29 @@ test('no offer announces MLow RED or its separate payload type, which this side 
         assert.equal(hasCapability(blob, 38), false, 'bit 38 is enable_mlow_separate_pt_tx')
         assert.equal(hasCapability(blob, isVideo ? 30 : 24), true, 'the media bit stays')
     }
+})
+
+test('the preaccept does not announce MLow RED either', () => {
+    const preaccept = (
+        buildPreacceptStanza('peer@lid', 'CALL', 'peer@lid').content as BinaryNode[]
+    )[0]
+    const blob = (preaccept.content as BinaryNode[]).find(
+        (child) => child.tag === 'capability'
+    )?.content
+    assert.ok(blob instanceof Uint8Array)
+    assert.equal(hasCapability(blob, 36), false)
+    assert.equal(hasCapability(blob, 24), true)
+})
+
+test('the in-band RED trial switch sets bit 36 alone, on a copy of the blob', () => {
+    const blob = Uint8Array.of(0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x07)
+
+    const announced = withMlowRedCapability(blob, true)
+
+    assert.deepEqual(announced, Uint8Array.of(0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x17))
+    assert.equal(hasCapability(announced, 36), true)
+    assert.equal(blob[6], 0x07, 'the shared blob is left alone')
+    assert.equal(withMlowRedCapability(blob, false), blob, 'off by default')
 })
 
 test('needsDecryption only flags encrypted payload tags', () => {

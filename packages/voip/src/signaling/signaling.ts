@@ -290,9 +290,26 @@ export async function decryptCallKey(
  * (`enable_mlow_red`, `0x10` of the last byte) nor 38 (`enable_mlow_separate_pt_tx`, `0x40`): a peer
  * that sees them may send RED this side cannot fully unwrap, in-band or on its own payload type.
  */
-const CAPABILITY_OFFER = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x07])
-const CAPABILITY_VIDEO_OFFER = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe0, 0xfa, 0x03])
-const CAPABILITY_PREACCEPT = new Uint8Array([0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x07])
+const CAPABILITY_OFFER_BASE = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x07])
+const CAPABILITY_VIDEO_OFFER_BASE = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe0, 0xfa, 0x03])
+const CAPABILITY_PREACCEPT_BASE = new Uint8Array([0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x07])
+
+/** `enable_mlow_red`, the capability index the in-band RED trial announces. */
+const MLOW_RED_CAPABILITY_INDEX = 36
+/** Live trial of in-band RED only: announces bit 36 in the offer, preaccept and accept. Off. */
+const ANNOUNCE_MLOW_RED = false as boolean
+
+/** `blob` with bit 36 set on a copy when `announce` is on, `blob` itself otherwise. */
+export function withMlowRedCapability(blob: Uint8Array, announce: boolean): Uint8Array {
+    if (!announce) return blob
+    const announced = blob.slice()
+    announced[2 + (MLOW_RED_CAPABILITY_INDEX >> 3)] |= 1 << (MLOW_RED_CAPABILITY_INDEX & 7)
+    return announced
+}
+
+const CAPABILITY_OFFER = withMlowRedCapability(CAPABILITY_OFFER_BASE, ANNOUNCE_MLOW_RED)
+const CAPABILITY_VIDEO_OFFER = withMlowRedCapability(CAPABILITY_VIDEO_OFFER_BASE, ANNOUNCE_MLOW_RED)
+const CAPABILITY_PREACCEPT = withMlowRedCapability(CAPABILITY_PREACCEPT_BASE, ANNOUNCE_MLOW_RED)
 
 /**
  * Codec identifiers for the `<video enc dec>` attrs shared by the offer and
@@ -493,6 +510,10 @@ export async function buildAcceptStanza(
 
     if (isVideo) {
         acceptContent.push({ tag: 'video', attrs: { enc: VIDEO_ENC_H264, dec: VIDEO_DEC_H264 } })
+    }
+    if (ANNOUNCE_MLOW_RED) {
+        const capability = isVideo ? CAPABILITY_VIDEO_OFFER : CAPABILITY_PREACCEPT
+        acceptContent.push({ tag: 'capability', attrs: { ver: '1' }, content: capability })
     }
 
     return {

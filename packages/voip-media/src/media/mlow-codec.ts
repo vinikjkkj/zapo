@@ -52,15 +52,18 @@ const SMPL_FRAME_SAMPLES = [160, 320, 960, 1_920] as const
 /** Furthest behind the played audio a sub-frame may start and still be taken as a copy of it. */
 const MAX_REDUNDANT_LAG = MLOW_SAMPLE_RATE
 
-/** First byte of an in-band RED header: bit 7 marks the copy, the low 7 bits carry its Δts / 10. */
+/** First byte of an in-band RED copy header: F (bit 7) set, the low 7 bits how far back in 10 ms. */
 const RED_COPY_MARKER = 0x80
+/** The primary's header, F clear: one byte that closes the header list. */
+const RED_PRIMARY_HEADER = 0x00
 const RED_DELTA_MASK = 0x7f
-const RED_DELTA_UNIT = 10
-/** Furthest back a copy may start, in 16 kHz samples: what 7 bits of Δts / 10 reach. */
-const RED_MAX_DELTA = 0x4ff
+/** 16 kHz samples in one 10 ms step of the header: 0x86 is the frame 60 ms before. */
+const RED_DELTA_UNIT = MLOW_SAMPLE_RATE / 100
+/** Furthest back a copy may start, in 16 kHz samples: 127 steps, 1270 ms. */
+const RED_MAX_DELTA = RED_DELTA_MASK * RED_DELTA_UNIT
 /** Longest copy the header's length byte describes. */
 const RED_MAX_COPY_BYTES = 0xff
-/** Most copies an in-band RED packet carries: seven 10 ms frames already reach the header's limit. */
+/** Most copies an in-band RED packet carries, a bound of ours. */
 export const MLOW_MAX_RED_BLOCKS = 8
 
 /**
@@ -232,27 +235,24 @@ export function mlowPacketSamples(packet: Uint8Array, bounds: Int32Array): numbe
     return samples
 }
 
-/** A RED header's first byte: bit 7 and a non-zero Δts, which no multiframe marker is. */
+/** A RED copy header's first byte: F set and a non-zero step back. */
 function isRedHeader(byte: number): boolean {
-    return (
-        (byte & RED_COPY_MARKER) !== 0 &&
-        (byte & RED_DELTA_MASK) !== 0 &&
-        !((byte & MULTIFRAME_MARKER) === MULTIFRAME_MARKER && byte < CELT_TOC)
-    )
+    return (byte & RED_COPY_MARKER) !== 0 && (byte & RED_DELTA_MASK) !== 0
 }
 
 /** Δts of a copy a RED header can carry, or 0 when the copy is left out. */
 function redCopyDelta(copy: Uint8Array, timestamp: number, copyTimestamp: number): number {
     const delta = (timestamp - copyTimestamp) >>> 0
     if (copy.length === 0 || copy.length > RED_MAX_COPY_BYTES) return 0
+    if (delta % RED_DELTA_UNIT !== 0) return 0
     return delta < RED_DELTA_UNIT || delta > RED_MAX_DELTA ? 0 : delta
 }
 
 /**
- * Writes in-band MLow RED into `target` and returns its length:
- * per copy a header `[0x80 | Δts / 10][length]`, the copies, then `primary` last. Δts is how many
- * 16 kHz samples a copy starts before `timestamp`; a copy empty, over 255 bytes or 1279 samples
- * back is left out. Rejected by the official clients.
+ * Writes the official in-band MLow RED, a compact RFC 2198, into `target` and returns
+ * its length: `[0x80 | steps][length]` per copy, the `0x00` primary header, the copies, then
+ * `primary`. Steps are 10 ms units back from `timestamp`, 1 to 127; a copy empty, over 255 bytes or
+ * off that grid is left out. Goes on PT 121; the receiver needs `enable_red_pt_support_rx`.
  */
 export function writeMlowRed(
     target: Uint8Array,
@@ -261,7 +261,7 @@ export function writeMlowRed(
     copies: readonly Uint8Array[],
     copyTimestamps: readonly number[]
 ): number {
-    let body = 0
+    let body = 1
     for (let index = 0; index < copies.length; index++) {
         if (redCopyDelta(copies[index], timestamp, copyTimestamps[index]) > 0) body += 2
     }
@@ -275,37 +275,39 @@ export function writeMlowRed(
         target.set(copy, body)
         body += copy.length
     }
+    target[header] = RED_PRIMARY_HEADER
     target.set(primary, body)
     return body + primary.length
 }
 
 /**
- * Splits the in-band RED of {@link writeMlowRed} into `bounds`, `[offset, length, Δts]` per copy
- * then the primary's `[offset, length]`, and returns the copy count; 0 when `packet` is not RED.
- * The headers end at the first byte that is not one, the first copy's TOC.
+ * Splits the in-band RED of {@link writeMlowRed} into `bounds`, `[offset, length, Δts]` per copy,
+ * Δts its 10 ms steps as 16 kHz samples, then the primary's `[offset, length]`. Returns the copy
+ * count, 0 for a lone primary, -1 when `packet` is not RED: headers while F is set, then `0x00`.
  */
 export function readMlowRed(packet: Uint8Array, bounds: Int32Array): number {
     let count = 0
     let cursor = 0
     let total = 0
-    while (cursor + 1 < packet.length && isRedHeader(packet[cursor])) {
-        if (count === MLOW_MAX_RED_BLOCKS || bounds.length < (count + 2) * 3) return 0
+    while (cursor < packet.length && isRedHeader(packet[cursor])) {
+        if (cursor + 1 >= packet.length || count === MLOW_MAX_RED_BLOCKS) return -1
+        if (bounds.length < (count + 2) * 3) return -1
         const length = packet[cursor + 1]
-        if (length === 0) return 0
+        if (length === 0) return -1
         bounds[count * 3 + 1] = length
         bounds[count * 3 + 2] = (packet[cursor] & RED_DELTA_MASK) * RED_DELTA_UNIT
         total += length
         cursor += 2
         count++
     }
-    if (count === 0 || cursor + total >= packet.length) return 0
+    if (cursor >= packet.length || packet[cursor] !== RED_PRIMARY_HEADER) return -1
+    cursor++
+    if (cursor + total >= packet.length || bounds.length < (count + 1) * 3) return -1
 
     for (let index = 0; index < count; index++) {
-        if (isRedHeader(packet[cursor])) return 0
         bounds[index * 3] = cursor
         cursor += bounds[index * 3 + 1]
     }
-    if (isRedHeader(packet[cursor])) return 0
     bounds[count * 3] = cursor
     bounds[count * 3 + 1] = packet.length - cursor
     bounds[count * 3 + 2] = 0
@@ -591,8 +593,8 @@ export class MLowCodec {
      * official client's packets add up. A sub-frame whose stretch already played is a
      * redundant copy and is dropped; one that lands where a lost packet left a hole is
      * played in its place, and only the hole it leaves is concealed. Without
-     * `timestamp` every packet decodes whole. An in-band RED packet ({@link readMlowRed})
-     * plays its primary; a copy plays only in the slot of a lost packet.
+     * `timestamp` every packet decodes whole. On `stream` 1 (PT 121) an in-band RED packet
+     * ({@link readMlowRed}) plays its primary; a copy plays only in the slot of a lost packet.
      *
      * `stream` 1 numbers a second RTP stream apart, as PT 121 beside PT 120: each stream's
      * own gaps tell its losses, and both play on the one timeline, so each slot plays once.
@@ -637,9 +639,12 @@ export class MLowCodec {
         }
 
         const onTimeline = timestamp !== undefined && this.playedUntil >= 0
-        const copies = readMlowRed(packet, this.redBounds)
+        const copies =
+            stream === 1 && readMlowSubframes(packet, this.subframeBounds) === 0
+                ? readMlowRed(packet, this.redBounds)
+                : -1
         let played: boolean
-        if (copies > 0) {
+        if (copies >= 0) {
             played = onTimeline
                 ? this.playRedOnTimeline(packet, copies, timestamp >>> 0, missing, onFrame)
                 : this.playRedPrimary(packet, copies, timestamp, missing, onFrame)

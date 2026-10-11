@@ -8,7 +8,7 @@ import {
     type CapturedMlowPacket,
     WEB_PT121_STREAM
 } from '../../media/__tests__/_mlow-captures.js'
-import { MLowCodec } from '../../media/mlow-codec.js'
+import { MLowCodec, writeMlowRed } from '../../media/mlow-codec.js'
 import type { RtpStreamReception } from '../../media/rtcp.js'
 import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { nodeCrypto } from '../../node/crypto.js'
@@ -185,4 +185,32 @@ test('a stream only on PT 121 plays continuously, concealing only the packet it 
     const report = harness.internals.audioReception.report(Date.now())
     assert.equal(report.ssrc, ssrc)
     assert.equal(report.packetsLost, 1)
+})
+
+test('in-band RED on PT 121 decodes as the audio it frames instead of being discarded', async (t) => {
+    const harness = await createPlane()
+    t.after(() => harness.plane.stop())
+    const sender = await MLowCodec.create({ red: true })
+    t.after(() => sender.destroy())
+
+    const target = new Uint8Array(8_192)
+    const primaries: CapturedMlowPacket[] = []
+    let copy: Uint8Array | null = null
+    for (let index = 0; index < 3; index++) {
+        const frame = new Float32Array(960).map(
+            (_, sample) => Math.sin((2 * Math.PI * 440 * (index * 960 + sample)) / 16_000) * 0.25
+        )
+        const timestamp = index * 960
+        const primary = sender.encode(frame)
+        primaries.push({ sequenceNumber: index + 1, timestamp, payload: primary })
+        const length = copy
+            ? writeMlowRed(target, primary, timestamp, [copy], [timestamp - 960])
+            : writeMlowRed(target, primary, timestamp, [], [])
+        const packet = { sequenceNumber: index + 1, timestamp, payload: target.slice(0, length) }
+        harness.internals.onRelayData(inbound(MLOW_RED_PAYLOAD_TYPE, PEER_AUDIO_SSRC, packet))
+        copy = sender.lastSecondary
+    }
+
+    assert.equal(harness.plane.getStats().audioRedDiscarded, 0)
+    assert.deepEqual(harness.played, await referencePcm(primaries), 'only the primaries play')
 })
