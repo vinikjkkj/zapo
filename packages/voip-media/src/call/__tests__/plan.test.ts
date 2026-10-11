@@ -111,9 +111,10 @@ function createCodec(): { codec: unknown; encoded: Float32Array[] } {
     const encoded: Float32Array[] = []
     const codec = {
         getFrameSize: () => 960,
-        encode: (frame: Float32Array) => {
+        encodeInto: (frame: Float32Array, target: Uint8Array) => {
             encoded.push(frame.slice())
-            return new Uint8Array([0xf8, 0xff, 0xfe])
+            target.set([0xf8, 0xff, 0xfe])
+            return 3
         },
         resetSequence: () => {},
         decodeSequenced: () => {},

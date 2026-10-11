@@ -175,7 +175,10 @@ async function createPlane(
 function fixedFrameCodec(samplesPerPacket: number): MLowCodec {
     return {
         getFrameSize: () => samplesPerPacket,
-        encode: () => OPUS_FRAME,
+        encodeInto: (_frame: Float32Array, target: Uint8Array) => {
+            target.set(OPUS_FRAME)
+            return OPUS_FRAME.length
+        },
         resetSequence: () => {},
         getStats: () => ({ success: 0, errors: 0 }),
         destroy: () => {}

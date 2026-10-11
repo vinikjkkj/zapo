@@ -28,6 +28,12 @@ const DISABLE_RTCP_REMB_KEY = 'disable_rtcp_remb'
 /** The interval between RTCP reports, in milliseconds. */
 const RTCP_INTERVAL_MS_KEY = 'rtcp_interval_ms'
 
+/** The audio codec section, where the frame duration lives. */
+const ENCODE_SECTION = 'encode'
+const FRAME_MS_KEY = 'frame_ms'
+/** Most audio frames bundled per packet, in `rc`. */
+const MAX_FRAMES_PER_PACKET_KEY = 'maxfpp'
+
 /** `{`, the first character of a payload that already arrived as plain JSON. */
 const OPEN_BRACE = 0x7b
 
@@ -110,8 +116,9 @@ function toSection(value: unknown): Record<string, unknown> | null {
  * key, a missing section or an unexpected type return the default instead of
  * throwing.
  *
- * Out of this catalogue this client applies two keys, and only those two:
- * `vid_rc.disable_rtcp_remb` and {@link rtcpIntervalMs}. All the others stay
+ * Out of this catalogue this client applies a handful of keys:
+ * `vid_rc.disable_rtcp_remb`, {@link rtcpIntervalMs}, {@link audioFrameMs} and
+ * {@link audioMaxFramesPerPacket}. All the others stay
  * readable through the generic accessors and change no behavior at all. The
  * whole node being absent has to leave the call exactly as it was before the
  * node existed.
@@ -208,6 +215,18 @@ export class WaVoipSettings {
      */
     get rtcpIntervalMs(): number | null {
         const value = this.getNumber(RATE_CONTROL_SECTION, RTCP_INTERVAL_MS_KEY, 0)
+        return value > 0 ? value : null
+    }
+
+    /** `encode.frame_ms`, the audio frame duration (`60` observed), or `null` when absent. */
+    get audioFrameMs(): number | null {
+        const value = this.getNumber(ENCODE_SECTION, FRAME_MS_KEY, 0)
+        return value > 0 ? value : null
+    }
+
+    /** `rc.maxfpp`, most audio frames per packet (`2` observed), or `null` when absent. */
+    get audioMaxFramesPerPacket(): number | null {
+        const value = this.getNumber(RATE_CONTROL_SECTION, MAX_FRAMES_PER_PACKET_KEY, 0)
         return value > 0 ? value : null
     }
 }

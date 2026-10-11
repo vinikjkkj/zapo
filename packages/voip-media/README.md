@@ -75,6 +75,33 @@ those instants carry, a pause in the capture goes out as a marked jump, and capt
 of the clock is shed. `sendVideoFrame` takes the host's own capture timestamp in any epoch and maps
 it onto the same clock.
 
+## The codec
+
+Audio is MLow at 16 kHz mono in 60 ms frames. When the plan's settings carry
+`audioFramesPerPacket: 2` (the server's `rc.maxfpp`), two frames share one packet the way the
+official 1:1 client sends them, `[0x92][0x02][length of the first][0x50 ...]`, 120 ms per packet;
+a frame with the VAD bit clear always goes alone. On receive, a multiframe packet plays only what
+its RTP timestamp span covers: anything past it is held until the next packet shows whether it was
+audio or a redundant copy, and a copy is only ever played for a packet that was lost.
+
+Two options on the plane, also accepted by `WaCallMediaReceiver` on a remote host:
+
+- `mlowCompanionModel`: the weights of the MLow Companion, the neural post-filter WhatsApp runs
+  in its decoder, as bytes or as a loader the plane calls when a call loads the codec. They are
+  WhatsApp's `mlow_companion_v1.pte`, a `DNNw` blob despite the extension, and no package ships
+  them. The library documents it for 20 ms wideband mono frames; measured on 0.2.0 it also
+  reshapes the 60 ms frames of a 1:1 call, at about 40 times the decode CPU (around 4% of one
+  core per stream). Weights that fail to load leave the call decoding without it, with a warning.
+- `mlowRed`: sends RED, each packet carrying one primary frame and the low-rate copy of the frame
+  before it. Off by default; it turns DTX off, which RED requires.
+
+```ts
+const plane = new WaCallMediaPlane({
+    ...webMediaHost,
+    mlowCompanionModel: () => fetch('/models/mlow_companion_v1.pte').then((r) => r.arrayBuffer())
+})
+```
+
 ## Audio in a browser
 
 `WaWebCallAudio` carries that clock for you: it opens the microphone and the speaker and drives

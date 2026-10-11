@@ -65,7 +65,10 @@ const DELTA_FRAME = new Uint8Array([0, 0, 0, 1, 0x41, 0x9a, 0x02, 0x00])
 
 const FAKE_CODEC = {
     getFrameSize: () => 960,
-    encode: () => new Uint8Array([0xf8, 0xff, 0xfe]),
+    encodeInto: (_frame: Float32Array, target: Uint8Array) => {
+        target.set([0xf8, 0xff, 0xfe])
+        return 3
+    },
     resetSequence: () => {},
     decodeSequenced: () => {},
     setExpectedPacketLossPercent: () => {},

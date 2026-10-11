@@ -187,6 +187,27 @@ test('buildAcceptStanza advertises the same dec as buildOfferStanza on a video c
     assert.equal(acceptVideo?.attrs.enc, offerVideo?.attrs.enc)
 })
 
+/** Whether the `<capability>` blob sets `index`: LSB-first over the five mask bytes. */
+function hasCapability(blob: Uint8Array, index: number): boolean {
+    return (blob[2 + (index >> 3)] & (1 << (index & 7))) !== 0
+}
+
+test('no offer announces MLow RED or its separate payload type, which this side cannot decode', async () => {
+    for (const isVideo of [false, true]) {
+        const offer = ((await buildOffer(isVideo)).content as BinaryNode[])[0]
+        const capability = (offer.content as BinaryNode[]).find(
+            (child) => child.tag === 'capability'
+        )
+        const blob = capability?.content
+        assert.ok(blob instanceof Uint8Array)
+        assert.equal(blob[0], 1)
+        assert.equal(blob[1], 5)
+        assert.equal(hasCapability(blob, 36), false, 'bit 36 is enable_mlow_red')
+        assert.equal(hasCapability(blob, 38), false, 'bit 38 is enable_mlow_separate_pt_tx')
+        assert.equal(hasCapability(blob, isVideo ? 30 : 24), true, 'the media bit stays')
+    }
+})
+
 test('needsDecryption only flags encrypted payload tags', () => {
     assert.equal(needsDecryption('accept'), true)
     assert.equal(needsDecryption('preaccept'), true)

@@ -111,6 +111,11 @@ export interface WaCallMediaSettings {
     readonly disableRtcpRemb: boolean
     /** Whether the server announced SFrame for the app-data stream. */
     readonly appDataSframe: boolean
+    /**
+     * 60 ms frames bundled per audio packet, from `rc.maxfpp`: 2 is what the official 1:1
+     * client sends, and absent means 1. A frame with the VAD bit clear always goes alone.
+     */
+    readonly audioFramesPerPacket?: number
 }
 
 export interface WaCallMediaVideo {

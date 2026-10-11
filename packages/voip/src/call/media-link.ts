@@ -1,9 +1,14 @@
+import { readFile } from 'node:fs/promises'
+
 import type { Logger } from 'zapo-js'
+import { toBytesView } from 'zapo-js/util'
 
 import {
     dialableRelayEndpoints,
     type InboundVideoFrame,
     type InboundVideoRtpPacket,
+    type MLowCompanionModelSource,
+    type MLowRedOptions,
     type WaCallMediaEvent,
     type WaCallMediaMessage,
     WaCallMediaMessageSequencer,
@@ -52,11 +57,34 @@ export interface WaCallMediaLink {
     snapshot(): WaCallMediaMessage | null
 }
 
+/**
+ * The Companion weights as the media takes them: bytes as they are, a path as a loader that reads
+ * the file once, on the first call that asks, and shares that read with every call after.
+ */
+export function toCompanionModelSource(
+    model: Uint8Array | ArrayBuffer | string | undefined
+): MLowCompanionModelSource | undefined {
+    if (typeof model !== 'string') return model
+    let read: Promise<Uint8Array> | null = null
+    return () => {
+        read ??= readFile(model).then(
+            (bytes) => toBytesView(bytes),
+            (err: unknown) => {
+                read = null
+                throw err
+            }
+        )
+        return read
+    }
+}
+
 export interface WaLocalCallMediaOptions {
     readonly logger: Logger
     readonly events: WaCallMediaLinkEvents
     readonly useOriginalRelayPort: boolean
     readonly useRawUdpTransport: boolean
+    readonly mlowCompanionModel?: MLowCompanionModelSource
+    readonly mlowRed?: boolean | MLowRedOptions
 }
 
 /**
@@ -74,6 +102,8 @@ export class WaLocalCallMedia implements WaCallMediaLink {
             ...nodeMediaHost,
             logger,
             useOriginalRelayPort: options.useOriginalRelayPort,
+            mlowCompanionModel: options.mlowCompanionModel,
+            mlowRed: options.mlowRed,
             createRawUdpLeg: options.useRawUdpTransport
                 ? (legOptions) => new WaRawUdpLeg(legOptions)
                 : undefined,

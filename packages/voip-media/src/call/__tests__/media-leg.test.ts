@@ -69,7 +69,10 @@ const FRAME_SAMPLES = 960
 /** A codec that encodes any frame into the same few bytes. */
 const FAKE_CODEC = {
     getFrameSize: () => FRAME_SAMPLES,
-    encode: () => new Uint8Array([0xf8, 0xff, 0xfe]),
+    encodeInto: (_frame: Float32Array, target: Uint8Array) => {
+        target.set([0xf8, 0xff, 0xfe])
+        return 3
+    },
     resetSequence: () => {},
     decodeSequenced: () => {},
     setExpectedPacketLossPercent: () => {},

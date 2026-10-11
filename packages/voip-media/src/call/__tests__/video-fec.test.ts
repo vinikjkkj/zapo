@@ -22,9 +22,11 @@ const OPUS_PAYLOAD_TYPE = 120
  * The FEC family inside the 7 bits of the PT field: `103 + 3k`, k from 0 to
  * 8. Only 103 and 106 showed up in capture; the rest is the formula, listed
  * here so a new k does not fall back into the video branch without anyone
- * noticing.
+ * noticing. 121 (`103 + 3 * 6`) is missing on purpose: it is `mlow-red-1`, audio.
  */
-const FEC_PAYLOAD_TYPES = [103, 106, 109, 112, 115, 118, 121, 124, 127]
+const FEC_PAYLOAD_TYPES = [103, 106, 109, 112, 115, 118, 124, 127]
+/** `mlow-red-1`, the voice stream carrying redundancy on a payload type of its own. */
+const MLOW_RED_PAYLOAD_TYPE = 121
 
 /** Video clock, the unit of the RTP timestamps below. */
 const VIDEO_CLOCK_RATE = 90_000
@@ -189,6 +191,23 @@ test('the opus payload type is outside the fec family', async () => {
     )
 
     assert.equal(harness.internals.reedSolomonFecPackets, 0, '120 is not 103 + 3k')
+    harness.plane.stop()
+})
+
+test('the separate RED audio payload type is counted apart, not read as video parity', async () => {
+    const harness = await createPlane()
+
+    const payload = new Uint8Array(200).fill(0x5a)
+    payload.set([0x92, 0x02, 0x71, 0x50])
+    harness.internals.onRelayData(inboundPacket(MLOW_RED_PAYLOAD_TYPE, PEER_AUDIO_SSRC, payload))
+
+    assert.equal(harness.internals.reedSolomonFecPackets, 0, '121 is audio, not 103 + 3 * 6')
+    assert.equal(harness.internals.videoRecvPackets, 0)
+    assert.equal(harness.frames.length, 0)
+    assert.equal(harness.packets.length, 0)
+    const stats = harness.plane.getStats()
+    assert.equal(stats.audioRedDiscarded, 1)
+    assert.equal(stats.audioReceived, 0, 'its payload layout is unknown, so it is not decoded')
     harness.plane.stop()
 })
 

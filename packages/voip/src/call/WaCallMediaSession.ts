@@ -117,6 +117,19 @@ function resolveAppDataSframe(settings: WaVoipSettings): boolean {
     )
 }
 
+/** Duration of the frame the codec encodes; the server's `frame_ms` has to match to bundle. */
+const CODEC_FRAME_MS = 60
+/** The bundle the official 1:1 client sends at `maxfpp` 2; more is not sent. */
+const MAX_AUDIO_FRAMES_PER_PACKET = 2
+
+/** Frames per audio packet: `rc.maxfpp`, capped at 2, and 1 unless `frame_ms` is our 60 ms. */
+function resolveAudioFramesPerPacket(settings: WaVoipSettings): number {
+    const frameMs = settings.audioFrameMs ?? CODEC_FRAME_MS
+    const maxFramesPerPacket = settings.audioMaxFramesPerPacket ?? 1
+    if (frameMs !== CODEC_FRAME_MS || maxFramesPerPacket < 2) return 1
+    return Math.min(Math.trunc(maxFramesPerPacket), MAX_AUDIO_FRAMES_PER_PACKET)
+}
+
 /** Deep equality for plan values: bytes by content, arrays and objects field by field. */
 function samePlanValue(left: unknown, right: unknown): boolean {
     if (left === right) return true
@@ -375,7 +388,8 @@ export class WaCallMediaSession {
 
     /**
      * Stores the configuration that came in the offer and hands the media what it
-     * tunes: the REMB gate, the RTCP interval and the app-data SFrame flag. Called
+     * tunes: the REMB gate, the RTCP interval, the app-data SFrame flag and the audio
+     * frames per packet. Called
      * again mid-call for the larger profile that rides an upgrade request.
      *
      * `null` is not an error, it is the common case of an absent or unreadable
@@ -394,7 +408,8 @@ export class WaCallMediaSession {
         const section: WaCallMediaSettings = {
             rtcpIntervalMs: settings.rtcpIntervalMs,
             disableRtcpRemb: settings.disableRtcpRemb,
-            appDataSframe: resolveAppDataSframe(settings)
+            appDataSframe: resolveAppDataSframe(settings),
+            audioFramesPerPacket: resolveAudioFramesPerPacket(settings)
         }
         void this.publish({ settings: section })
 
@@ -403,6 +418,7 @@ export class WaCallMediaSession {
             sectionCount: settings.sectionCount,
             disableRtcpRemb: section.disableRtcpRemb,
             rtcpIntervalMs: section.rtcpIntervalMs,
+            audioFramesPerPacket: section.audioFramesPerPacket,
             appDataStream: settings.getFlag(
                 VOIP_SETTINGS_OPTIONS_SECTION,
                 ENABLE_APP_DATA_STREAM_KEY,

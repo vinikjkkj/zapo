@@ -5,7 +5,12 @@ import { isLidJid } from 'zapo-js/protocol'
 import { type BinaryNode, hasNodeChild } from 'zapo-js/transport'
 import { resolvePositive, setBoundedMapEntry, toError } from 'zapo-js/util'
 
-import type { WaCallMediaEvent, WaCallMediaMessage } from '@zapo-js/voip-media'
+import type {
+    MLowCompanionModelSource,
+    MLowRedOptions,
+    WaCallMediaEvent,
+    WaCallMediaMessage
+} from '@zapo-js/voip-media'
 
 import { generateCallKey } from '../crypto/encryption.js'
 import { WaAudioEngine } from '../media/WaAudioEngine.js'
@@ -29,7 +34,12 @@ import {
 } from '../types.js'
 
 import { CallInfo } from './call-state.js'
-import { type WaCallMediaLinkEvents, WaLocalCallMedia, WaRemoteCallMedia } from './media-link.js'
+import {
+    toCompanionModelSource,
+    type WaCallMediaLinkEvents,
+    WaLocalCallMedia,
+    WaRemoteCallMedia
+} from './media-link.js'
 import { WaCallMediaSession } from './WaCallMediaSession.js'
 
 const DEFAULT_MAX_CONCURRENT_CALLS = 1
@@ -45,6 +55,10 @@ export interface WaCallManagerConfig {
     maxConcurrentCalls?: number
     useOriginalRelayPort?: boolean
     useRawUdpTransport?: boolean
+    /** See `WaVoipCoordinatorOptions.mlowCompanionModel`. */
+    mlowCompanionModel?: Uint8Array | ArrayBuffer | string
+    /** See `WaVoipCoordinatorOptions.mlowRed`. */
+    mlowRed?: boolean | MLowRedOptions
     /** Where call media runs; see `WaVoipCoordinatorOptions.media`. */
     mediaMode?: WaCallMediaMode
 }
@@ -60,6 +74,8 @@ export class WaCallManager extends EventEmitter {
     /** Unset, each call picks by session: the advertised port on a companion, 3480 on a primary. */
     private readonly useOriginalRelayPort: boolean | undefined
     private readonly useRawUdpTransport: boolean
+    private readonly mlowCompanionModel: MLowCompanionModelSource | undefined
+    private readonly mlowRed: boolean | MLowRedOptions | undefined
     private readonly mediaMode: WaCallMediaMode
 
     private readonly calls = new Map<string, WaCallMediaSession>()
@@ -85,6 +101,8 @@ export class WaCallManager extends EventEmitter {
         )
         this.useOriginalRelayPort = config.useOriginalRelayPort
         this.useRawUdpTransport = config.useRawUdpTransport ?? false
+        this.mlowCompanionModel = toCompanionModelSource(config.mlowCompanionModel)
+        this.mlowRed = config.mlowRed
         this.mediaMode = config.mediaMode ?? 'local'
     }
 
@@ -641,7 +659,9 @@ export class WaCallManager extends EventEmitter {
             logger,
             events,
             useOriginalRelayPort: this.useOriginalRelayPort ?? !this.deps.isMobilePrimary(),
-            useRawUdpTransport: this.useRawUdpTransport
+            useRawUdpTransport: this.useRawUdpTransport,
+            mlowCompanionModel: this.mlowCompanionModel,
+            mlowRed: this.mlowRed
         })
     }
 

@@ -127,9 +127,31 @@ test('the server settings reach the media resolved', () => {
     assert.deepEqual(harness.link.plan.settings, {
         rtcpIntervalMs: 1500,
         disableRtcpRemb: true,
-        appDataSframe: true
+        appDataSframe: true,
+        audioFramesPerPacket: 1
     })
     harness.session.cleanup()
+})
+
+test('maxfpp bundles the 60 ms audio frames two to a packet, and no further', () => {
+    const cases: ReadonlyArray<readonly [Record<string, unknown>, number]> = [
+        [{ encode: { frame_ms: '60' }, rc: { maxfpp: '2', minfpp: '1' } }, 2],
+        [{ rc: { maxfpp: '2' } }, 2],
+        [{ rc: { maxfpp: '3' } }, 2],
+        [{ rc: { maxfpp: '1' } }, 1],
+        [{ encode: { frame_ms: '20' }, rc: { maxfpp: '2' } }, 1],
+        [{ encode: { frame_ms: '60' } }, 1]
+    ]
+    for (const [json, expected] of cases) {
+        const harness = createSession()
+        harness.session.applyVoipSettings(WaVoipSettings.fromJson(JSON.stringify(json)))
+        assert.equal(
+            harness.link.plan.settings?.audioFramesPerPacket,
+            expected,
+            JSON.stringify(json)
+        )
+        harness.session.cleanup()
+    }
 })
 
 /** SFrame on the app data takes both gates: with either off the peer expects no trailer. */

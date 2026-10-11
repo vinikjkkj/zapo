@@ -97,10 +97,11 @@ class FakeCodec {
     getFrameSize(): number {
         return FRAME_SAMPLES
     }
-    encode(): Uint8Array {
+    encodeInto(_frame: Float32Array, target: Uint8Array): number {
         this.encodes++
         if (this.failOn.has(this.encodes)) throw new Error('encoder fault')
-        return OPUS_FRAME
+        target.set(OPUS_FRAME)
+        return OPUS_FRAME.length
     }
     resetSequence(): void {}
     decodeSequenced(): void {}

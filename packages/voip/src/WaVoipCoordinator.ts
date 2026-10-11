@@ -1,7 +1,11 @@
 import { type Logger, type LogLevel, type WaClientPluginContext } from 'zapo-js'
 import { WA_MESSAGE_TAGS } from 'zapo-js/protocol'
 
-import type { WaCallMediaEventMessage, WaCallMediaMessage } from '@zapo-js/voip-media'
+import type {
+    MLowRedOptions,
+    WaCallMediaEventMessage,
+    WaCallMediaMessage
+} from '@zapo-js/voip-media'
 
 import type { CallInfo } from './call/call-state.js'
 import { WaCallManager } from './call/WaCallManager.js'
@@ -53,6 +57,21 @@ export interface WaVoipCoordinatorOptions {
      */
     readonly useRawUdpTransport?: boolean
     /**
+     * Weights of the MLow Companion, the neural post-filter WhatsApp runs in its decoder: the
+     * bytes of `mlow_companion_v1.pte` (a `DNNw` blob despite the name), or a path read once on
+     * the first call. Not shipped with this package. Measured on `libmlow-wasm-fork` 0.2.0 it
+     * reshapes the 60 ms frames of a 1:1 call too, at roughly 40 times the decode CPU. Weights
+     * that fail to load leave calls decoding without it, with a warning. With remote media,
+     * pass it to the host's `WaCallMediaReceiver` as `mlowCompanionModel` instead.
+     */
+    readonly mlowCompanionModel?: Uint8Array | ArrayBuffer | string
+    /**
+     * Sends MLow RED: one primary frame per packet plus the redundant copy of the frame before
+     * it. Off by default; it turns DTX off.
+     * With remote media, pass it to the host's `WaCallMediaReceiver` as `mlowRed` instead.
+     */
+    readonly mlowRed?: boolean | MLowRedOptions
+    /**
      * Where call media runs. `local` (default) carries it in this process on `@roamhq/wrtc` and
      * `libmlow-wasm-fork`. `remote` emits each plan change as `voip_call_media` for a host
      * running `WaCallMediaReceiver`, whose events return through {@link WaVoipCoordinator.media}.
@@ -99,6 +118,8 @@ export class WaVoipCoordinator {
             maxConcurrentCalls: options.maxConcurrentCalls,
             useOriginalRelayPort: options.useOriginalRelayPort,
             useRawUdpTransport: options.useRawUdpTransport,
+            mlowCompanionModel: options.mlowCompanionModel,
+            mlowRed: options.mlowRed,
             mediaMode: options.media?.mode
         })
         this.registerIncomingHandlers(ctx)

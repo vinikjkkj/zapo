@@ -126,7 +126,10 @@ async function createPlane(
     internals.rtpSession = RtpSession.whatsappOpus(SELF_AUDIO_SSRC)
     internals.codec = {
         getFrameSize: () => AUDIO_SAMPLES_PER_PACKET,
-        encode: () => OPUS_FRAME,
+        encodeInto: (_frame: Float32Array, target: Uint8Array) => {
+            target.set(OPUS_FRAME)
+            return OPUS_FRAME.length
+        },
         resetSequence: () => {},
         getStats: () => ({ success: 0, errors: 0 }),
         destroy: () => {}
