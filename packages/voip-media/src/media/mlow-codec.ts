@@ -874,9 +874,7 @@ export class MLowCodec {
 
         const hole = (start - played) | 0
         if (missing > 0 && hole > 0) {
-            const lost = missing * MAX_LOST_PACKET_SAMPLES
-            const concealed = this.concealSpan(hole < lost ? hole : lost, packet, onFrame)
-            this.playedUntil = (played + concealed) >>> 0
+            this.concealUntil(start, missing * MAX_LOST_PACKET_SAMPLES, packet, onFrame)
         }
         const recovered =
             missing > 0 ? this.countCopiesInHole(start, played, first, count, missing) : 0
@@ -991,6 +989,7 @@ export class MLowCodec {
                     packet.subarray(offset, offset + bounds[index * 3 + 1])
                 )
                 this.playedUntil = (start + this.redFills[index]) >>> 0
+                budget -= this.redFills[index]
                 onFrame(this.decodeScratch.subarray(0, copySamples))
             }
             this.concealUntil(timestamp, budget, primary, onFrame)
@@ -1056,7 +1055,10 @@ export class MLowCodec {
         return copies
     }
 
-    /** Conceals from `playedUntil` up to `until`, `budget` samples at most; returns those emitted. */
+    /**
+     * Conceals from `playedUntil` up to `until`, `budget` samples at most; the FEC of `fecPacket`,
+     * which sits right before it, only when the span reaches `until`. Returns the samples emitted.
+     */
     private concealUntil(
         until: number,
         budget: number,
@@ -1065,7 +1067,12 @@ export class MLowCodec {
     ): number {
         const hole = (until - this.playedUntil) | 0
         if (hole <= 0 || budget <= 0) return 0
-        const concealed = this.concealSpan(hole < budget ? hole : budget, fecPacket, onFrame)
+        const reaches = hole <= budget
+        const concealed = this.concealSpan(
+            reaches ? hole : budget,
+            reaches ? fecPacket : null,
+            onFrame
+        )
         this.playedUntil = (this.playedUntil + concealed) >>> 0
         return concealed
     }

@@ -1290,3 +1290,81 @@ test('MLowCodec leaves a timestamp jump without loss silent and conceals only wh
     const lostBefore = await playedAgainstClock(packets, [3])
     assert.equal(lostBefore.played, lostBefore.clock - DTX_GAP, 'the lost pair, not the pause')
 })
+
+test('MLowCodec takes the arriving packet FEC only for a gap that ends at that packet', async () => {
+    const contiguous = await timelinePackets(Array(8).fill('pair'))
+    const atPacket = await playedAgainstClock(contiguous, [3])
+    assert.deepEqual([atPacket.stats.fec, atPacket.stats.plc], [1, 0])
+
+    const paused = contiguous.map((packet, index) =>
+        index < 4 ? packet : { ...packet, timestamp: packet.timestamp + DTX_GAP }
+    )
+    const beforePause = await playedAgainstClock(paused, [3])
+    assert.deepEqual(
+        [beforePause.stats.fec, beforePause.stats.plc],
+        [0, 1],
+        'the lost slot sits a pause before the packet its FEC belongs to'
+    )
+})
+
+test('MLowCodec closes an in-band RED gap with the primary FEC only when it reaches the primary', async () => {
+    const sender = await MLowCodec.create({ red: true })
+    const receiver = await MLowCodec.create()
+    try {
+        const target = new Uint8Array(8_192)
+        const payloads: Uint8Array[] = []
+        let lostCopy: Uint8Array | null = null
+        for (let index = 0; index < 5; index++) {
+            const first = sender.encode(voicedFrame(index * 1920))
+            if (index === 3) lostCopy = sender.lastSecondary
+            const pair = sender.packFrames([first, sender.encode(voicedFrame(index * 1920 + 960))])
+            const length =
+                index === 4 && lostCopy
+                    ? writeMlowRed(target, pair, index * 1920 + DTX_GAP, [lostCopy], [3 * 1920])
+                    : writeMlowRed(target, pair, index * 1920, [], [])
+            payloads.push(target.slice(0, length))
+        }
+
+        let played = 0
+        for (const index of [0, 1, 2, 4]) {
+            const timestamp = index * 1920 + (index === 4 ? DTX_GAP : 0)
+            receiver.decodeSequenced(
+                index + 1,
+                payloads[index],
+                (pcm) => {
+                    played += pcm.length
+                },
+                timestamp,
+                1
+            )
+        }
+
+        const stats = receiver.getStats()
+        assert.equal(stats.redRecovered, 1)
+        assert.deepEqual([stats.fec, stats.plc], [0, 1], 'the gap stops a pause short of it')
+        assert.equal(played, 5 * 1920, 'the lost pair is the copy and PLC, the pause stays silent')
+    } finally {
+        sender.destroy()
+        receiver.destroy()
+    }
+})
+
+test('MLowCodec rejects a packet over 120 ms, so no lost packet holds more', async () => {
+    const sender = await MLowCodec.create()
+    const receiver = await MLowCodec.create()
+    try {
+        const bounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
+        for (let index = 0; index < 3; index++) {
+            const frames = [0, 1, 2].map((frame) =>
+                sender.encode(voicedFrame((index * 3 + frame) * 960))
+            )
+            const packet = sender.packFrames(frames)
+            assert.equal(mlowPacketSamples(packet, bounds), 2880)
+            receiver.decodeSequenced(index + 1, packet, () => {}, index * 2880)
+        }
+        assert.deepEqual([receiver.getStats().success, receiver.getStats().errors], [0, 3])
+    } finally {
+        sender.destroy()
+        receiver.destroy()
+    }
+})
