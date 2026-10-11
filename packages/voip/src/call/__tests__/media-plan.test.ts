@@ -236,6 +236,7 @@ function remoteEvents(messages: WaCallMediaMessage[]): {
             onRelayLost: (reason) => {
                 counts.lost.push(reason)
             },
+            onRelayAnswered: () => {},
             onReaction: () => {},
             onInboundAudio: () => {},
             onInboundVideoRtp: () => {},

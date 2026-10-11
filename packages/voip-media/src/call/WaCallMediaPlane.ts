@@ -243,6 +243,8 @@ export interface WaCallMediaPlaneEvents {
      * media is gone; ending the call is signaling's decision.
      */
     readonly onRelayLost?: (reason: string) => void
+    /** A relay answered one of our legs for the first time; see `WaSctpRelayOptions.onRelayAnswered`. */
+    readonly onRelayAnswered?: (name: string, rttMs?: number) => void
     /** One in-band emoji reaction, deduplicated: the sender repeats it, this fires once. */
     readonly onReaction?: (reaction: WaCallReaction) => void
     readonly onInboundVideoRtp?: (packet: InboundVideoRtpPacket) => void
@@ -544,6 +546,9 @@ export class WaCallMediaPlane {
             now: options.now,
             onConnected: () => this.onRelayConnected(),
             onLost: (reason) => this.onRelayLost(reason),
+            onRelayAnswered: (name, rttMs) => {
+                if (!this.stopped) this.events.onRelayAnswered?.(name, rttMs)
+            },
             onReceive: (data, connectionId) => this.onRelayData(data, connectionId)
         })
     }

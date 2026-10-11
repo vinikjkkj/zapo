@@ -40,6 +40,9 @@ const plane = new WaCallMediaPlane({
     onRelayLost: (reason) => {
         // no leg left - tell signaling, which ends the call
     },
+    onRelayAnswered: (name, rttMs) => {
+        // a relay answered for the first time - tell signaling, which names only these to the peer
+    },
     onReaction: (reaction) => {
         // an in-band emoji reaction from the peer
     }

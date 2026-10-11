@@ -1216,6 +1216,13 @@ test('an incoming call that ends before it is announced reports neither a state 
     }
 })
 
+/** What a remote media host reports as each relay first answers one of its legs. */
+function answerRelays(manager: WaCallManager, callId: string, names: readonly string[]): void {
+    for (const name of names) {
+        manager.handleMediaEvent(callId, { type: 'relay_answered', name })
+    }
+}
+
 test('the relaylatency a caller sends on the preaccept names only the relays it dials', async () => {
     const { deps, stores, sent } = createMockDeps()
     const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1, mediaMode: 'remote' })
@@ -1230,6 +1237,7 @@ test('the relaylatency a caller sends on the preaccept names only the relays it 
             ]
         )
     )
+    answerRelays(manager, callId, ['tcp1c01', 'gru1c01'])
     const before = sent.length
 
     await routeCallStanza(manager, deps, {
@@ -1283,6 +1291,7 @@ test('a caller announces each relay once, however many devices of the peer preac
             ]
         )
     )
+    answerRelays(manager, callId, ['gru1c01', 'gig4c02'])
     const before = sent.length
 
     await routeCallStanza(manager, deps, preacceptNode(callId, '2222222222:0@lid'))
@@ -1329,6 +1338,7 @@ test('after setup a call sends no relaylatency, however many the peer sends', as
         if (direction === 'outgoing') {
             callId = await manager.startCall({ peerJid: '2222222222@lid' })
             await manager.handleCallAck(buildOfferAckNode(callId, ['2222222222@lid'], relays))
+            answerRelays(manager, callId, ['gru1c01', 'gig4c02'])
             await routeCallStanza(manager, deps, preacceptNode(callId, peer))
         } else {
             const relayNode = (buildOfferAckNode(callId, [], relays).content as BinaryNode[])[0]
@@ -1337,6 +1347,8 @@ test('after setup a call sends no relaylatency, however many the peer sends', as
                 deps,
                 buildOfferNode(callId, peer, undefined, [relayNode])
             )
+            answerRelays(manager, callId, ['gru1c01', 'gig4c02'])
+            await settle()
         }
         assert.deepEqual(announcedRelayNames(sent), ['gru1c01', 'gig4c02'], direction)
         const afterSetup = sent.length
@@ -1361,6 +1373,7 @@ test('a relay reachable over IPv4 and IPv6 is announced once, by its IPv4 addres
             [{ name: 'gru1c01', ip: [10, 0, 0, 1], c2rRtt: 17, ipv6 }]
         )
     )
+    answerRelays(manager, callId, ['gru1c01'])
     const before = sent.length
 
     await routeCallStanza(manager, deps, preacceptNode(callId, '2222222222:0@lid'))

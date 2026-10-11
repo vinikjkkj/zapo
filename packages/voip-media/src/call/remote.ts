@@ -26,10 +26,15 @@ export interface WaCallMediaMessage {
 
 /** What the host carrying the media tells signaling. */
 export type WaCallMediaEvent =
-    /** Media started flowing: the call is accepted and a relay leg is up. */
-    | { readonly type: 'active' }
+    /**
+     * Media started flowing: the call is accepted and a relay leg is up. `reportsRelayAnswers`
+     * is set by a host that sends `relay_answered`; an older one leaves it out.
+     */
+    | { readonly type: 'active'; readonly reportsRelayAnswers?: boolean }
     /** The call has no relay leg left; signaling ends the call. */
     | { readonly type: 'relay_lost'; readonly reason: string }
+    /** A relay answered one of the host's legs for the first time, once per relay name. */
+    | { readonly type: 'relay_answered'; readonly name: string; readonly rttMs?: number }
     /** An in-band reaction from the peer. */
     | { readonly type: 'reaction'; readonly reaction: WaCallReaction }
     /** The host missed a message and needs the whole plan again. */
@@ -164,7 +169,7 @@ export class WaCallMediaMessageSequencer {
 
 export interface WaCallMediaReceiverOptions extends Omit<
     WaCallMediaPlaneOptions,
-    'onActive' | 'onRelayLost' | 'onReaction'
+    'onActive' | 'onRelayLost' | 'onRelayAnswered' | 'onReaction'
 > {
     readonly callId: string
     /** Hands an event back to signaling, over whatever transport the integrator runs. */
@@ -189,8 +194,9 @@ export class WaCallMediaReceiver {
         this.send = options.send
         this.plane = new WaCallMediaPlane({
             ...options,
-            onActive: () => this.emit({ type: 'active' }),
+            onActive: () => this.emit({ type: 'active', reportsRelayAnswers: true }),
             onRelayLost: (reason) => this.emit({ type: 'relay_lost', reason }),
+            onRelayAnswered: (name, rttMs) => this.emit({ type: 'relay_answered', name, rttMs }),
             onReaction: (reaction) => {
                 options.onReaction?.(reaction)
                 this.emit({ type: 'reaction', reaction })

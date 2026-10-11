@@ -227,6 +227,10 @@ export class WaCallMediaSession {
     private outgoingPreacceptSent = false
     /** Relays our own `<relaylatency>` already named; bounded by the relays the server lists. */
     private readonly announcedRelayNames = new Set<string>()
+    /** Relays the media heard answer, with the round trip it measured; only these are named. */
+    private readonly answeredRelays = new Map<string, number | undefined>()
+    /** Set once setup first asks for our `<relaylatency>`; a relay answering later is named then. */
+    private relayLatencyOpened = false
     /** The peer's last `latency` per relay name, as sent; kept for the relay election, unused yet. */
     private readonly peerRelayLatencies = new Map<string, number>()
     private peerRelayLatencyReports = 0
@@ -307,6 +311,7 @@ export class WaCallMediaSession {
         this.media = options.createMediaLink({
             onActive: () => this.onMediaActive(),
             onRelayLost: (reason) => this.onRelayLost(reason),
+            onRelayAnswered: (name, rttMs) => this.onRelayAnswered(name, rttMs),
             onReaction: (reaction) => this.delegate.emitCallReaction?.(this.info, reaction),
             onInboundAudio: (pcm) => this.delegate.emitInboundAudio(this.info, pcm),
             onInboundVideoRtp: (packet) => this.delegate.emitInboundVideoRtp(this.info, packet),
@@ -691,10 +696,12 @@ export class WaCallMediaSession {
     }
 
     /**
-     * One `<relaylatency>` per relay we dial, each once per call: every device of the peer
-     * preaccepts, and a name is claimed before its send yields. Stops once the call has ended.
+     * One `<relaylatency>` per relay that answered us, each once per call: every device of the
+     * peer preaccepts, and a name is claimed before its send yields. Stops once the call has
+     * ended. The callee dials only on accept, so it names nothing while it rings.
      */
     async sendRelayLatency(): Promise<void> {
+        this.relayLatencyOpened = true
         if (!this.info.relayData) return
 
         const meId = this.deps.authClient.getCurrentCredentials()?.meJid ?? ''
@@ -725,22 +732,36 @@ export class WaCallMediaSession {
     }
 
     /**
-     * What `<te>` may say about our relays: only the ones we dial, once per name, with our
-     * own latency and address. Naming another makes the peer elect a relay we are not on.
+     * What `<te>` may say about our relays: only the ones we dial and that answered, once per
+     * name, with our own latency and address. Naming another makes the peer elect a relay we
+     * are not on.
      */
     private dialableRelayLatencies(): OwnRelayLatency[] {
         const seen = new Set<string>()
         const relays: OwnRelayLatency[] = []
         for (const ep of dialableRelayEndpoints(this.info.relayData?.endpoints ?? [])) {
             if (!ep.relayName || !ep.addressBytes || seen.has(ep.relayName)) continue
+            if (!this.answeredRelays.has(ep.relayName)) continue
             seen.add(ep.relayName)
             relays.push({
                 relayName: ep.relayName,
-                latency: ep.c2rRtt || 0,
+                latency: ep.c2rRtt ?? this.answeredRelays.get(ep.relayName) ?? 0,
                 addressBytes: ep.addressBytes
             })
         }
         return relays
+    }
+
+    /** A relay the server listed answered our media; named at once if setup already announced. */
+    private onRelayAnswered(name: string, rttMs?: number): void {
+        if (this.answeredRelays.has(name)) return
+        if (!this.info.relayData?.endpoints.some((ep) => ep.relayName === name)) return
+        const measured =
+            typeof rttMs === 'number' && Number.isFinite(rttMs) && rttMs >= 0
+                ? Math.round(rttMs)
+                : undefined
+        this.answeredRelays.set(name, measured)
+        if (this.relayLatencyOpened) void this.sendRelayLatency()
     }
 
     /**

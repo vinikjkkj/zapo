@@ -18,6 +18,9 @@ import {
 
 const CALL_ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
+/** The relay's whole 0x0802 keepalive answer: type, zero length, magic cookie, transaction id. */
+const PONG = new Uint8Array([0x08, 0x02, 0x00, 0x00, 0x21, 0x12, 0xa4, 0x42, ...new Uint8Array(12)])
+
 const KEYED_PLAN: WaCallMediaPlanUpdate = {
     keys: {
         epoch: 1,
@@ -267,5 +270,66 @@ test('a reaction the plane receives goes back to signaling as an event that enco
         type: 'reaction',
         reaction: { transactionId: 7n, reaction: '👍' }
     })
+    receiver.stop()
+})
+
+test('a relay that answers the plane goes back to signaling once, as an event that encodes', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+    const sent: WaCallMediaEventMessage[] = []
+    const answers: Array<() => void> = []
+    const receiver = new WaCallMediaReceiver({
+        callId: CALL_ID,
+        logger: createNoopLogger(),
+        crypto: nodeCrypto,
+        createPeerConnection: peerConnectionNotDialled,
+        now: () => 0,
+        createRawUdpLeg: (options) => {
+            let open = false
+            answers.push(() => options.onMessage(PONG.slice()))
+            return {
+                get isOpen() {
+                    return open
+                },
+                open: () => {
+                    open = true
+                    options.onOpen()
+                },
+                send: () => open,
+                close: () => {
+                    open = false
+                }
+            }
+        },
+        send: (message) => {
+            sent.push(message)
+        }
+    })
+    t.after(() => receiver.stop())
+    const relays = KEYED_PLAN.relays!
+    await receiver.receive(
+        message(0, true, {
+            relays: { endpoints: [{ ...relays.endpoints[0], name: 'gru1c01' }] }
+        })
+    )
+
+    answers[0]()
+    answers[0]()
+
+    assert.deepEqual(
+        sent.map((event) => decodeCallMediaEvent(encodeCallMediaEvent(event)).event),
+        [{ type: 'relay_answered', name: 'gru1c01', rttMs: 0 }]
+    )
+})
+
+/** Signaling reads the relays that answered from a host that says it reports them. */
+test('a host going active says it reports the relays that answer', () => {
+    const { receiver, sent } = createReceiver()
+
+    ;(receiver.plane as unknown as { events: { onActive(): void } }).events.onActive()
+
+    assert.deepEqual(
+        sent.map((event) => event.event),
+        [{ type: 'active', reportsRelayAnswers: true }]
+    )
     receiver.stop()
 })

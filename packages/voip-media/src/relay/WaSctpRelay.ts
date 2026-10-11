@@ -149,6 +149,8 @@ export interface Connection {
      */
     abortDial: (() => void) | null
     hasReceivedFirstPacket: boolean
+    /** When the leg's first allocate went out, or `null` before one has. */
+    allocateSentAt: number | null
     /** When the peer's media last authenticated on this leg, or `null` if it never has. */
     peerMediaAt: number | null
     /** When the oldest ping no pong has answered went out, or `null` with none pending. */
@@ -183,6 +185,11 @@ export interface WaSctpRelayOptions {
     /** The call has no leg left, open or dialling; see `announceLastLegLost`. */
     readonly onLost?: (reason: string) => void
     /**
+     * A relay answered for the first time, once per relay name. `rttMs` runs from the first
+     * allocate of the leg it answered on, when one went out.
+     */
+    readonly onRelayAnswered?: (name: string, rttMs?: number) => void
+    /**
      * A packet arrived from a relay, STUN and media alike, before any parsing. `connectionId`
      * names the leg, for {@link WaSctpRelay.notePeerMedia}.
      */
@@ -198,9 +205,11 @@ export class WaSctpRelay {
     private readonly createRawUdpLeg: WaSctpRelayOptions['createRawUdpLeg']
     private readonly onConnected: WaSctpRelayOptions['onConnected']
     private readonly onLost: WaSctpRelayOptions['onLost']
+    private readonly onRelayAnswered: WaSctpRelayOptions['onRelayAnswered']
     private readonly onReceive: WaSctpRelayOptions['onReceive']
     private readonly now: () => number
     private connections = new Map<string, Connection>()
+    private readonly answeredRelayNames = new Set<string>()
     private relayMap = new Map<string, RelayInfo>()
     private stats = {
         sent: 0,
@@ -225,6 +234,7 @@ export class WaSctpRelay {
         this.createRawUdpLeg = options.createRawUdpLeg
         this.onConnected = options.onConnected
         this.onLost = options.onLost
+        this.onRelayAnswered = options.onRelayAnswered
         this.onReceive = options.onReceive
         this.now = options.now ?? (() => performance.now())
     }
@@ -391,6 +401,7 @@ export class WaSctpRelay {
             connectionTimeout: null,
             abortDial: null,
             hasReceivedFirstPacket: false,
+            allocateSentAt: null,
             peerMediaAt: null,
             pingUnansweredSince: null,
             unresponsive: false,
@@ -923,6 +934,7 @@ export class WaSctpRelay {
         )
 
         const sent = this.sendToChannel(conn, toArrayBuffer(allocate))
+        if (sent) conn.allocateSentAt ??= this.now()
         this.logger.trace('raw udp allocate sent', {
             connectionId: conn.id,
             label,
@@ -1047,7 +1059,9 @@ export class WaSctpRelay {
                     relayInfo.port,
                     transactionId
                 )
-                this.sendToChannel(conn, toArrayBuffer(v4))
+                if (this.sendToChannel(conn, toArrayBuffer(v4))) {
+                    conn.allocateSentAt ??= this.now()
+                }
                 this.logger.trace('stun v4 allocate sent', { connectionId, label, size: v4.length })
             }
         }
@@ -1273,10 +1287,20 @@ export class WaSctpRelay {
 
         if (!conn.hasReceivedFirstPacket) {
             conn.hasReceivedFirstPacket = true
+            const rttMs =
+                conn.allocateSentAt === null
+                    ? undefined
+                    : Math.round(this.now() - conn.allocateSentAt)
             this.logger.debug('relay leg answered', {
                 connectionId: conn.id,
-                port: conn.relayInfo.port
+                port: conn.relayInfo.port,
+                rttMs
             })
+            const name = conn.relayInfo.name
+            if (name && !this.answeredRelayNames.has(name)) {
+                this.answeredRelayNames.add(name)
+                this.onRelayAnswered?.(name, rttMs)
+            }
         }
 
         const shouldLog =
@@ -1605,6 +1629,7 @@ export class WaSctpRelay {
         }
 
         this.relayMap.clear()
+        this.answeredRelayNames.clear()
         this.stats.connected = 0
         this.audioSsrc = 0
         this.subscriptionSsrc = 0

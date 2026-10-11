@@ -1,6 +1,7 @@
 import type { Logger } from 'zapo-js'
 
 import {
+    dialableRelayEndpoints,
     type InboundVideoFrame,
     type InboundVideoRtpPacket,
     type WaCallMediaEvent,
@@ -19,6 +20,8 @@ export interface WaCallMediaLinkEvents {
     /** Media started flowing: the call is accepted and a relay leg is up. */
     onActive(): void
     onRelayLost(reason: string): void
+    /** A relay answered one of our legs for the first time; `rttMs` when the media measured one. */
+    onRelayAnswered(name: string, rttMs?: number): void
     onReaction(reaction: WaCallReaction): void
     onInboundAudio(pcm: Float32Array): void
     onInboundVideoRtp(packet: InboundVideoRtpPacket): void
@@ -80,6 +83,7 @@ export class WaLocalCallMedia implements WaCallMediaLink {
                 events.onActive()
             },
             onRelayLost: (reason) => events.onRelayLost(reason),
+            onRelayAnswered: (name, rttMs) => events.onRelayAnswered(name, rttMs),
             onReaction: (reaction) => events.onReaction(reaction),
             onInboundVideoRtp: (packet) => events.onInboundVideoRtp(packet),
             onInboundVideo: (frame) => events.onInboundVideo(frame)
@@ -208,10 +212,14 @@ export class WaRemoteCallMedia implements WaCallMediaLink {
             case 'active':
                 if (this.active) return
                 this.active = true
+                if (!event.reportsRelayAnswers) this.assumeDialledRelaysAnswered()
                 this.events.onActive()
                 return
             case 'relay_lost':
                 this.events.onRelayLost(event.reason)
+                return
+            case 'relay_answered':
+                this.events.onRelayAnswered(event.name, event.rttMs)
                 return
             case 'reaction':
                 this.events.onReaction(event.reaction)
@@ -224,6 +232,14 @@ export class WaRemoteCallMedia implements WaCallMediaLink {
 
     snapshot(): WaCallMediaMessage {
         return this.sequencer.snapshot()
+    }
+
+    /** A host older than `relay_answered` names no relay: once its media is up, all we dial count. */
+    private assumeDialledRelaysAnswered(): void {
+        const endpoints = this.sequencer.snapshot().plan.relays?.endpoints ?? []
+        for (const endpoint of dialableRelayEndpoints(endpoints)) {
+            if (endpoint.name) this.events.onRelayAnswered(endpoint.name)
+        }
     }
 }
 
