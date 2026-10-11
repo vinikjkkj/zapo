@@ -1258,3 +1258,35 @@ test('MLowCodec keeps single-frame streams on the clock across a loss', async ()
         assert.equal(fromRed.stats.redRecovered, 1)
     }
 })
+
+test('MLowCodec fills the hole of a lost pair that a single frame follows', async () => {
+    const plain = await timelinePackets(['pair', 'pair', 'pair', 'pair', 'single', 'pair', 'pair'])
+    const plainRun = await playedAgainstClock(plain, [3])
+    assert.equal(plainRun.played, plainRun.clock, 'plain')
+
+    const red = await timelinePackets([
+        ...Array<TimelinePacketKind>(5).fill('pair-copy-first'),
+        'single-copy',
+        'pair-copy-first',
+        'pair-copy-first'
+    ])
+    const redRun = await playedAgainstClock(red, [3, 4], 1)
+    assert.equal(redRun.played, redRun.clock, 'in-band RED')
+    assert.equal(redRun.stats.redRecovered, 1)
+})
+
+/** 1 s on the 16 kHz clock: a pause the sender took without losing a packet. */
+const DTX_GAP = 16_000
+
+test('MLowCodec leaves a timestamp jump without loss silent and conceals only what was lost', async () => {
+    const packets = (await timelinePackets(Array(8).fill('pair'))).map((packet, index) =>
+        index < 4 ? packet : { ...packet, timestamp: packet.timestamp + DTX_GAP }
+    )
+
+    const clean = await playedAgainstClock(packets, [])
+    assert.equal(clean.played, clean.clock - DTX_GAP)
+    assert.equal(clean.stats.plc + clean.stats.fec, 0, 'a pause is not a loss')
+
+    const lostBefore = await playedAgainstClock(packets, [3])
+    assert.equal(lostBefore.played, lostBefore.clock - DTX_GAP, 'the lost pair, not the pause')
+})

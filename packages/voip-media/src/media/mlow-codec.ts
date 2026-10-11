@@ -52,6 +52,12 @@ const SMPL_FRAME_SAMPLES = [160, 320, 960, 1_920] as const
 /** Furthest behind the played audio a sub-frame may start and still be taken as a copy of it. */
 const MAX_REDUNDANT_LAG = MLOW_SAMPLE_RATE
 
+/**
+ * Most of a hole one lost packet accounts for: the longest packet the decoder takes. Beyond it the
+ * hole is a pause the sender took, left silent.
+ */
+const MAX_LOST_PACKET_SAMPLES = MAX_FRAME_SIZE
+
 /** First byte of an in-band RED copy header: F (bit 7) set, the low 7 bits how far back in 10 ms. */
 const RED_COPY_MARKER = 0x80
 /** The primary's header, F clear: one byte that closes the header list. */
@@ -868,9 +874,7 @@ export class MLowCodec {
 
         const hole = (start - played) | 0
         if (missing > 0 && hole > 0) {
-            let packetSpan = 0
-            for (let index = 0; index < count; index++) packetSpan += this.subframeSpans[index]
-            const lost = missing * packetSpan
+            const lost = missing * MAX_LOST_PACKET_SAMPLES
             const concealed = this.concealSpan(hole < lost ? hole : lost, packet, onFrame)
             this.playedUntil = (played + concealed) >>> 0
         }
@@ -974,7 +978,7 @@ export class MLowCodec {
             return this.playOnTimeline(primary, timestamp, missing, onFrame)
         }
 
-        let budget = missing * primarySpan
+        let budget = missing * MAX_LOST_PACKET_SAMPLES
         let samples = 0
         try {
             for (let index = 0; index < copies; index++) {
