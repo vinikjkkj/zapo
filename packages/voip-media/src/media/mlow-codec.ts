@@ -868,8 +868,10 @@ export class MLowCodec {
 
         const hole = (start - played) | 0
         if (missing > 0 && hole > 0) {
-            const frames = Math.ceil(hole / this.concealFrameSize())
-            const concealed = this.concealGap(frames < missing ? frames : missing, packet, onFrame)
+            let packetSpan = 0
+            for (let index = 0; index < count; index++) packetSpan += this.subframeSpans[index]
+            const lost = missing * packetSpan
+            const concealed = this.concealSpan(hole < lost ? hole : lost, packet, onFrame)
             this.playedUntil = (played + concealed) >>> 0
         }
         const recovered =
@@ -948,8 +950,7 @@ export class MLowCodec {
             return this.playRedPrimary(packet, copies, timestamp, missing, onFrame)
         }
 
-        const played = this.playedUntil
-        let firstStart = timestamp
+        let cursor = this.playedUntil
         let used = 0
         for (let index = 0; index < copies; index++) {
             const offset = bounds[index * 3]
@@ -962,10 +963,10 @@ export class MLowCodec {
                       )
                     : 0
             const fills =
-                span > 0 && ((start - played) | 0) >= 0 && ((timestamp - start - span) | 0) >= 0
+                span > 0 && ((start - cursor) | 0) >= 0 && ((timestamp - start - span) | 0) >= 0
             this.redFills[index] = fills ? span : 0
             if (!fills) continue
-            if (used === 0) firstStart = start
+            cursor = (start + span) >>> 0
             used++
         }
         if (used === 0) {
@@ -973,25 +974,22 @@ export class MLowCodec {
             return this.playOnTimeline(primary, timestamp, missing, onFrame)
         }
 
-        const hole = (firstStart - played) | 0
-        if (hole > 0) {
-            const frames = Math.ceil(hole / this.concealFrameSize())
-            // The primary's FEC belongs to the copy's slot, not the hole, so the hole gets PLC.
-            const concealed = this.concealGap(frames < missing ? frames : missing, null, onFrame)
-            this.playedUntil = (played + concealed) >>> 0
-        }
-
+        let budget = missing * primarySpan
         let samples = 0
         try {
             for (let index = 0; index < copies; index++) {
                 if (this.redFills[index] === 0) continue
+                const start = (timestamp - bounds[index * 3 + 2]) >>> 0
+                budget -= this.concealUntil(start, budget, null, onFrame)
                 const offset = bounds[index * 3]
                 const copySamples = decoder.decodeFloatInto(
                     this.decodeScratch,
                     packet.subarray(offset, offset + bounds[index * 3 + 1])
                 )
+                this.playedUntil = (start + this.redFills[index]) >>> 0
                 onFrame(this.decodeScratch.subarray(0, copySamples))
             }
+            this.concealUntil(timestamp, budget, primary, onFrame)
             samples = decoder.decodeFloatInto(this.decodeScratch, primary)
         } catch (err) {
             this.decodeErrors++
@@ -1052,6 +1050,48 @@ export class MLowCodec {
             at = (at + this.subframeSpans[index]) >>> 0
         }
         return copies
+    }
+
+    /** Conceals from `playedUntil` up to `until`, `budget` samples at most; returns those emitted. */
+    private concealUntil(
+        until: number,
+        budget: number,
+        fecPacket: Uint8Array | null,
+        onFrame: (pcm: Float32Array) => void
+    ): number {
+        const hole = (until - this.playedUntil) | 0
+        if (hole <= 0 || budget <= 0) return 0
+        const concealed = this.concealSpan(hole < budget ? hole : budget, fecPacket, onFrame)
+        this.playedUntil = (this.playedUntil + concealed) >>> 0
+        return concealed
+    }
+
+    /**
+     * Conceals `samples` in steps no longer than the last decoded frame, `maxConcealFrames` at
+     * most, the step that ends the span from `fecPacket`'s FEC when given; returns those emitted.
+     */
+    private concealSpan(
+        samples: number,
+        fecPacket: Uint8Array | null,
+        onFrame: (pcm: Float32Array) => void
+    ): number {
+        const step = this.concealFrameSize()
+        let left = samples - (samples % CONCEAL_QUANTUM)
+        let emitted = 0
+        for (let frames = 0; left > 0; frames++) {
+            if (frames === this.maxConcealFrames) {
+                this.concealCapped++
+                this.logger.trace('mlow concealment capped', { samples, frames })
+                break
+            }
+            const size = left < step ? left : step
+            left -= size
+            const pcm =
+                left === 0 && fecPacket ? this.recoverPrevious(fecPacket, size) : this.conceal(size)
+            emitted += pcm.length
+            onFrame(pcm)
+        }
+        return emitted
     }
 
     /**

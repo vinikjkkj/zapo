@@ -1136,3 +1136,125 @@ test('MLowCodec decodes only the primary of an official RED packet without a tim
         reference.destroy()
     }
 })
+
+interface TimelinePacket {
+    readonly sequenceNumber: number
+    readonly timestamp: number
+    readonly payload: Uint8Array
+    readonly span: number
+}
+
+type TimelinePacketKind = 'single' | 'single-copy' | 'pair' | 'pair-copy-first' | 'pair-copy-second'
+
+/**
+ * Packets one sender emits per `plan` entry: one 60 ms frame or a pair in a multiframe; a `-copy`
+ * kind frames it as in-band RED behind the 60 ms copy of the previous packet's first or second frame.
+ */
+async function timelinePackets(plan: readonly TimelinePacketKind[]): Promise<TimelinePacket[]> {
+    const sender = await MLowCodec.create({ red: true })
+    try {
+        const target = new Uint8Array(8_192)
+        const packets: TimelinePacket[] = []
+        let timestamp = 0
+        let frame = 0
+        let previous: { copies: Uint8Array[]; timestamp: number } | null = null
+        for (let index = 0; index < plan.length; index++) {
+            const kind = plan[index]
+            const primaries: Uint8Array[] = []
+            const copies: Uint8Array[] = []
+            for (let count = kind.startsWith('single') ? 1 : 2; count > 0; count--) {
+                primaries.push(sender.encode(voicedFrame(frame++ * 960)))
+                copies.push(sender.lastSecondary!)
+            }
+            let payload = primaries.length === 1 ? primaries[0] : sender.packFrames(primaries)
+            if (kind.includes('copy')) {
+                const second = kind === 'pair-copy-second' && previous?.copies.length === 2
+                const copy = previous ? previous.copies[second ? 1 : 0] : null
+                const copyTimestamp = previous ? previous.timestamp + (second ? 960 : 0) : 0
+                const length = copy
+                    ? writeMlowRed(target, payload, timestamp, [copy], [copyTimestamp])
+                    : writeMlowRed(target, payload, timestamp, [], [])
+                payload = target.slice(0, length)
+            }
+            const span = primaries.length * 960
+            packets.push({ sequenceNumber: index + 1, timestamp, payload, span })
+            previous = { copies, timestamp }
+            timestamp += span
+        }
+        return packets
+    } finally {
+        sender.destroy()
+    }
+}
+
+/** Samples played for `packets` less `lost`, beside the clock span they cover. */
+async function playedAgainstClock(
+    packets: readonly TimelinePacket[],
+    lost: readonly number[],
+    stream: 0 | 1 = 0
+): Promise<{ played: number; clock: number; stats: ReturnType<MLowCodec['getStats']> }> {
+    const receiver = await MLowCodec.create()
+    try {
+        let played = 0
+        for (let index = 0; index < packets.length; index++) {
+            if (lost.includes(index)) continue
+            const { sequenceNumber, payload, timestamp } = packets[index]
+            receiver.decodeSequenced(
+                sequenceNumber,
+                payload,
+                (pcm) => {
+                    played += pcm.length
+                },
+                timestamp,
+                stream
+            )
+        }
+        const last = packets[packets.length - 1]
+        const clock = last.timestamp + last.span - packets[0].timestamp
+        return { played, clock, stats: receiver.getStats() }
+    } finally {
+        receiver.destroy()
+    }
+}
+
+test('MLowCodec fills the hole of lost two-frame packets up to the next one', async () => {
+    const plain = OFFICIAL_MLOW_PACKETS.map((packet, index) => ({
+        ...packet,
+        span: 1920,
+        sequenceNumber: index + 1
+    }))
+    for (const lost of [[3], [3, 4]]) {
+        const { played, clock, stats } = await playedAgainstClock(plain, lost)
+        assert.equal(played, clock, `lost ${lost.join(',')}`)
+        assert.equal(stats.fec, 1, 'the FEC of the next packet ends the hole')
+    }
+
+    const afterSingle = await timelinePackets(['pair', 'pair', 'single', 'pair', 'pair', 'pair'])
+    for (const lost of [[3], [3, 4]]) {
+        const { played, clock } = await playedAgainstClock(afterSingle, lost)
+        assert.equal(played, clock, `a two-frame packet lost behind a single frame, lost ${lost}`)
+    }
+})
+
+test('MLowCodec conceals the part of a lost two-frame packet an in-band RED copy leaves', async () => {
+    for (const kind of ['pair-copy-first', 'pair-copy-second'] as const) {
+        const packets = await timelinePackets(Array(8).fill(kind))
+        for (const lost of [[3], [3, 4]]) {
+            const { played, clock, stats } = await playedAgainstClock(packets, lost, 1)
+            assert.equal(played, clock, `${kind}, lost ${lost.join(',')}`)
+            assert.equal(stats.redRecovered, 1)
+        }
+    }
+})
+
+test('MLowCodec keeps single-frame streams on the clock across a loss', async () => {
+    const plain = await timelinePackets(Array(8).fill('single'))
+    const red = await timelinePackets(Array(8).fill('single-copy'))
+    for (const lost of [[3], [3, 4]]) {
+        const fromPlain = await playedAgainstClock(plain, lost)
+        assert.equal(fromPlain.played, fromPlain.clock, `plain, lost ${lost.join(',')}`)
+        const fromRed = await playedAgainstClock(red, lost, 1)
+        assert.equal(fromRed.played, fromRed.clock, `in-band RED, lost ${lost.join(',')}`)
+        assert.equal(fromRed.stats.redRecovered, 1)
+    }
+})
