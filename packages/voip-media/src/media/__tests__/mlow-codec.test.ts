@@ -2,7 +2,19 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { createNoopLogger, type Logger } from '../../logger.js'
-import { MLOW_ENCODER_CTL, MLowCodec } from '../mlow-codec.js'
+import {
+    MLOW_ENCODER_CTL,
+    MLOW_MAX_RED_BLOCKS,
+    MLOW_MAX_SUBFRAMES,
+    MLowCodec,
+    mlowFrameSamples,
+    mlowPacketSamples,
+    readMlowRed,
+    readMlowSubframes,
+    writeMlowRed
+} from '../mlow-codec.js'
+
+import { ANDROID_PT121_STREAM, OFFICIAL_MLOW_PACKETS, WEB_PT121_STREAM } from './_mlow-captures.js'
 
 function voicedFrame(offset = 0): Float32Array {
     const frame = new Float32Array(960)
@@ -488,16 +500,103 @@ test('MLowCodec without RED keeps DTX and yields no redundant copy', async () =>
     }
 })
 
-/** Packets as the RED sender lays them out: each primary followed by the copy of the one before. */
-async function redundantPackets(count: number): Promise<Uint8Array[]> {
+test('the official packets split into two 60 ms sub-frames that fill the timestamp step', () => {
+    const bounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
+    for (let index = 0; index < OFFICIAL_MLOW_PACKETS.length; index++) {
+        const { payload, timestamp, sequenceNumber } = OFFICIAL_MLOW_PACKETS[index]
+        assert.equal(readMlowSubframes(payload, bounds), 2)
+        assert.equal(payload[0], 0x92)
+        assert.equal(payload[1], 0x02)
+        assert.deepEqual([bounds[0], bounds[1]], [3, payload[2]])
+        assert.equal(bounds[2], 3 + payload[2])
+        assert.equal(bounds[2] + bounds[3], payload.length)
+        assert.equal(payload[bounds[0]], 0x50)
+        assert.equal(payload[bounds[2]], 0x50)
+
+        const span = mlowFrameSamples(payload[bounds[0]]) + mlowFrameSamples(payload[bounds[2]])
+        assert.equal(span, 1920)
+        const next = OFFICIAL_MLOW_PACKETS[index + 1]
+        if (next) {
+            assert.equal(next.sequenceNumber - sequenceNumber, 1)
+            assert.equal(next.timestamp - timestamp, span, 'no sub-frame repeats an earlier slot')
+        }
+    }
+})
+
+test('MLowCodec plays the official stream through once, taking no sub-frame for a copy', async () => {
+    const receiver = await MLowCodec.create()
+    const reference = await MLowCodec.create()
+    try {
+        for (const { sequenceNumber, payload, timestamp } of OFFICIAL_MLOW_PACKETS) {
+            const expected = reference.decode(payload)
+            const played: Float32Array[] = []
+            receiver.decodeSequenced(
+                sequenceNumber,
+                payload,
+                (pcm) => played.push(pcm.slice()),
+                timestamp
+            )
+            assert.deepEqual(played, [expected])
+        }
+        const stats = receiver.getStats()
+        assert.equal(stats.success, OFFICIAL_MLOW_PACKETS.length)
+        assert.equal(stats.errors, 0)
+        assert.equal(stats.redundant, 0)
+        assert.equal(stats.redRecovered, 0)
+    } finally {
+        receiver.destroy()
+        reference.destroy()
+    }
+})
+
+test('MLowCodec conceals a lost official packet at its length and takes no copy from the next', async () => {
+    const receiver = await MLowCodec.create()
+    try {
+        const lengths: number[] = []
+        OFFICIAL_MLOW_PACKETS.forEach(({ sequenceNumber, payload, timestamp }, index) => {
+            if (index === 3) return
+            receiver.decodeSequenced(
+                sequenceNumber,
+                payload,
+                (pcm) => lengths.push(pcm.length),
+                timestamp
+            )
+        })
+
+        assert.deepEqual(lengths, Array(OFFICIAL_MLOW_PACKETS.length).fill(1920))
+        const stats = receiver.getStats()
+        assert.equal(stats.plc + stats.fec, 1)
+        assert.equal(stats.redRecovered, 0)
+        assert.equal(stats.redundant, 0)
+    } finally {
+        receiver.destroy()
+    }
+})
+
+interface RedundantPacket {
+    readonly sequenceNumber: number
+    readonly timestamp: number
+    readonly payload: Uint8Array
+    readonly primary: Uint8Array
+    readonly copy: Uint8Array | null
+}
+
+/** RED as the plane sends it: the copy of the frame before, then the frame, at the copy's slot. */
+async function redundantPackets(count: number): Promise<RedundantPacket[]> {
     const sender = await MLowCodec.create({ red: true })
     try {
-        const packets: Uint8Array[] = []
-        let previous: Uint8Array | null = null
-        for (let packet = 0; packet < count; packet++) {
-            const primary = sender.encode(voicedFrame(packet * 960))
-            packets.push(previous ? sender.packFrames([primary, previous]) : primary)
-            previous = sender.lastSecondary
+        const packets: RedundantPacket[] = []
+        let copy: Uint8Array | null = null
+        for (let index = 0; index < count; index++) {
+            const primary = sender.encode(voicedFrame(index * 960))
+            packets.push({
+                sequenceNumber: index + 1,
+                timestamp: copy ? (index - 1) * 960 : 0,
+                payload: copy ? sender.packFrames([copy, primary]) : primary,
+                primary,
+                copy
+            })
+            copy = sender.lastSecondary
         }
         return packets
     } finally {
@@ -505,51 +604,116 @@ async function redundantPackets(count: number): Promise<Uint8Array[]> {
     }
 }
 
-test('MLowCodec never plays a sub-frame past the span the timestamps give a packet', async () => {
+test('RED packets keep the official framing, the copy first on the slot of the frame before', async () => {
+    const packets = await redundantPackets(3)
+    const official = OFFICIAL_MLOW_PACKETS[0].payload
+    const bounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
+    for (const { payload, primary, copy } of packets.slice(1)) {
+        assert.ok(copy)
+        assert.equal(readMlowSubframes(payload, bounds), 2)
+        assert.equal(payload[0], official[0])
+        assert.equal(payload[1], official[1])
+        assert.equal(payload[2], copy.length)
+        assert.deepEqual(payload.subarray(bounds[0], bounds[0] + bounds[1]), copy)
+        assert.deepEqual(payload.subarray(bounds[2]), primary)
+        assert.equal(payload[bounds[0]] & 0x39, official[3] & 0x39, 'same rate, duration, channels')
+        assert.equal(mlowFrameSamples(payload[bounds[0]]), 960)
+        assert.equal(mlowFrameSamples(payload[bounds[2]]), 960)
+    }
+    assert.deepEqual(
+        packets.map((packet) => packet.timestamp),
+        [0, 0, 960],
+        'stamped on the copy, so the primary of frame n lands on n * 960'
+    )
+})
+
+test('MLowCodec never plays a RED copy whose slot already played', async () => {
     const packets = await redundantPackets(5)
     const receiver = await MLowCodec.create()
     try {
         const lengths: number[] = []
-        for (let index = 0; index < packets.length; index++) {
+        for (const { sequenceNumber, payload, timestamp } of packets) {
             receiver.decodeSequenced(
-                index + 1,
-                packets[index],
+                sequenceNumber,
+                payload,
                 (pcm) => lengths.push(pcm.length),
-                index * 960
+                timestamp
             )
         }
 
         assert.deepEqual(lengths, [960, 960, 960, 960, 960], 'one 60 ms primary per packet')
-        assert.equal(receiver.getStats().redundant, 3, 'each copy dropped once the next step lands')
+        assert.equal(receiver.getStats().redundant, 4)
         assert.equal(receiver.getStats().redRecovered, 0)
     } finally {
         receiver.destroy()
     }
 })
 
-test('MLowCodec recovers a lost packet from the copy the next one carries past its span', async () => {
-    const packets = await redundantPackets(4)
+test('MLowCodec plays the copy in place of a lost packet, as the frame it stands for', async () => {
+    const packets = await redundantPackets(5)
+    const receiver = await MLowCodec.create()
+    const reference = await MLowCodec.create()
+    try {
+        const played: number[] = []
+        for (const index of [0, 1, 3, 4]) {
+            const { sequenceNumber, payload, timestamp } = packets[index]
+            receiver.decodeSequenced(
+                sequenceNumber,
+                payload,
+                (pcm) => played.push(...pcm),
+                timestamp
+            )
+        }
+
+        const expected: number[] = []
+        const lostCopy = packets[3].copy
+        assert.ok(lostCopy)
+        for (const frame of [
+            packets[0].primary,
+            packets[1].primary,
+            lostCopy,
+            packets[3].primary,
+            packets[4].primary
+        ]) {
+            expected.push(...reference.decode(frame))
+        }
+        assert.deepEqual(played, expected, 'the copy fills the hole and nothing plays twice')
+        const stats = receiver.getStats()
+        assert.equal(stats.redRecovered, 1)
+        assert.equal(stats.redundant, 2)
+        assert.equal(stats.plc, 0)
+        assert.equal(stats.fec, 0)
+    } finally {
+        receiver.destroy()
+        reference.destroy()
+    }
+})
+
+test('MLowCodec conceals only the hole the copy cannot cover after two losses', async () => {
+    const packets = await redundantPackets(5)
     const receiver = await MLowCodec.create()
     try {
         const lengths: number[] = []
-        const collect = (pcm: Float32Array): void => {
-            lengths.push(pcm.length)
+        for (const index of [0, 1, 4]) {
+            const { sequenceNumber, payload, timestamp } = packets[index]
+            receiver.decodeSequenced(
+                sequenceNumber,
+                payload,
+                (pcm) => lengths.push(pcm.length),
+                timestamp
+            )
         }
-        receiver.decodeSequenced(1, packets[0], collect, 0)
-        receiver.decodeSequenced(2, packets[1], collect, 960)
-        receiver.decodeSequenced(4, packets[3], collect, 2880)
 
-        assert.deepEqual(lengths, [960, 960, 960, 960])
+        assert.deepEqual(lengths, [960, 960, 960, 1920])
         const stats = receiver.getStats()
+        assert.equal(stats.plc + stats.fec, 1)
         assert.equal(stats.redRecovered, 1)
-        assert.equal(stats.fec, 0, 'the redundant copy is preferred over in-band FEC')
-        assert.equal(stats.plc, 0)
     } finally {
         receiver.destroy()
     }
 })
 
-test('MLowCodec plays a held sub-frame late when the timeline shows it was a primary', async () => {
+test('MLowCodec plays both sub-frames of a plain multiframe on their own slots', async () => {
     const sender = await MLowCodec.create()
     const receiver = await MLowCodec.create()
     try {
@@ -562,7 +726,7 @@ test('MLowCodec plays a held sub-frame late when the timeline shows it was a pri
         receiver.decodeSequenced(2, sender.packFrames([frames[1], frames[2]]), collect, 960)
         receiver.decodeSequenced(3, sender.packFrames([frames[3], frames[4]]), collect, 2880)
 
-        assert.deepEqual(lengths, [960, 960, 960, 1920], 'no audio of a plain stream is lost')
+        assert.deepEqual(lengths, [960, 1920, 1920], 'no audio of a plain stream is lost')
         assert.equal(receiver.getStats().redundant, 0)
     } finally {
         sender.destroy()
@@ -590,6 +754,41 @@ test('MLowCodec decodes a plain 120 ms stream whole when it has its timestamps',
         assert.equal(receiver.getStats().redundant, 0)
     } finally {
         sender.destroy()
+        receiver.destroy()
+    }
+})
+
+test('mlowPacketSamples spans a frame or a multiframe, and is 0 for what is not MLow', () => {
+    const bounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
+    for (const { payload } of [...ANDROID_PT121_STREAM.packets, ...WEB_PT121_STREAM.packets]) {
+        assert.equal(mlowPacketSamples(payload, bounds), payload.length === 1 ? 160 : 960)
+    }
+    assert.equal(mlowPacketSamples(OFFICIAL_MLOW_PACKETS[0].payload, bounds), 1920)
+    assert.equal(mlowPacketSamples(new Uint8Array(0), bounds), 0)
+    assert.equal(mlowPacketSamples(Uint8Array.of(0xfc, 0xff, 0xfe), bounds), 0, 'a CELT TOC')
+    assert.equal(mlowPacketSamples(Uint8Array.of(0x92, 0x02, 0xff, 0x50), bounds), 0)
+    assert.equal(mlowPacketSamples(Uint8Array.of(0x92, 0x02, 0x01, 0x50, 0xc0), bounds), 0)
+})
+
+test('MLowCodec numbers a second stream apart and plays each slot of the two once', async () => {
+    const { packets } = WEB_PT121_STREAM
+    const receiver = await MLowCodec.create()
+    try {
+        const lengths: number[] = []
+        const collect = (pcm: Float32Array): void => {
+            lengths.push(pcm.length)
+        }
+        packets.forEach(({ sequenceNumber, payload, timestamp }, index) => {
+            if (index !== 3) receiver.decodeSequenced(40_000 + index, payload, collect, timestamp)
+            receiver.decodeSequenced(sequenceNumber, payload, collect, timestamp, 1)
+        })
+
+        assert.deepEqual(lengths, Array(packets.length).fill(960))
+        const stats = receiver.getStats()
+        assert.equal(stats.redundant, packets.length - 1)
+        assert.equal(stats.late, 0)
+        assert.equal(stats.plc + stats.fec, 0, 'the second stream filled the slot the first lost')
+    } finally {
         receiver.destroy()
     }
 })
@@ -633,5 +832,218 @@ test('MLowCodec resets the Companion where the inbound sequence restarts', async
         assert.equal(resets, 1)
     } finally {
         codec.destroy()
+    }
+})
+
+/** `[offset, length, Δts]` per copy, then the primary's `[offset, length]`. */
+const RED_BOUNDS_LENGTH = (MLOW_MAX_RED_BLOCKS + 1) * 3
+
+test('writeMlowRed puts a 2-byte header per copy, the copies, then the primary last', () => {
+    const target = new Uint8Array(64)
+    const primary = Uint8Array.from([0x50, 1, 2, 3])
+    const older = Uint8Array.from([0x48, 9, 9])
+    const newer = Uint8Array.from([0x48, 7])
+
+    const length = writeMlowRed(target, primary, 1920, [older, newer], [1280, 1600])
+
+    assert.deepEqual(
+        target.subarray(0, length),
+        Uint8Array.from([0xc0, 3, 0xa0, 2, 0x48, 9, 9, 0x48, 7, 0x50, 1, 2, 3]),
+        '0x80 | Δts / 10 then the length, per copy: 640 and 320 samples back'
+    )
+})
+
+test('writeMlowRed stamps a 60 ms copy 960 samples back as 0xe0, across a timestamp wrap', () => {
+    const target = new Uint8Array(16)
+    const copy = Uint8Array.from([0x50])
+    const length = writeMlowRed(target, Uint8Array.from([0x50, 5]), 200, [copy], [0xffff_fd08])
+    assert.deepEqual(target.subarray(0, length), Uint8Array.from([0xe0, 1, 0x50, 0x50, 5]))
+})
+
+test('writeMlowRed leaves out a copy over 255 bytes, empty, or out of the header reach', () => {
+    const target = new Uint8Array(1024)
+    const primary = Uint8Array.from([0x50, 1])
+    const fits = Uint8Array.from([0x50, 2])
+    const copies = [new Uint8Array(256).fill(0x50), new Uint8Array(0), fits, fits, fits, fits]
+    const stamps = [9_040, 9_040, 8_720, 10_000, 9_995, 9_040]
+
+    const length = writeMlowRed(target, primary, 10_000, copies, stamps)
+
+    assert.deepEqual(
+        target.subarray(0, length),
+        Uint8Array.from([0xe0, 2, 0x50, 2, 0x50, 1]),
+        'only the copy 960 back fits: 1280 back, the same slot and 5 back are left out too'
+    )
+    const alone = writeMlowRed(target, primary, 10_000, [], [])
+    assert.deepEqual(target.subarray(0, alone), primary, 'no copy, no header')
+})
+
+test('readMlowRed splits the headers, the copies and the primary', () => {
+    const packet = Uint8Array.from([0xc0, 3, 0xa0, 2, 0x48, 9, 9, 0x48, 7, 0x50, 1, 2, 3])
+    const bounds = new Int32Array(RED_BOUNDS_LENGTH)
+
+    assert.equal(readMlowRed(packet, bounds), 2)
+    assert.deepEqual([...bounds.subarray(0, 8)], [4, 3, 640, 7, 2, 320, 9, 4])
+})
+
+test('readMlowRed takes a plain frame, a multiframe or a broken header for no RED', async () => {
+    const bounds = new Int32Array(RED_BOUNDS_LENGTH)
+    for (const { payload } of OFFICIAL_MLOW_PACKETS) {
+        assert.equal(readMlowRed(payload, bounds), 0, 'the official 92 02 multiframe')
+    }
+    const codec = await MLowCodec.create()
+    try {
+        const frame = codec.encode(voicedFrame())
+        assert.equal(readMlowRed(frame, bounds), 0, 'a single frame opens on its TOC')
+        assert.equal(readMlowRed(codec.packFrames([frame, frame]), bounds), 0)
+    } finally {
+        codec.destroy()
+    }
+    assert.equal(readMlowRed(Uint8Array.from([0x08]), bounds), 0, 'a DTX frame')
+    assert.equal(readMlowRed(Uint8Array.from([0xe0, 200, 0x50, 1]), bounds), 0, 'copy past the end')
+    assert.equal(readMlowRed(Uint8Array.from([0xe0, 2, 0x50, 1]), bounds), 0, 'no primary left')
+    assert.equal(readMlowRed(Uint8Array.from([0xe0, 0, 0x50, 1]), bounds), 0, 'empty copy')
+    assert.equal(
+        readMlowRed(Uint8Array.from([0xe0, 1, 0x50, 0xe0, 1]), bounds),
+        0,
+        'a primary that does not open on a TOC'
+    )
+})
+
+/** Official in-band RED: the copy of the frame before behind its header, then the frame, on its slot. */
+async function officialRedPackets(count: number): Promise<RedundantPacket[]> {
+    const sender = await MLowCodec.create({ red: true })
+    try {
+        const target = new Uint8Array(8_192)
+        const packets: RedundantPacket[] = []
+        let copy: Uint8Array | null = null
+        for (let index = 0; index < count; index++) {
+            const primary = sender.encode(voicedFrame(index * 960))
+            const timestamp = index * 960
+            let payload = primary
+            if (copy) {
+                const length = writeMlowRed(target, primary, timestamp, [copy], [timestamp - 960])
+                payload = target.slice(0, length)
+            }
+            packets.push({ sequenceNumber: index + 1, timestamp, payload, primary, copy })
+            copy = sender.lastSecondary
+        }
+        return packets
+    } finally {
+        sender.destroy()
+    }
+}
+
+test('MLowCodec drops every official RED copy whose slot already played', async () => {
+    const packets = await officialRedPackets(5)
+    const receiver = await MLowCodec.create()
+    const reference = await MLowCodec.create()
+    try {
+        const played: number[] = []
+        for (const { sequenceNumber, payload, timestamp } of packets) {
+            receiver.decodeSequenced(
+                sequenceNumber,
+                payload,
+                (pcm) => played.push(...pcm),
+                timestamp
+            )
+        }
+
+        const expected: number[] = []
+        for (const { primary } of packets) expected.push(...reference.decode(primary))
+        assert.deepEqual(played, expected, 'only the primaries play')
+        const stats = receiver.getStats()
+        assert.equal(stats.redundant, 4)
+        assert.equal(stats.redRecovered, 0)
+        assert.equal(stats.errors, 0)
+    } finally {
+        receiver.destroy()
+        reference.destroy()
+    }
+})
+
+test('MLowCodec plays an official RED copy in place of the packet that was lost', async () => {
+    const packets = await officialRedPackets(5)
+    const receiver = await MLowCodec.create()
+    const reference = await MLowCodec.create()
+    try {
+        const played: number[] = []
+        for (const index of [0, 1, 3, 4]) {
+            const { sequenceNumber, payload, timestamp } = packets[index]
+            receiver.decodeSequenced(
+                sequenceNumber,
+                payload,
+                (pcm) => played.push(...pcm),
+                timestamp
+            )
+        }
+
+        const lostCopy = packets[3].copy
+        assert.ok(lostCopy)
+        const expected: number[] = []
+        for (const frame of [
+            packets[0].primary,
+            packets[1].primary,
+            lostCopy,
+            packets[3].primary,
+            packets[4].primary
+        ]) {
+            expected.push(...reference.decode(frame))
+        }
+        assert.deepEqual(played, expected, 'the copy fills the hole and nothing plays twice')
+        const stats = receiver.getStats()
+        assert.equal(stats.redRecovered, 1)
+        assert.equal(stats.redundant, 2)
+        assert.equal(stats.plc, 0)
+        assert.equal(stats.fec, 0)
+    } finally {
+        receiver.destroy()
+        reference.destroy()
+    }
+})
+
+test('MLowCodec conceals only the hole an official RED copy cannot cover', async () => {
+    const packets = await officialRedPackets(5)
+    const receiver = await MLowCodec.create()
+    try {
+        const lengths: number[] = []
+        for (const index of [0, 1, 4]) {
+            const { sequenceNumber, payload, timestamp } = packets[index]
+            receiver.decodeSequenced(
+                sequenceNumber,
+                payload,
+                (pcm) => lengths.push(pcm.length),
+                timestamp
+            )
+        }
+
+        assert.deepEqual(lengths, [960, 960, 960, 960, 960])
+        const stats = receiver.getStats()
+        assert.equal(stats.plc, 1, 'the frame no copy covers is concealed')
+        assert.equal(stats.fec, 0, 'the FEC of the primary is for the slot the copy fills')
+        assert.equal(stats.redRecovered, 1)
+    } finally {
+        receiver.destroy()
+    }
+})
+
+test('MLowCodec decodes only the primary of an official RED packet without a timeline', async () => {
+    const packets = await officialRedPackets(3)
+    const receiver = await MLowCodec.create()
+    const reference = await MLowCodec.create()
+    try {
+        const played: number[] = []
+        for (const { sequenceNumber, payload } of packets) {
+            receiver.decodeSequenced(sequenceNumber, payload, (pcm) => played.push(...pcm))
+        }
+
+        const expected: number[] = []
+        for (const { primary } of packets) expected.push(...reference.decode(primary))
+        assert.deepEqual(played, expected)
+        assert.equal(receiver.getStats().errors, 0)
+        assert.equal(receiver.getStats().redundant, 2)
+    } finally {
+        receiver.destroy()
+        reference.destroy()
     }
 })

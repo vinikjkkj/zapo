@@ -230,6 +230,8 @@ export class RtpStreamReception {
     private jitter = 0
     private senderReportArrivalMs = 0
     private pendingJumpSequence = -1
+    private expectedPriorLoss = 0
+    private receivedPriorLoss = 0
 
     constructor(clockRate: number) {
         this.clockRate = clockRate
@@ -251,6 +253,19 @@ export class RtpStreamReception {
         if (expected <= 0) return 0
         const lost = expected - this.received
         return lost > 0 ? (lost / expected) * 100 : 0
+    }
+
+    /** Loss since the previous call, in percent, on an interval apart from the one {@link report} consumes. */
+    takeLossPercent(): number {
+        if (this.baseSequence < 0) return 0
+        const expected = this.extendedHighest - this.baseSequence + 1
+        const expectedInterval = expected - this.expectedPriorLoss
+        const lostInterval = expectedInterval - (this.received - this.receivedPriorLoss)
+        this.expectedPriorLoss = expected
+        this.receivedPriorLoss = this.received
+        return expectedInterval > 0 && lostInterval > 0
+            ? (lostInterval / expectedInterval) * 100
+            : 0
     }
 
     /**
@@ -396,6 +411,8 @@ export class RtpStreamReception {
         this.jitter = 0
         this.senderReportArrivalMs = 0
         this.pendingJumpSequence = -1
+        this.expectedPriorLoss = 0
+        this.receivedPriorLoss = 0
     }
 
     /**
@@ -882,6 +899,31 @@ export function nextReceiverMaxBitrate(
     return Math.floor(next)
 }
 
+/** First audio REMB: above the 22000 the peer's UAQC needs (`uaqc_probing_remb_threshold`) to leave probing. */
+const AUDIO_REMB_INITIAL_BITRATE = 24_000
+/** Audio REMB floor, UAQC's `uaqc_bandwidth_managed_remb_lower_threshold`. */
+const AUDIO_REMB_MIN_BITRATE = 16_000
+/**
+ * Audio REMB ceiling: a 15% backoff (25500) stays over UAQC's 25000 high-quality target and 24000
+ * managed band; the peer reads the lower of this and its own estimate, so more hands it the state.
+ */
+const AUDIO_REMB_MAX_BITRATE = 30_000
+const AUDIO_REMB_GROWTH_FACTOR = 1.1
+
+/**
+ * Next audio REMB in bps, a rule of ours (none was recovered): 10% up per interval under 2% loss
+ * to 30 kbps and steady there, held up to 10%, 15% down from there, never below 16 kbps.
+ */
+export function nextAudioReceiverEstimate(previous: number, lossPercent: number): number {
+    if (!(previous > 0)) return AUDIO_REMB_INITIAL_BITRATE
+    let next = previous
+    if (lossPercent >= REMB_CONGESTED_LOSS_PERCENT) next = previous * REMB_BACKOFF_FACTOR
+    else if (lossPercent < REMB_QUIET_LOSS_PERCENT) next = previous * AUDIO_REMB_GROWTH_FACTOR
+    if (next < AUDIO_REMB_MIN_BITRATE) return AUDIO_REMB_MIN_BITRATE
+    if (next > AUDIO_REMB_MAX_BITRATE) return AUDIO_REMB_MAX_BITRATE
+    return Math.floor(next)
+}
+
 /**
  * REMB bitrate in the exponent-mantissa pair the field carries: 6 bits of
  * exponent over 18 of mantissa, worth `mantissa << exponent`.
@@ -946,7 +988,7 @@ function encodeRembBitrate(bitsPerSecond: number): number {
  *
  * The header media SSRC stays at zero, as in the Full Intra Request: the source
  * the estimate refers to is the one listed in the FCI, and it is `mediaSsrc`,
- * the peer's video SSRC this endpoint is receiving.
+ * the peer's video or audio SSRC this endpoint is receiving.
  */
 export function buildReceiverEstimatedMaxBitrate(
     senderSsrc: number,

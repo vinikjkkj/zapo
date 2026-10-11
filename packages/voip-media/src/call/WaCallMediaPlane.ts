@@ -12,24 +12,27 @@ import { WA_FAST_REMB_ELEMENT_LENGTH, writeFastRembExtension } from '../media/fa
 import { H264Depacketizer, isH264KeyFrame, packetizeH264AnnexB } from '../media/h264.js'
 import {
     MLOW_MAX_PACKET_BYTES,
+    MLOW_MAX_RED_BLOCKS,
     MLOW_MAX_SUBFRAMES,
     MLOW_TOC_VAD,
     MLowCodec,
     type MLowCompanionModelSource,
+    mlowPacketSamples,
     type MLowRedOptions,
-    readMlowSubframes
+    writeMlowRed
 } from '../media/mlow-codec.js'
 import {
     buildFullIntraRequest,
     buildPictureLossIndication,
     buildReceiverEstimatedMaxBitrate,
     buildSenderReportWithSdes,
+    nextAudioReceiverEstimate,
     nextReceiverMaxBitrate,
     RTCP_CNAME_LENGTH,
     RtpStreamReception,
     SenderReportSchedule
 } from '../media/rtcp.js'
-import { RtpSession, WA_RTP_EXTENSION_PROFILE } from '../media/rtp.js'
+import { type RtpHeader, RtpSession, WA_RTP_EXTENSION_PROFILE } from '../media/rtp.js'
 import { WaJitterBuffer, type WaJitterBufferStats } from '../media/WaJitterBuffer.js'
 import { HostCaptureTimeMapper, WaMediaClock } from '../media/WaMediaClock.js'
 import { isRtcpPacket, isRtpPacket, isStunPacket } from '../relay/stun.js'
@@ -99,6 +102,14 @@ const DEFAULT_FRAME_SAMPLES = 960
 
 /** Most frames bundled per audio packet: the two the official 1:1 client sends. */
 const MAX_AUDIO_FRAMES_PER_PACKET = 2
+
+/**
+ * RED layout sent: `timestamp`, the copy-first multiframe stamped on the copy, the one the official
+ * clients accept, or the experimental `official`, the in-band headers of {@link writeMlowRed}.
+ */
+const MLOW_RED_LAYOUT: 'official' | 'timestamp' = 'timestamp'
+/** Room for a primary behind the most copies a RED packet carries, each 2 header bytes and 255 at most. */
+const RED_PACKET_BYTES = MLOW_MAX_PACKET_BYTES + MLOW_MAX_RED_BLOCKS * (2 + 0xff)
 
 /**
  * How far a frame's capture instant may drift from the stream's timeline: 120 ms. Later
@@ -284,9 +295,9 @@ export interface WaCallMediaPlaneOptions extends WaMediaHost, WaCallMediaPlaneEv
      */
     readonly mlowCompanionModel?: MLowCompanionModelSource
     /**
-     * Sends MLow RED: each packet carries one primary frame and the low-rate redundant copy of
-     * the frame before it, as a two-frame multiframe. Off by default. Turns DTX off
-     * and overrides the bundling the plan asks for.
+     * Sends MLow RED as a plain multiframe, the low-rate copy of the previous frame then the
+     * frame, stamped on the copy. Off by default. Turns DTX off and overrides the bundling the
+     * plan asks for.
      */
     readonly mlowRed?: boolean | MLowRedOptions
 }
@@ -305,7 +316,7 @@ export interface WaCallMediaStats {
      */
     readonly audioCaptureSkewMs: number
     readonly audioReceived: number
-    /** `mlow-red-1` packets, counted and not decoded: their payload layout is not established. */
+    /** PT 121 packets discarded for not parsing as MLow; the rest decode with the PT 120 audio. */
     readonly audioRedDiscarded: number
     /** Inbound RTP dropped on an exception in the receive path: the sum of the three below. */
     readonly srtpErrors: number
@@ -437,14 +448,25 @@ export class WaCallMediaPlane {
     private pendingAudioTimestamp = 0
     private pendingAudioMarker = false
     private pendingAudioCaptureMs = 0
-    /** RED: the redundant copy of the last frame sent, which the next packet carries. */
+    /** RED: the redundant copy of the last frame sent, which the next packet carries first. */
     private previousSecondary: Uint8Array | null = null
+    private previousSecondaryTimestamp = 0
+    private previousSecondaryCaptureMs = 0
+    /** RED layout this plane sends; see {@link MLOW_RED_LAYOUT}. */
+    private redLayout: 'official' | 'timestamp' = MLOW_RED_LAYOUT
+    /** In-band RED: copies per packet, and the copies of the last frames sent with their timestamps. */
+    private redLevel = 1
+    private readonly redCopies: Uint8Array[] = []
+    private readonly redCopyTimestamps: number[] = []
+    private redScratch: Uint8Array | null = null
 
     private audioSendCount = 0
     private audioOctetCount = 0
     private audioDropCount = 0
     private audioRecvCount = 0
-    private audioRedRecvCount = 0
+    private audioRedDiscardCount = 0
+    /** Sub-frame bounds of the PT 121 packet being checked. */
+    private readonly redPayloadBounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
     private recvRealCount = 0
     private recvDtxCount = 0
     private videoSendFrames = 0
@@ -541,6 +563,11 @@ export class WaCallMediaPlane {
      * and its own ceiling would never move from where it is.
      */
     private receiverEstimateBitrate = 0
+
+    /** Pacing of the audio REMB on the call's RTCP interval, and the bitrate it last announced. */
+    private audioReceiverEstimateSchedule =
+        SenderReportSchedule.onWallClock(SENDER_REPORT_INTERVAL_MS)
+    private audioReceiverEstimateBitrate = 0
 
     /**
      * Buffer of the video RTP header extension, rewritten on every packet.
@@ -693,6 +720,7 @@ export class WaCallMediaPlane {
             )
             this.videoReportSchedule = SenderReportSchedule.onWallClock(intervalMs)
             this.receiverEstimateSchedule = SenderReportSchedule.onWallClock(intervalMs)
+            this.audioReceiverEstimateSchedule = SenderReportSchedule.onWallClock(intervalMs)
         }
 
         this.appDataSframeRequired = settings.appDataSframe
@@ -720,7 +748,7 @@ export class WaCallMediaPlane {
             this.audioTimelineAnchored = false
             this.pendingSkipSamples = 0
             this.pendingAudio = null
-            this.previousSecondary = null
+            this.clearRedCopies()
         }
         if (this.carriesVideo) {
             this.ensureVideoRtpSession()
@@ -938,7 +966,7 @@ export class WaCallMediaPlane {
             audioFramesShed: this.audioFramesShed,
             audioCaptureSkewMs: (this.audioCaptureSkewTicks * 1000) / AUDIO_CLOCK_RATE,
             audioReceived: this.audioRecvCount,
-            audioRedDiscarded: this.audioRedRecvCount,
+            audioRedDiscarded: this.audioRedDiscardCount,
             srtpErrors: this.srtpReplayCount + this.srtpAuthFailureCount + this.srtpOtherErrorCount,
             srtpReplays: this.srtpReplayCount,
             srtpAuthFailures: this.srtpAuthFailureCount,
@@ -999,7 +1027,7 @@ export class WaCallMediaPlane {
         this.encodeBuffer = null
         this.encodeBufferPos = 0
         this.pendingAudio = null
-        this.previousSecondary = null
+        this.clearRedCopies()
         return stats
     }
 
@@ -1271,9 +1299,9 @@ export class WaCallMediaPlane {
     }
 
     /**
-     * Puts one encoded frame on the wire. With RED it leaves with the redundant copy of the frame
-     * before; otherwise a speech frame waits to share a packet when the plan bundles, and a frame
-     * that breaks the run (VAD clear, or not following on) sends what waits on its own first.
+     * Puts one encoded frame on the wire, behind the copy of the frame before with RED. Otherwise
+     * a speech frame waits to share a packet when the plan bundles, and a frame that breaks the
+     * run (VAD clear, or not following on) sends what waits on its own first.
      */
     private packetizeAudio(
         codec: MLowCodec,
@@ -1283,10 +1311,11 @@ export class WaCallMediaPlane {
         captureMs: number
     ): void {
         if (codec.redActive) {
-            const previous = this.previousSecondary
-            this.previousSecondary = codec.lastSecondary
-            const packet = previous && !marker ? this.packAudio(codec, frame, previous) : null
-            this.sendOpusFrame(packet ?? frame, timestamp, marker, captureMs)
+            if (this.redLayout === 'official') {
+                this.packetizeRedInBand(codec, frame, timestamp, marker, captureMs)
+            } else {
+                this.packetizeRed(codec, frame, timestamp, marker, captureMs)
+            }
             return
         }
 
@@ -1319,6 +1348,68 @@ export class WaCallMediaPlane {
             return
         }
         this.sendOpusFrame(frame, timestamp, marker, captureMs)
+    }
+
+    /**
+     * `[copy of frame n-1][frame n]` at frame n-1's timestamp: the copy lands on the slot the
+     * previous packet filled, a duplicate unless that packet was lost. A marked frame goes alone.
+     */
+    private packetizeRed(
+        codec: MLowCodec,
+        frame: Uint8Array,
+        timestamp: number,
+        marker: boolean,
+        captureMs: number
+    ): void {
+        const copy = this.previousSecondary
+        const copyTimestamp = this.previousSecondaryTimestamp
+        const copyCaptureMs = this.previousSecondaryCaptureMs
+        this.previousSecondary = codec.lastSecondary
+        this.previousSecondaryTimestamp = timestamp
+        this.previousSecondaryCaptureMs = captureMs
+        const packet = copy && !marker ? this.packAudio(codec, copy, frame) : null
+        if (packet) {
+            this.sendOpusFrame(packet, copyTimestamp, false, copyCaptureMs)
+        } else {
+            this.sendOpusFrame(frame, timestamp, marker, captureMs)
+        }
+    }
+
+    /**
+     * Experimental in-band RED, rejected by the official clients.
+     * At frame n's timestamp: the copies of up to `redLevel` frames before, then frame n.
+     */
+    private packetizeRedInBand(
+        codec: MLowCodec,
+        frame: Uint8Array,
+        timestamp: number,
+        marker: boolean,
+        captureMs: number
+    ): void {
+        const copies = this.redCopies
+        const stamps = this.redCopyTimestamps
+        if (marker) this.clearRedCopies()
+        let payload = frame
+        if (copies.length > 0) {
+            const target = (this.redScratch ??= new Uint8Array(RED_PACKET_BYTES))
+            payload = target.subarray(0, writeMlowRed(target, frame, timestamp, copies, stamps))
+        }
+        this.sendOpusFrame(payload, timestamp, marker, captureMs)
+
+        const secondary = codec.lastSecondary
+        if (!secondary) return
+        if (copies.length === this.redLevel) {
+            copies.shift()
+            stamps.shift()
+        }
+        copies.push(secondary)
+        stamps.push(timestamp)
+    }
+
+    private clearRedCopies(): void {
+        this.previousSecondary = null
+        this.redCopies.length = 0
+        this.redCopyTimestamps.length = 0
     }
 
     private packAudio(codec: MLowCodec, first: Uint8Array, second: Uint8Array): Uint8Array | null {
@@ -1564,61 +1655,25 @@ export class WaCallMediaPlane {
         try {
             const rtpPacket = this.srtpSession.unprotect(data)
             this.notePeerMedia(connectionId)
-            if (pt === PayloadType.WhatsAppMlowRed) {
-                this.countRedundantAudio(rtpPacket.payload, rtpPacket.header.ssrc)
-                return
-            }
-            if (pt !== PayloadType.WhatsAppOpus) {
-                if (pt === PayloadType.WhatsAppH264) {
-                    this.onVideoPacket(rtpPacket.header, rtpPacket.payload, pt)
-                } else if (isReedSolomonFecPayloadType(pt)) {
-                    const fecPackets = ++this.reedSolomonFecPackets
-                    if (fecPackets === 1 || fecPackets % 100 === 0) {
-                        this.logger.debug('reed-solomon fec packet discarded', {
-                            packets: fecPackets,
-                            payloadType: pt,
-                            ssrc: `0x${rtpPacket.header.ssrc.toString(16)}`
-                        })
-                    }
+            if (pt === PayloadType.WhatsAppOpus) {
+                this.onAudioPacket(rtpPacket.header, rtpPacket.payload, 0)
+            } else if (pt === PayloadType.WhatsAppMlowRed) {
+                if (mlowPacketSamples(rtpPacket.payload, this.redPayloadBounds) > 0) {
+                    this.onAudioPacket(rtpPacket.header, rtpPacket.payload, 1)
+                } else {
+                    this.discardRedAudio(rtpPacket.payload, rtpPacket.header.ssrc)
                 }
-                return
-            }
-            this.latchPeerSsrc(rtpPacket.header.ssrc)
-            const codec = this.codec
-            if (!codec) return
-            const opusPayload = rtpPacket.payload
-
-            this.audioRecvCount++
-            const seq = rtpPacket.header.sequenceNumber
-            this.audioReception.observe(
-                rtpPacket.header.ssrc,
-                seq,
-                rtpPacket.header.timestamp,
-                Date.now()
-            )
-
-            if (opusPayload.length === 0) return
-
-            if (opusPayload.length <= 2) this.recvDtxCount++
-            else this.recvRealCount++
-
-            codec.decodeSequenced(seq, opusPayload, this.onDecodedAudio, rtpPacket.header.timestamp)
-
-            if (this.audioRecvCount % 100 === 0) {
-                codec.setExpectedPacketLossPercent(this.audioReception.lossPercent)
-                const stats = codec.getStats()
-                this.logger.debug('audio recv stats', {
-                    recvCount: this.audioRecvCount,
-                    real: this.recvRealCount,
-                    dtx: this.recvDtxCount,
-                    decodeOk: stats.success,
-                    decodeErr: stats.errors,
-                    plc: stats.plc,
-                    fec: stats.fec,
-                    late: stats.late,
-                    redundant: stats.redundant,
-                    redRecovered: stats.redRecovered
-                })
+            } else if (pt === PayloadType.WhatsAppH264) {
+                this.onVideoPacket(rtpPacket.header, rtpPacket.payload, pt)
+            } else if (isReedSolomonFecPayloadType(pt)) {
+                const fecPackets = ++this.reedSolomonFecPackets
+                if (fecPackets === 1 || fecPackets % 100 === 0) {
+                    this.logger.debug('reed-solomon fec packet discarded', {
+                        packets: fecPackets,
+                        payloadType: pt,
+                        ssrc: `0x${rtpPacket.header.ssrc.toString(16)}`
+                    })
+                }
             }
         } catch (err: unknown) {
             this.countReceiveError(err, data)
@@ -1626,24 +1681,57 @@ export class WaCallMediaPlane {
     }
 
     /**
-     * `mlow-red-1` is counted, never decoded: where its redundancy sits in the payload is not
-     * established. The first packets log their sub-frame TOCs, which is what would settle it.
+     * Decodes one peer audio packet: `stream` 0 is PT 120, 1 is PT 121, numbered apart on the
+     * one timeline. PT 121 on an SSRC other than the one the reception follows stays out of it.
      */
-    private countRedundantAudio(payload: Uint8Array, ssrc: number): void {
-        const packets = ++this.audioRedRecvCount
-        if (packets > 5 && packets % 500 !== 0) return
-        const bounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
-        const subframes = readMlowSubframes(payload, bounds)
-        const subframeTocs: number[] = []
-        for (let index = 0; index < subframes; index++) {
-            subframeTocs.push(payload[bounds[index * 2]])
+    private onAudioPacket(header: RtpHeader, payload: Uint8Array, stream: 0 | 1): void {
+        const ssrc = header.ssrc
+        this.latchPeerSsrc(ssrc)
+        const codec = this.codec
+        if (!codec) return
+
+        this.audioRecvCount++
+        const seq = header.sequenceNumber
+        const followed = this.audioReception.sourceSsrc
+        if (stream === 0 || followed === 0 || followed === ssrc) {
+            this.audioReception.observe(ssrc, seq, header.timestamp, Date.now())
+            this.sendAudioReceiverEstimate(ssrc)
         }
-        this.logger.debug('mlow-red-1 packet counted, not decoded', {
+
+        if (payload.length === 0) return
+
+        if (payload.length <= 2) this.recvDtxCount++
+        else this.recvRealCount++
+
+        codec.decodeSequenced(seq, payload, this.onDecodedAudio, header.timestamp, stream)
+
+        if (this.audioRecvCount % 100 === 0) {
+            codec.setExpectedPacketLossPercent(this.audioReception.lossPercent)
+            const stats = codec.getStats()
+            this.logger.debug('audio recv stats', {
+                recvCount: this.audioRecvCount,
+                real: this.recvRealCount,
+                dtx: this.recvDtxCount,
+                decodeOk: stats.success,
+                decodeErr: stats.errors,
+                plc: stats.plc,
+                fec: stats.fec,
+                late: stats.late,
+                redundant: stats.redundant,
+                redRecovered: stats.redRecovered
+            })
+        }
+    }
+
+    /** Counts a PT 121 packet that does not parse as MLow; the first ones log their header. */
+    private discardRedAudio(payload: Uint8Array, ssrc: number): void {
+        const packets = ++this.audioRedDiscardCount
+        if (packets > 5 && packets % 500 !== 0) return
+        this.logger.debug('pt 121 packet discarded, not mlow', {
             packets,
             ssrc: `0x${ssrc.toString(16)}`,
             bytes: payload.length,
-            header: bytesToHex(payload.subarray(0, 4)),
-            subframeTocs
+            header: bytesToHex(payload.subarray(0, 4))
         })
     }
 
@@ -1903,6 +1991,38 @@ export class WaCallMediaPlane {
      */
     private timestampAtAssembly(timestamp: number, captureMs: number, clockRate: number): number {
         return (timestamp + Math.round(((this.clock.now() - captureMs) * clockRate) / 1000)) >>> 0
+    }
+
+    /**
+     * The audio REMB (PSFB 206, FMT 15) once per RTCP interval, from our audio stream on the
+     * peer's: its UAQC only leaves probing on one. The video REMB gate does not apply.
+     */
+    private sendAudioReceiverEstimate(mediaSsrc: number): void {
+        if (!this.flowing || !this.audioReceiverEstimateSchedule.shouldReport(this.clock.now())) {
+            return
+        }
+        const srtcpContext = this.srtcpContext
+        const rtpSession = this.rtpSession
+        if (!srtcpContext || !rtpSession) return
+
+        const bitrate = nextAudioReceiverEstimate(
+            this.audioReceiverEstimateBitrate,
+            this.audioReception.takeLossPercent()
+        )
+        this.audioReceiverEstimateBitrate = bitrate
+        const senderSsrc = rtpSession.getSsrc()
+        try {
+            const remb = buildReceiverEstimatedMaxBitrate(senderSsrc, mediaSsrc, bitrate)
+            this.sctpRelay.sendMedia(toArrayBuffer(srtcpContext.protect(remb, senderSsrc)))
+            this.logger.trace('audio receiver estimate sent', {
+                mediaSsrc: `0x${mediaSsrc.toString(16)}`,
+                bitrate
+            })
+        } catch (err: unknown) {
+            this.logger.trace('audio receiver estimate send failed', {
+                message: toError(err).message
+            })
+        }
     }
 
     /**

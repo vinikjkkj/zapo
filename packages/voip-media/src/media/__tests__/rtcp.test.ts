@@ -7,6 +7,7 @@ import {
     buildPictureLossIndication,
     buildReceiverEstimatedMaxBitrate,
     buildSenderReportWithSdes,
+    nextAudioReceiverEstimate,
     nextReceiverMaxBitrate,
     RtpStreamReception,
     SenderReportSchedule
@@ -705,6 +706,21 @@ test('scopes the loss fraction to the interval while the loss count stays cumula
     assert.equal(second.packetsLost, 1, 'the earlier loss stays in the cumulative count')
 })
 
+test('takes the interval loss apart from the interval the sender report consumes', () => {
+    const reception = new RtpStreamReception(AUDIO_CLOCK_RATE)
+    assert.equal(reception.takeLossPercent(), 0, 'nothing received yet')
+    observeRun(reception, 100, 10, [105])
+    assert.ok(Math.abs(reception.takeLossPercent() - 10) < 1e-9)
+    assert.equal(
+        reception.report(0).fractionLost,
+        Math.floor(256 / 10),
+        'the sender report keeps its own interval'
+    )
+    observeRun(reception, 110, 10)
+    assert.equal(reception.takeLossPercent(), 0, 'a clean interval after a lossy one')
+    assert.equal(reception.takeLossPercent(), 0, 'an interval with nothing expected')
+})
+
 test('saturates the loss fraction at the width of its field', () => {
     const reception = new RtpStreamReception(AUDIO_CLOCK_RATE)
     reception.observe(PEER_SSRC, 100, 0, 0)
@@ -1152,4 +1168,59 @@ test('keeps the announced ceiling inside the floor and the cap', () => {
     )
     assert.equal(nextReceiverMaxBitrate(10_000, 0, REMB_WINDOW_MS, 0), REMB_MIN_BITRATE)
     assert.equal(nextReceiverMaxBitrate(100_000, 0, 0, 0), 150_000, 'an unmeasurable window grows')
+})
+
+/** UAQC thresholds of the audio `<voip_settings>` the estimate is placed against. */
+const UAQC_PROBING_REMB_THRESHOLD = 22_000
+const UAQC_BANDWIDTH_MANAGED_REMB_UPPER = 24_000
+const UAQC_HIGH_QUALITY_TARGET = 25_000
+/** Floor and ceiling of the audio estimate. */
+const AUDIO_REMB_MIN_BITRATE = 16_000
+const AUDIO_REMB_MAX_BITRATE = 30_000
+const AUDIO_REMB_INITIAL_BITRATE = 24_000
+
+test('the audio estimate opens above the bitrate UAQC needs to leave probing', () => {
+    assert.equal(nextAudioReceiverEstimate(0, 0), AUDIO_REMB_INITIAL_BITRATE)
+    assert.equal(nextAudioReceiverEstimate(0, 50), AUDIO_REMB_INITIAL_BITRATE)
+    assert.ok(AUDIO_REMB_INITIAL_BITRATE >= UAQC_PROBING_REMB_THRESHOLD)
+})
+
+test('the audio estimate climbs 10% per clean interval and settles on its ceiling', () => {
+    assert.equal(nextAudioReceiverEstimate(AUDIO_REMB_INITIAL_BITRATE, 0), 26_400)
+    assert.equal(nextAudioReceiverEstimate(26_400, 1.9), 29_040)
+
+    let estimate = nextAudioReceiverEstimate(0, 0)
+    for (let interval = 0; interval < 20; interval++) {
+        const next = nextAudioReceiverEstimate(estimate, 0)
+        assert.ok(next >= estimate, 'a clean interval never lowers it')
+        estimate = next
+    }
+    assert.equal(estimate, AUDIO_REMB_MAX_BITRATE)
+    assert.equal(nextAudioReceiverEstimate(estimate, 0), estimate, 'no trend once settled')
+})
+
+test('one backoff from the ceiling stays above the high-quality target and managed band', () => {
+    const backedOff = nextAudioReceiverEstimate(AUDIO_REMB_MAX_BITRATE, 10)
+    assert.ok(backedOff > UAQC_HIGH_QUALITY_TARGET)
+    assert.ok(backedOff > UAQC_BANDWIDTH_MANAGED_REMB_UPPER)
+    assert.ok(
+        nextAudioReceiverEstimate(backedOff, 10) < UAQC_BANDWIDTH_MANAGED_REMB_UPPER,
+        'a second lossy interval does reach the managed band'
+    )
+})
+
+test('the audio estimate holds on intermediate loss and backs off from 10%', () => {
+    assert.equal(nextAudioReceiverEstimate(30_000, 2), 30_000)
+    assert.equal(nextAudioReceiverEstimate(30_000, 9.9), 30_000)
+    assert.equal(nextAudioReceiverEstimate(30_000, 10), 25_500)
+    assert.equal(nextAudioReceiverEstimate(30_000, 40), 25_500)
+})
+
+test('the audio estimate never drops below 16 kbps however heavy the loss', () => {
+    let estimate = AUDIO_REMB_MAX_BITRATE
+    for (let interval = 0; interval < 30; interval++) {
+        estimate = nextAudioReceiverEstimate(estimate, 90)
+        assert.ok(estimate >= AUDIO_REMB_MIN_BITRATE)
+    }
+    assert.equal(estimate, AUDIO_REMB_MIN_BITRATE)
 })

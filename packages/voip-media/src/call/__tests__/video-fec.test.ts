@@ -25,7 +25,7 @@ const OPUS_PAYLOAD_TYPE = 120
  * noticing. 121 (`103 + 3 * 6`) is missing on purpose: it is `mlow-red-1`, audio.
  */
 const FEC_PAYLOAD_TYPES = [103, 106, 109, 112, 115, 118, 124, 127]
-/** `mlow-red-1`, the voice stream carrying redundancy on a payload type of its own. */
+/** `mlow-red-1`, where a peer that negotiated it sends all of its audio. */
 const MLOW_RED_PAYLOAD_TYPE = 121
 
 /** Video clock, the unit of the RTP timestamps below. */
@@ -194,7 +194,7 @@ test('the opus payload type is outside the fec family', async () => {
     harness.plane.stop()
 })
 
-test('the separate RED audio payload type is counted apart, not read as video parity', async () => {
+test('the separate RED audio payload type is audio, not read as video parity', async () => {
     const harness = await createPlane()
 
     const payload = new Uint8Array(200).fill(0x5a)
@@ -205,9 +205,7 @@ test('the separate RED audio payload type is counted apart, not read as video pa
     assert.equal(harness.internals.videoRecvPackets, 0)
     assert.equal(harness.frames.length, 0)
     assert.equal(harness.packets.length, 0)
-    const stats = harness.plane.getStats()
-    assert.equal(stats.audioRedDiscarded, 1)
-    assert.equal(stats.audioReceived, 0, 'its payload layout is unknown, so it is not decoded')
+    assert.equal(harness.plane.getStats().audioRedDiscarded, 0, 'it parses as MLow')
     harness.plane.stop()
 })
 

@@ -72,6 +72,7 @@ export {
     buildPictureLossIndication,
     buildReceiverEstimatedMaxBitrate,
     buildSenderReportWithSdes,
+    nextAudioReceiverEstimate,
     nextReceiverMaxBitrate,
     RTCP_CNAME_LENGTH,
     RtpStreamReception,

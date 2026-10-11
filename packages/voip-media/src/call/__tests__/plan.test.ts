@@ -156,12 +156,16 @@ function createPlane(events: WaCallMediaPlaneEvents = {}): {
     return { plane, relay, internals, encoded }
 }
 
-function inboundRtp(ssrc: number, payloadType = 120): RtpPacket {
-    return new RtpPacket(new RtpHeader(payloadType, 1, 960, ssrc), new Uint8Array([1, 2, 3]))
+function inboundRtp(
+    ssrc: number,
+    payloadType = 120,
+    payload: Uint8Array = new Uint8Array([1, 2, 3])
+): RtpPacket {
+    return new RtpPacket(new RtpHeader(payloadType, 1, 960, ssrc), payload)
 }
 
 /** A peer packet under the keys of `keys(1)`, so it authenticates. */
-function protectedRtp(ssrc: number, payloadType?: number): Uint8Array {
+function protectedRtp(ssrc: number, payloadType?: number, payload?: Uint8Array): Uint8Array {
     const { send } = keys(1)
     const peer = new SrtpSession(
         nodeCrypto,
@@ -170,7 +174,7 @@ function protectedRtp(ssrc: number, payloadType?: number): Uint8Array {
         SRTP_SEND_AUTH_TAG_LEN,
         SRTP_RECV_AUTH_TAG_LEN
     )
-    return peer.protect(inboundRtp(ssrc, payloadType))
+    return peer.protect(inboundRtp(ssrc, payloadType, payload))
 }
 
 test('the ssrcs section names our streams and the peer stream to the relay', async () => {
@@ -384,6 +388,18 @@ test('the video fec stream does not become the subscription', async () => {
     assert.equal(relay.subscriptions.at(-1), PEER_AUDIO)
 
     internals.onRelayData(protectedRtp(OTHER_PEER))
+    assert.equal(relay.subscriptions.at(-1), OTHER_PEER)
+    plane.stop()
+})
+
+test('PT 121 audio latches like PT 120, and a PT 121 packet that is not MLow does not', async () => {
+    const { plane, relay, internals } = createPlane()
+    await plane.apply({ ssrcs: SSRCS, keys: keys(1) })
+
+    internals.onRelayData(protectedRtp(UNKNOWN_PEER, 121, Uint8Array.of(0xfc, 0xff, 0xfe)))
+    assert.equal(relay.subscriptions.at(-1), PEER_AUDIO)
+
+    internals.onRelayData(protectedRtp(OTHER_PEER, 121))
     assert.equal(relay.subscriptions.at(-1), OTHER_PEER)
     plane.stop()
 })
