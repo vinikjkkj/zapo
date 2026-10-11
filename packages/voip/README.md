@@ -426,14 +426,14 @@ plugins: [voipPlugin({ useOriginalRelayPort: true })]
 
 ## Codec
 
-MLow runs through **`libmlow-wasm-fork`** (≥ 0.2.0): 16 kHz, mono, 960-sample frames (60 ms), `useSmpl: true`, DTX enabled. No `koffi`, no bundled native libraries. When the call's `<voip_settings>` carry `rc.maxfpp` 2 on the 60 ms `frame_ms`, two frames go out per packet, as the official 1:1 client sends them.
+MLow runs through **`libmlow-wasm-fork`** (≥ 0.2.0): 16 kHz, mono, 960-sample frames (60 ms), `useSmpl: true`, DTX enabled. No `koffi`, no bundled native libraries. When the call's `<voip_settings>` carry `rc.maxfpp` 2 on the 60 ms `frame_ms`, up to two consecutive speech frames go out per packet, as the official 1:1 client sends them; a frame with the VAD bit clear, or the one left waiting when capture pauses, goes alone.
 
 ```ts
 plugins: [
     voipPlugin({
         // WhatsApp's MLow Companion weights (`mlow_companion_v1.pte`), not shipped: bytes or a path
         mlowCompanionModel: '/models/mlow_companion_v1.pte',
-        // Off by default; turns DTX off
+        // Off by default; turning it on turns DTX off
         mlowRed: false
     })
 ]

@@ -930,8 +930,8 @@ export class MLowCodec {
     }
 
     /**
-     * Plays an in-band RED packet: a copy only where a loss left its slot unplayed, after
-     * concealing what no copy covers, then the primary. False when the decoder rejects it.
+     * Plays an in-band RED packet: a copy only where a loss left its slot unplayed, then the
+     * primary; with no such copy the primary goes through {@link playOnTimeline}. False if rejected.
      */
     private playRedOnTimeline(
         packet: Uint8Array,
@@ -968,17 +968,16 @@ export class MLowCodec {
             if (used === 0) firstStart = start
             used++
         }
+        if (used === 0) {
+            this.redundantSubframes += copies
+            return this.playOnTimeline(primary, timestamp, missing, onFrame)
+        }
 
         const hole = (firstStart - played) | 0
-        if (missing > 0 && hole > 0) {
+        if (hole > 0) {
             const frames = Math.ceil(hole / this.concealFrameSize())
-            // With a copy next, the primary's FEC belongs to the copy's slot, not the hole.
-            const fecSource = used > 0 ? null : primary
-            const concealed = this.concealGap(
-                frames < missing ? frames : missing,
-                fecSource,
-                onFrame
-            )
+            // The primary's FEC belongs to the copy's slot, not the hole, so the hole gets PLC.
+            const concealed = this.concealGap(frames < missing ? frames : missing, null, onFrame)
             this.playedUntil = (played + concealed) >>> 0
         }
 
@@ -1006,9 +1005,6 @@ export class MLowCodec {
         this.redRecoveredFrames += used
         if (samples > 0) {
             this.lastDecodedSamples = samples
-        }
-        if (missing === 0 && hole === 0) {
-            this.packetStep = (end - played) >>> 0
         }
         this.playedUntil = end
         onFrame(this.decodeScratch.subarray(0, samples))

@@ -67,7 +67,7 @@ export interface WaVoipCoordinatorOptions {
     readonly mlowCompanionModel?: Uint8Array | ArrayBuffer | string
     /**
      * Sends MLow RED: each packet carries the low-rate copy of the frame before, then the frame.
-     * Off by default; it turns DTX off.
+     * Off by default; turning it on turns DTX off.
      * With remote media, pass it to the host's `WaCallMediaReceiver` as `mlowRed` instead.
      */
     readonly mlowRed?: boolean | MLowRedOptions

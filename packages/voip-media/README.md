@@ -109,8 +109,8 @@ Two options on the plane, also accepted by `WaCallMediaReceiver` on a remote hos
   official in-band layout, a compact RFC 2198 with a `0x00` primary header and each
   copy counted back in 10 ms steps, stays internal: an official client takes it only on PT 121 and
   behind its RX gate (`enable_red_pt_support_rx`), which the server sets, and rejects it on
-  PT 120. The receive side reads it on PT 121. Off by default; it turns DTX off, which RED
-  requires.
+  PT 120. The receive side reads it on PT 121. Off by default; turning it on turns DTX off,
+  which RED requires.
 
 ```ts
 const plane = new WaCallMediaPlane({

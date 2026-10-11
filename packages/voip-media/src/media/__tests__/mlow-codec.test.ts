@@ -1081,6 +1081,35 @@ test('MLowCodec conceals only the hole an official RED copy cannot cover', async
     }
 })
 
+test('MLowCodec drops an in-band RED packet whose slot the other stream already played', async () => {
+    const packets = await officialRedPackets(5)
+    const receiver = await MLowCodec.create()
+    const reference = await MLowCodec.create()
+    try {
+        const played: number[] = []
+        const collect = (pcm: Float32Array): void => {
+            played.push(...pcm)
+        }
+        for (const index of [0, 1, 2, 3]) {
+            const { primary, timestamp } = packets[index]
+            receiver.decodeSequenced(index + 1, primary, collect, timestamp)
+        }
+        for (const index of [1, 2]) {
+            const { payload, timestamp } = packets[index]
+            receiver.decodeSequenced(100 + index, payload, collect, timestamp, 1)
+        }
+        receiver.decodeSequenced(5, packets[4].primary, collect, packets[4].timestamp)
+
+        const expected: number[] = []
+        for (const { primary } of packets) expected.push(...reference.decode(primary))
+        assert.deepEqual(played, expected, 'each slot plays once and the timeline never steps back')
+        assert.equal(receiver.getStats().redundant, 4, 'copy and primary of both late packets')
+    } finally {
+        receiver.destroy()
+        reference.destroy()
+    }
+})
+
 test('MLowCodec decodes only the primary of an official RED packet without a timeline', async () => {
     const packets = await officialRedPackets(3)
     const receiver = await MLowCodec.create()
