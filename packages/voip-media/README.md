@@ -177,6 +177,7 @@ await audio.setOutput(headsetId)
   a `NotSupportedError` and `start` fail before asking for the microphone, releasing what it
   opened. With `output` the context is still the adapter's, so it is still resumed and still
   falls back to the device rate. If `stop()` ends the call mid-switch, `setOutput` resolves.
+  Await it before asking for another output: overlapping switches have no guaranteed order.
   A context passed in as `audioContext` keeps its own output: `start` refuses `output` with one
   and `setOutput` rejects, so route it with its own `setSinkId`.
 

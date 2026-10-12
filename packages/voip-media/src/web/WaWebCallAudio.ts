@@ -209,7 +209,8 @@ export class WaWebCallAudio {
     /**
      * Plays to the output device `sinkId`, `''` the default. Rejects on an `audioContext` passed
      * in, and with a `NotSupportedError` for another device where there is no `setSinkId`.
-     * Resolves if `stop()` ends the call mid-switch, whatever the switch did.
+     * Resolves if `stop()` ends the call mid-switch, whatever the switch did. Await it before
+     * asking for another output: overlapping switches have no guaranteed order.
      */
     async setOutput(sinkId: string): Promise<void> {
         if (this.stopping !== null) throw new Error(STOPPED_ERROR)
