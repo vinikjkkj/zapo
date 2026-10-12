@@ -95,6 +95,8 @@ interface FakeBrowserOptions {
      * Chrome's (the default); `setSinkId` alone; or neither, as Firefox's and Safari's.
      */
     readonly outputSelection?: 'constructor' | 'setSinkId' | 'none'
+    /** Settles each `setSinkId` call, which switches the output only if it resolves. */
+    readonly switchOutput?: (sinkId: string) => Promise<void>
 }
 
 interface FakeContext {
@@ -175,6 +177,7 @@ function installFakeBrowser(t: TestContext, options: FakeBrowserOptions = {}): F
                 this.sinkId = selection === 'constructor' ? (contextOptions?.sinkId ?? '') : ''
                 this.setSinkId = async (sinkId) => {
                     this.sinkIds.push(sinkId)
+                    await options.switchOutput?.(sinkId)
                     this.sinkId = sinkId
                 }
             }
@@ -613,6 +616,40 @@ test('setOutput rejects where the browser cannot choose the output', async (t) =
     t.after(() => audio.stop())
 
     await assert.rejects(audio.setOutput('headset'), { name: 'NotSupportedError' })
+})
+
+for (const outcome of ['resolves', 'rejects'] as const) {
+    test(`setOutput resolves when stop ends the call while setSinkId ${outcome}`, async (t) => {
+        let settle = (): void => undefined
+        const switching = new Promise<void>((resolve, reject) => {
+            settle =
+                outcome === 'resolves'
+                    ? resolve
+                    : () => reject(new DOMException('the context is closed', 'InvalidStateError'))
+        })
+        const browser = installFakeBrowser(t, { switchOutput: () => switching })
+        const audio = await WaWebCallAudio.start(createRecordingSink())
+
+        const output = audio.setOutput('headset')
+        await audio.stop()
+        settle()
+
+        await output
+        assert.equal(browser.contexts[0].closes, 1)
+        await assert.rejects(audio.setOutput('speaker'), /stopped/)
+        assert.deepEqual(browser.contexts[0].sinkIds, ['headset'], 'nothing after the stop')
+    })
+}
+
+test('setOutput rejects with the error of a setSinkId that fails without a stop', async (t) => {
+    const browser = installFakeBrowser(t, {
+        switchOutput: () => Promise.reject(new DOMException('no such device', 'NotFoundError'))
+    })
+    const audio = await WaWebCallAudio.start(createRecordingSink())
+    t.after(() => audio.stop())
+
+    await assert.rejects(audio.setOutput('gone'), { name: 'NotFoundError' })
+    assert.equal(browser.contexts[0].sinkId, '', 'the output is unchanged')
 })
 
 test('the default output needs no setSinkId: a context without one already plays to it', async (t) => {

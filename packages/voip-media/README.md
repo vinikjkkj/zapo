@@ -170,11 +170,13 @@ await audio.setOutput(headsetId)
   the adapter opened is stopped when replaced; `stream` stays the caller's, and `stop()` does not
   stop it. It throws after `stop()`.
 - `setOutput(sinkId)` and the `output` option pick the output device, an id from
-  `enumerateDevices()`, through `AudioContext.setSinkId`; `''` is the default device. Chrome and
-  Edge have `setSinkId`; Firefox and Safari do not, and there any device but `''`, which their
-  contexts already play to, makes `setOutput` reject with a `NotSupportedError` and `start` fail
-  before asking for the microphone, releasing what it opened. With `output` the context is still
-  the adapter's, so it is still resumed and still falls back to the device rate.
+  `enumerateDevices()`; `''` is the default device. `output` goes to the context's constructor as
+  its `sinkId` option, or to `AudioContext.setSinkId` where the constructor ignores it;
+  `setOutput` calls `setSinkId`. Chrome and Edge have both; Firefox and Safari have neither, and
+  there any device but `''`, which their contexts already play to, makes `setOutput` reject with
+  a `NotSupportedError` and `start` fail before asking for the microphone, releasing what it
+  opened. With `output` the context is still the adapter's, so it is still resumed and still
+  falls back to the device rate. If `stop()` ends the call mid-switch, `setOutput` resolves.
   A context passed in as `audioContext` keeps its own output: `start` refuses `output` with one
   and `setOutput` rejects, so route it with its own `setSinkId`.
 

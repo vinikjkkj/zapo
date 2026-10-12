@@ -28,9 +28,9 @@ export interface WaWebCallAudioOptions {
      */
     readonly audioContext?: AudioContext
     /**
-     * Output device id, from `enumerateDevices()`, for the context the adapter creates. Any but
-     * the default, `''`, needs `AudioContext.setSinkId` (Chrome, Edge), or `start` fails.
-     * Refused with `audioContext`.
+     * Output device id, from `enumerateDevices()`, for the context the adapter creates: passed as
+     * its constructor's `sinkId`, or to `setSinkId` where that is ignored (Chrome, Edge). Where
+     * neither applies, any but the default, `''`, fails `start`. Refused with `audioContext`.
      */
     readonly output?: string
     /**
@@ -209,11 +209,16 @@ export class WaWebCallAudio {
     /**
      * Plays to the output device `sinkId`, `''` the default. Rejects on an `audioContext` passed
      * in, and with a `NotSupportedError` for another device where there is no `setSinkId`.
+     * Resolves if `stop()` ends the call mid-switch, whatever the switch did.
      */
     async setOutput(sinkId: string): Promise<void> {
         if (this.stopping !== null) throw new Error(STOPPED_ERROR)
         if (!this.ownsContext) throw new Error(CALLER_CONTEXT_OUTPUT_ERROR)
-        await routeOutput(this.context, sinkId)
+        try {
+            await routeOutput(this.context, sinkId)
+        } catch (error) {
+            if (this.stopping === null) throw error
+        }
     }
 
     /** Stops and releases what the adapter acquired; a repeat call returns the same promise. */
@@ -222,6 +227,7 @@ export class WaWebCallAudio {
         return this.stopping
     }
 
+    /** Detaches the graph, ends the processor and releases what the adapter owns. */
     private async teardown(): Promise<void> {
         this.node.port.onmessage = null
         this.source.disconnect()
@@ -263,6 +269,7 @@ function openAudioContext(options?: CallAudioContextOptions): AudioContext {
     return context
 }
 
+/** The constructor options that ask for `output`, none without one. */
 function outputOption(output: string | undefined): CallAudioContextOptions | undefined {
     return output === undefined ? undefined : { sinkId: output }
 }
