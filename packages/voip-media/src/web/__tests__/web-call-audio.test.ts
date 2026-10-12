@@ -46,6 +46,16 @@ class FakePort {
     }
 }
 
+/** A gain node that keeps the ramps scheduled on its gain. */
+class FakeGainNode extends FakeNode {
+    readonly ramps: { target: number; startTime: number; timeConstant: number }[] = []
+    readonly gain = {
+        setTargetAtTime: (target: number, startTime: number, timeConstant: number): void => {
+            this.ramps.push({ target, startTime, timeConstant })
+        }
+    }
+}
+
 class FakeTrack {
     stops = 0
 
@@ -56,9 +66,17 @@ class FakeTrack {
 
 class FakeMicrophone {
     readonly track = new FakeTrack()
+    /** Every context refuses a source on it, as Firefox does a microphone at a foreign rate. */
+    refused = false
 
     getTracks(): FakeTrack[] {
         return [this.track]
+    }
+}
+
+class FakeSourceNode extends FakeNode {
+    constructor(readonly stream: FakeMicrophone) {
+        super()
     }
 }
 
@@ -72,15 +90,26 @@ interface FakeBrowserOptions {
      * microphone prompt outlasts; a later `resume()` never settles.
      */
     readonly activationEndsAtPrompt?: boolean
+    /**
+     * How a context picks its output device: `sinkId` in its constructor and `setSinkId`, as
+     * Chrome's (the default); `setSinkId` alone; or neither, as Firefox's and Safari's.
+     */
+    readonly outputSelection?: 'constructor' | 'setSinkId' | 'none'
 }
 
 interface FakeContext {
     readonly options: AudioContextOptions | undefined
     readonly sampleRate: number
     readonly state: AudioContextState
+    currentTime: number
     readonly destination: object
     readonly modules: readonly string[]
-    readonly sources: readonly FakeNode[]
+    readonly sources: readonly FakeSourceNode[]
+    readonly gains: readonly FakeGainNode[]
+    /** The output device; `undefined` where the browser has no output selection. */
+    readonly sinkId: string | undefined
+    /** The `setSinkId` calls, in order. */
+    readonly sinkIds: readonly string[]
     readonly closes: number
 }
 
@@ -122,9 +151,14 @@ function installFakeBrowser(t: TestContext, options: FakeBrowserOptions = {}): F
         readonly options: AudioContextOptions | undefined
         readonly sampleRate: number
         state: AudioContextState = options.activationEndsAtPrompt ? 'suspended' : 'running'
+        currentTime = 0
         readonly destination = { destination: true }
         readonly modules: string[] = []
-        readonly sources: FakeNode[] = []
+        readonly sources: FakeSourceNode[] = []
+        readonly gains: FakeGainNode[] = []
+        sinkId: string | undefined
+        readonly sinkIds: string[] = []
+        readonly setSinkId?: (sinkId: string) => Promise<void>
         closes = 0
         readonly audioWorklet = {
             addModule: async (url: string): Promise<void> => {
@@ -133,19 +167,33 @@ function installFakeBrowser(t: TestContext, options: FakeBrowserOptions = {}): F
             }
         }
 
-        constructor(contextOptions?: AudioContextOptions) {
+        constructor(contextOptions?: AudioContextOptions & { readonly sinkId?: string }) {
             this.options = contextOptions
             this.sampleRate = contextOptions?.sampleRate ?? DEVICE_RATE
+            const selection = options.outputSelection ?? 'constructor'
+            if (selection !== 'none') {
+                this.sinkId = selection === 'constructor' ? (contextOptions?.sinkId ?? '') : ''
+                this.setSinkId = async (sinkId) => {
+                    this.sinkIds.push(sinkId)
+                    this.sinkId = sinkId
+                }
+            }
             browser.contexts.push(this)
         }
 
-        createMediaStreamSource(): FakeNode {
-            if (this.sampleRate === options.refuseSourceAtRate) {
+        createMediaStreamSource(stream: FakeMicrophone): FakeSourceNode {
+            if (this.sampleRate === options.refuseSourceAtRate || stream.refused) {
                 throw new Error('NotSupportedError: different sample-rate')
             }
-            const source = new FakeNode()
+            const source = new FakeSourceNode(stream)
             this.sources.push(source)
             return source
+        }
+
+        createGain(): FakeGainNode {
+            const gain = new FakeGainNode()
+            this.gains.push(gain)
+            return gain
         }
 
         async close(): Promise<void> {
@@ -230,11 +278,11 @@ function createRecordingSink(): RecordingSink {
     }
 }
 
-function microphoneOf(browser: FakeBrowser): MediaStream {
-    return browser.microphone as unknown as MediaStream
+function asStream(microphone: FakeMicrophone): MediaStream {
+    return microphone as unknown as MediaStream
 }
 
-test('start opens a 16 kHz context and wires microphone, worklet and speaker', async (t) => {
+test('start opens a 16 kHz context and wires microphone, worklet, gain and speaker', async (t) => {
     const browser = installFakeBrowser(t)
     const audio = await WaWebCallAudio.start(createRecordingSink())
     t.after(() => audio.stop())
@@ -266,7 +314,11 @@ test('start opens a 16 kHz context and wires microphone, worklet and speaker', a
     assert.equal(node.options.channelCount, 1)
     assert.deepEqual(node.options.outputChannelCount, [1])
     assert.deepEqual(context.sources[0].connections, [node])
-    assert.deepEqual(node.connections, [context.destination])
+    assert.equal(context.gains.length, 1)
+    const [gain] = context.gains
+    assert.deepEqual(node.connections, [gain], 'the playout goes through the gain')
+    assert.deepEqual(gain.connections, [context.destination])
+    assert.deepEqual(gain.ramps, [], 'the speaker starts unmuted')
 })
 
 test('the context is resumed inside the user gesture, before the microphone prompt ends it', async (t) => {
@@ -335,6 +387,7 @@ test('stop releases what start acquired, once', async (t) => {
 
     assert.equal(context.sources[0].disconnects, 1)
     assert.equal(node.disconnects, 1)
+    assert.equal(context.gains[0].disconnects, 1)
     assert.deepEqual(node.port.posted, [WA_CALL_AUDIO_STOP_MESSAGE])
     assert.equal(browser.microphone.track.stops, 1)
     assert.equal(context.closes, 1)
@@ -347,7 +400,7 @@ test('stop leaves a microphone and a context handed in alone', async (t) => {
     const browser = installFakeBrowser(t)
     const context = browser.newContext()
     const audio = await WaWebCallAudio.start(createRecordingSink(), {
-        microphone: microphoneOf(browser),
+        microphone: asStream(browser.microphone),
         audioContext: context
     })
     const [node] = browser.nodes
@@ -418,4 +471,233 @@ test('a worklet URL is loaded as given, with no Blob', async (t) => {
     assert.deepEqual(browser.contexts[0].modules, ['/assets/wa-call-audio.js'])
     assert.deepEqual(browser.blobs, [])
     assert.deepEqual(browser.createdUrls, [])
+})
+
+test('muting the speaker ramps its gain down and back, once per change', async (t) => {
+    const browser = installFakeBrowser(t)
+    const audio = await WaWebCallAudio.start(createRecordingSink())
+    t.after(() => audio.stop())
+    const [context] = browser.contexts
+    const [gain] = context.gains
+    context.currentTime = 2.5
+
+    audio.setPlayoutMuted(true)
+    audio.setPlayoutMuted(true)
+    audio.setPlayoutMuted(false)
+    audio.setPlayoutMuted(false)
+
+    assert.deepEqual(
+        gain.ramps.map(({ target, startTime }) => ({ target, startTime })),
+        [
+            { target: 0, startTime: 2.5 },
+            { target: 1, startTime: 2.5 }
+        ]
+    )
+    for (const { timeConstant } of gain.ramps) {
+        assert.ok(timeConstant > 0 && timeConstant <= 0.01, 'a ramp of a few ms, not a step')
+    }
+})
+
+test('a muted speaker keeps pulling playout, so the jitter buffer drains', async (t) => {
+    const browser = installFakeBrowser(t)
+    const sink = createRecordingSink()
+    const audio = await WaWebCallAudio.start(sink)
+    t.after(() => audio.stop())
+    const { port } = browser.nodes[0]
+
+    audio.setPlayoutMuted(true)
+    port.emit(new Float32Array(WA_CALL_AUDIO_BLOCK_SAMPLES))
+
+    assert.deepEqual(
+        sink.calls.map((call) => call.method),
+        ['push', 'pull']
+    )
+    assert.equal(port.posted.length, 1, 'the worklet still got its block')
+})
+
+test('muting after stop does nothing', async (t) => {
+    const browser = installFakeBrowser(t)
+    const audio = await WaWebCallAudio.start(createRecordingSink())
+    await audio.stop()
+
+    audio.setPlayoutMuted(true)
+
+    assert.deepEqual(browser.contexts[0].gains[0].ramps, [])
+})
+
+test('a new microphone replaces only the source, and the one the adapter opened is stopped', async (t) => {
+    const browser = installFakeBrowser(t)
+    const audio = await WaWebCallAudio.start(createRecordingSink())
+    t.after(() => audio.stop())
+    const [context] = browser.contexts
+    const [node] = browser.nodes
+    const headset = new FakeMicrophone()
+
+    audio.setMicrophone(asStream(headset))
+
+    const [opened, replacement] = context.sources
+    assert.equal(replacement.stream, headset)
+    assert.deepEqual(replacement.connections, [node])
+    assert.equal(opened.disconnects, 1)
+    assert.equal(browser.microphone.track.stops, 1)
+    assert.equal(headset.track.stops, 0)
+    assert.equal(browser.contexts.length, 1, 'the context is kept')
+    assert.equal(browser.nodes.length, 1, 'the worklet is kept')
+    assert.equal(node.disconnects, 0)
+})
+
+test('a microphone handed in is left running when replaced', async (t) => {
+    const browser = installFakeBrowser(t)
+    const audio = await WaWebCallAudio.start(createRecordingSink(), {
+        microphone: asStream(browser.microphone)
+    })
+    t.after(() => audio.stop())
+
+    audio.setMicrophone(asStream(new FakeMicrophone()))
+
+    assert.equal(browser.contexts[0].sources[0].disconnects, 1)
+    assert.equal(browser.microphone.track.stops, 0)
+})
+
+test('a microphone the context refuses throws and leaves the current one running', async (t) => {
+    const browser = installFakeBrowser(t)
+    const audio = await WaWebCallAudio.start(createRecordingSink())
+    const [context] = browser.contexts
+    const refused = new FakeMicrophone()
+    refused.refused = true
+
+    assert.throws(() => audio.setMicrophone(asStream(refused)), /different sample-rate/)
+
+    assert.equal(context.sources.length, 1)
+    assert.equal(context.sources[0].disconnects, 0)
+    assert.equal(browser.microphone.track.stops, 0)
+    await audio.stop()
+    assert.equal(browser.microphone.track.stops, 1, 'the adapter still owns what it opened')
+})
+
+test('stop leaves a microphone set later alone', async (t) => {
+    const browser = installFakeBrowser(t)
+    const audio = await WaWebCallAudio.start(createRecordingSink())
+    const headset = new FakeMicrophone()
+    audio.setMicrophone(asStream(headset))
+
+    await audio.stop()
+
+    assert.equal(browser.contexts[0].sources[1].disconnects, 1)
+    assert.equal(headset.track.stops, 0)
+    assert.equal(browser.microphone.track.stops, 1, 'the one the adapter opened, stopped once')
+})
+
+test('a microphone set after stop is refused', async (t) => {
+    const browser = installFakeBrowser(t)
+    const audio = await WaWebCallAudio.start(createRecordingSink())
+    await audio.stop()
+
+    assert.throws(() => audio.setMicrophone(asStream(new FakeMicrophone())), /stopped/)
+    assert.equal(browser.contexts[0].sources.length, 1)
+})
+
+test('setOutput routes the context to the device', async (t) => {
+    const browser = installFakeBrowser(t)
+    const audio = await WaWebCallAudio.start(createRecordingSink())
+    t.after(() => audio.stop())
+
+    await audio.setOutput('headset')
+
+    assert.deepEqual(browser.contexts[0].sinkIds, ['headset'])
+})
+
+test('setOutput rejects where the browser cannot choose the output', async (t) => {
+    installFakeBrowser(t, { outputSelection: 'none' })
+    const audio = await WaWebCallAudio.start(createRecordingSink())
+    t.after(() => audio.stop())
+
+    await assert.rejects(audio.setOutput('headset'), { name: 'NotSupportedError' })
+})
+
+test('the default output needs no setSinkId: a context without one already plays to it', async (t) => {
+    const browser = installFakeBrowser(t, { outputSelection: 'none' })
+    const audio = await WaWebCallAudio.start(createRecordingSink(), { output: '' })
+    t.after(() => audio.stop())
+
+    await audio.setOutput('')
+
+    assert.equal(browser.nodes.length, 1, 'the call started')
+    assert.equal(browser.contexts[0].closes, 0)
+    await assert.rejects(audio.setOutput('headset'), { name: 'NotSupportedError' })
+})
+
+test('start passes an output to the context constructor', async (t) => {
+    const browser = installFakeBrowser(t)
+    const audio = await WaWebCallAudio.start(createRecordingSink(), { output: 'headset' })
+    t.after(() => audio.stop())
+
+    const [context] = browser.contexts
+    assert.deepEqual(context.options, { sampleRate: 16_000, sinkId: 'headset' })
+    assert.equal(context.sinkId, 'headset')
+    assert.deepEqual(context.sinkIds, [], 'the constructor took it, so setSinkId is not called')
+})
+
+test('start routes an output the constructor ignores through setSinkId', async (t) => {
+    const browser = installFakeBrowser(t, { outputSelection: 'setSinkId' })
+    const audio = await WaWebCallAudio.start(createRecordingSink(), { output: 'headset' })
+    t.after(() => audio.stop())
+
+    assert.deepEqual(browser.contexts[0].sinkIds, ['headset'])
+})
+
+test('the device-rate fallback keeps the output', async (t) => {
+    const browser = installFakeBrowser(t, { refuseSourceAtRate: 16_000 })
+    const audio = await WaWebCallAudio.start(createRecordingSink(), { output: 'headset' })
+    t.after(() => audio.stop())
+
+    const [refused, fallback] = browser.contexts
+    assert.equal(refused.closes, 1)
+    assert.deepEqual(fallback.options, { sinkId: 'headset' })
+    assert.equal(fallback.sinkId, 'headset')
+    assert.equal(browser.nodes[0].context, fallback)
+})
+
+test('a fallback whose constructor ignores the output is routed through setSinkId', async (t) => {
+    const browser = installFakeBrowser(t, {
+        refuseSourceAtRate: 16_000,
+        outputSelection: 'setSinkId'
+    })
+    const audio = await WaWebCallAudio.start(createRecordingSink(), { output: 'headset' })
+    t.after(() => audio.stop())
+
+    const [refused, fallback] = browser.contexts
+    assert.deepEqual(refused.sinkIds, ['headset'])
+    assert.deepEqual(fallback.sinkIds, ['headset'])
+})
+
+test('a start whose output cannot be chosen fails and releases what it acquired', async (t) => {
+    const browser = installFakeBrowser(t, { outputSelection: 'none' })
+
+    await assert.rejects(WaWebCallAudio.start(createRecordingSink(), { output: 'headset' }), {
+        name: 'NotSupportedError'
+    })
+
+    assert.equal(browser.contexts.length, 1)
+    assert.equal(browser.contexts[0].closes, 1)
+    assert.deepEqual(browser.userMediaRequests, [], 'it fails before asking for the microphone')
+    assert.equal(browser.nodes.length, 0)
+})
+
+test('a context handed in keeps its own output', async (t) => {
+    const browser = installFakeBrowser(t)
+    const context = browser.newContext()
+
+    await assert.rejects(
+        WaWebCallAudio.start(createRecordingSink(), { audioContext: context, output: 'headset' }),
+        /keeps its own output/
+    )
+    assert.deepEqual(browser.userMediaRequests, [], 'nothing was acquired')
+
+    const audio = await WaWebCallAudio.start(createRecordingSink(), { audioContext: context })
+    t.after(() => audio.stop())
+    await assert.rejects(audio.setOutput('headset'), /keeps its own output/)
+
+    assert.deepEqual(browser.contexts[0].sinkIds, [])
+    assert.equal(browser.contexts[0].closes, 0)
 })

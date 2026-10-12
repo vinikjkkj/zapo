@@ -142,6 +142,42 @@ and falls back to the device rate, converting in the worklet, where the browser 
 forbids `blob:` scripts, serve `WA_CALL_AUDIO_WORKLET_SOURCE` as a file and pass its URL as
 `workletUrl`.
 
+Three controls change a running call without rebuilding the graph:
+
+```ts
+const audio = await WaWebCallAudio.start(plane, { output: speakerId })
+
+// Hold: the speaker goes quiet, the call keeps its timeline.
+audio.setPlayoutMuted(true)
+
+// Another microphone: only the source node is swapped.
+const microphone = await navigator.mediaDevices.getUserMedia({
+    audio: { deviceId: { exact: microphoneId } }
+})
+audio.setMicrophone(microphone)
+
+// Another speaker or headset.
+await audio.setOutput(headsetId)
+```
+
+- `setPlayoutMuted(muted)` ramps a gain between the worklet and the speaker over a few
+  milliseconds, so it does not click. Playout is still pulled while muted: the jitter buffer keeps
+  draining, and the call comes back from hold in step. It mutes the speaker only; muting the
+  microphone is the plane's job. After `stop()` it does nothing.
+- `setMicrophone(stream)` connects a source on `stream` to the running worklet before it lets the
+  old one go, so capture has no gap. A stream the context refuses (Firefox, for a microphone at a
+  rate other than the context's) throws and leaves the current microphone running. A microphone
+  the adapter opened is stopped when replaced; `stream` stays the caller's, and `stop()` does not
+  stop it. It throws after `stop()`.
+- `setOutput(sinkId)` and the `output` option pick the output device, an id from
+  `enumerateDevices()`, through `AudioContext.setSinkId`; `''` is the default device. Chrome and
+  Edge have `setSinkId`; Firefox and Safari do not, and there any device but `''`, which their
+  contexts already play to, makes `setOutput` reject with a `NotSupportedError` and `start` fail
+  before asking for the microphone, releasing what it opened. With `output` the context is still
+  the adapter's, so it is still resumed and still falls back to the device rate.
+  A context passed in as `audioContext` keeps its own output: `start` refuses `output` with one
+  and `setOutput` rejects, so route it with its own `setSinkId`.
+
 ## Video in a browser
 
 The plane carries H.264 access units; the browser's WebCodecs makes and shows them.
