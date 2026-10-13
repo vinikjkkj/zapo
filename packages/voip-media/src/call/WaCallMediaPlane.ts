@@ -4,10 +4,17 @@ import { bytesToHex, concatBytes, EMPTY_BYTES, readUInt32BE, toArrayBuffer } fro
 import { setBoundedMapEntry } from '../collections.js'
 import type { WaMediaCrypto } from '../crypto/primitives.js'
 import { randomBytes } from '../crypto/random.js'
-import { SrtcpContext, SrtcpSession, SrtpError, SrtpSession } from '../crypto/srtp.js'
+import {
+    SrtcpContext,
+    SrtcpSession,
+    SRTP_MAX_RECV_CONTEXTS,
+    SrtpError,
+    SrtpSession
+} from '../crypto/srtp.js'
 import { toError } from '../errors.js'
 import type { WaMediaHost } from '../host.js'
 import { createNoopLogger, type Logger } from '../logger.js'
+import { type AudioReceiveSenderStats, AudioReceiveSet } from '../media/audio-receive-set.js'
 import { WA_FAST_REMB_ELEMENT_LENGTH, writeFastRembExtension } from '../media/fast-remb.js'
 import { H264Depacketizer, isH264KeyFrame, packetizeH264AnnexB } from '../media/h264.js'
 import {
@@ -17,11 +24,13 @@ import {
     MLOW_TOC_VAD,
     MLowCodec,
     type MLowCompanionModelSource,
+    type MLowDecodeOutcome,
     mlowPacketSamples,
     type MLowRedOptions,
     readMlowRed,
     writeMlowRed
 } from '../media/mlow-codec.js'
+import { AudioPayloadProbe } from '../media/payload-probe.js'
 import {
     buildFullIntraRequest,
     buildPictureLossIndication,
@@ -31,12 +40,20 @@ import {
     nextReceiverMaxBitrate,
     RTCP_CNAME_LENGTH,
     RtpStreamReception,
+    type SenderReportReception,
     SenderReportSchedule
 } from '../media/rtcp.js'
 import { type RtpHeader, RtpSession, WA_RTP_EXTENSION_PROFILE } from '../media/rtp.js'
 import { WaJitterBuffer, type WaJitterBufferStats } from '../media/WaJitterBuffer.js'
 import { HostCaptureTimeMapper, WaMediaClock } from '../media/WaMediaClock.js'
-import { isRtcpPacket, isRtpPacket, isStunPacket } from '../relay/stun.js'
+import {
+    buildRxSubscriptions,
+    isRtcpPacket,
+    isRtpPacket,
+    isStunPacket,
+    type RxVideoSubscription
+} from '../relay/stun.js'
+import { readWarpFrame } from '../relay/warp-frame.js'
 import {
     type RawUdpLeg,
     type RawUdpLegOptions,
@@ -50,11 +67,13 @@ import {
     PayloadType,
     SRTP_AUTH_TAG_LEN,
     SRTP_RECV_AUTH_TAG_LEN,
-    SRTP_SEND_AUTH_TAG_LEN
+    SRTP_SEND_AUTH_TAG_LEN,
+    type SrtpKeyingMaterial
 } from '../types.js'
 
 import {
     dialableRelayEndpoints,
+    type WaCallMediaGroup,
     type WaCallMediaKeys,
     type WaCallMediaPlanUpdate,
     type WaCallMediaRelay,
@@ -146,17 +165,33 @@ const INITIAL_RECEIVER_ESTIMATE = nextReceiverMaxBitrate(0, 0, 0, 0)
  */
 const VIDEO_EXTENSION_FIRST_PACKET_LENGTH = 13
 
-/** Memory guard on a set fed from the plan, one entry per peer device. */
+/** Memory guard on a set fed from the plan, one entry per peer device; a group plan replaces it whole. */
 const MAX_TRACKED_PEER_APP_DATA_SSRCS = 32
 
-/** Reassembly buffers kept per inbound video SSRC; the oldest is dropped on overflow. */
-const MAX_H264_DEPACKETIZERS = 8
+/**
+ * Silence after which a group sender counts as no longer received, by default: the time a peer
+ * waits before it reports another participant invisible.
+ */
+const DEFAULT_SENDER_SILENCE_MS = 20_000
+/** How often group senders are checked for that silence, at most. */
+const SENDER_SILENCE_CHECK_MS = 1_000
+/** Video streams a group sender may send at once: main and secondary. */
+const VIDEO_STREAMS_PER_SENDER = 2
 
 /**
- * Shortest gap between two key frame requests of the whole plane: every tracked stream keeps its
- * own pace, and a peer minting new SSRCs draws no more requests than all of them together.
+ * `mlow-1`: plain MLow on a payload type of its own, on PT 120's clock, SSRC and numbering, so it
+ * shares that stream's timeline. A sender moves to it when a group call falls to two members.
  */
-const KEY_FRAME_REQUEST_FLOOR_MS = KEY_FRAME_REQUEST_INTERVAL_MS / MAX_H264_DEPACKETIZERS
+const MLOW_ALT_PAYLOAD_TYPE = 122
+
+/**
+ * Remote senders of a group call given a decoder at once: the compiled participant ceiling.
+ * A sender is a device, so a roster of many multi-device accounts can pass it.
+ */
+const MAX_GROUP_SENDERS = 64
+
+/** Reassembly buffers kept per inbound video SSRC, at least; the oldest is dropped on overflow. */
+const MAX_H264_DEPACKETIZERS = 8
 
 /** `length` rounded up until it closes the 32-bit word. */
 function padTo32Bits(length: number): number {
@@ -269,16 +304,44 @@ export interface WaCallMediaPlaneEvents {
     readonly onRelayLost?: (reason: string) => void
     /** A relay answered one of our legs for the first time; see `WaSctpRelayOptions.onRelayAnswered`. */
     readonly onRelayAnswered?: (name: string, rttMs?: number) => void
-    /** One in-band emoji reaction, deduplicated: the sender repeats it, this fires once. */
-    readonly onReaction?: (reaction: WaCallReaction) => void
+    /**
+     * One in-band emoji reaction, deduplicated: the sender repeats it, this fires once. In a
+     * group call `senderId` names the sender whose stream carried it.
+     */
+    readonly onReaction?: (reaction: WaCallReaction, senderId?: string) => void
     readonly onInboundVideoRtp?: (packet: InboundVideoRtpPacket) => void
     readonly onInboundVideo?: (frame: InboundVideoFrame) => void
+    /**
+     * One group sender's decoded audio, before the mix {@link WaCallMediaPlane.pullPlayout}
+     * plays. `pcm` is reused after the call returns.
+     */
+    readonly onSenderAudio?: (senderId: string, pcm: Float32Array) => void
+    /**
+     * A group sender's media started arriving (`true`, on its first authenticated packet) or
+     * stopped (`false`, after {@link WaCallMediaPlaneOptions.senderSilenceMs} without one).
+     */
+    readonly onSenderMedia?: (senderId: string, receiving: boolean) => void
 }
 
 export interface WaCallMediaPlaneOptions extends WaMediaHost, WaCallMediaPlaneEvents {
     readonly logger?: Logger
     /** See `WaSctpRelayOptions.createRawUdpLeg`. */
     readonly createRawUdpLeg?: (options: RawUdpLegOptions) => RawUdpLeg
+    /**
+     * Which relays `createRawUdpLeg` dials: `all` (the default), or only the endpoints the plan
+     * marks `transport: 'raw-udp'`, the others going over the peer connection.
+     */
+    readonly rawUdpLegs?: 'all' | 'required'
+    /**
+     * Silence after which a group sender counts as no longer received; a local choice, 20 s by
+     * default.
+     */
+    readonly senderSilenceMs?: number
+    /**
+     * Asks the relay for `group.videoSubscriptions`. Off by default, until the relay's handling
+     * of them is confirmed; off, the plan's subscriptions are ignored.
+     */
+    readonly videoSubscriptions?: boolean
     /** Dials every relay on the port it advertises instead of the web client's port. */
     readonly useOriginalRelayPort?: boolean
     /**
@@ -333,7 +396,20 @@ export interface WaCallMediaStats {
     readonly decoded: number
     readonly decodeErrors: number
     readonly playout: WaJitterBufferStats
+    /** Per remote sender of a group call; absent on a 1:1 call. */
+    readonly senders?: readonly WaCallMediaSenderStats[]
+    /** Group packets on an SSRC the plan keys for no sender, dropped; absent on a 1:1 call. */
+    readonly unplannedPackets?: number
+    /** Inbound datagrams the relay framed around RTP, unframed and passed on. */
+    readonly warpFrames?: number
+    /** Relay frames with no RTP inside, dropped. */
+    readonly warpControlFrames?: number
+    /** Relay frames whose header ran past the datagram, dropped. */
+    readonly warpOverruns?: number
 }
+
+/** The audio of one remote sender of a group call. */
+export type WaCallMediaSenderStats = AudioReceiveSenderStats
 
 /** The send time as WhatsApp Web stamps it in extension id 9: wall ms / 16, 12 bits. */
 function wallSendTime16(): number {
@@ -350,7 +426,10 @@ export class WaCallMediaPlane {
     private readonly crypto: WaMediaCrypto
     private readonly sctpRelay: WaSctpRelay
     private readonly useOriginalRelayPort: boolean
+    private readonly rawUdpLegs: 'all' | 'required'
     private readonly companionModel: MLowCompanionModelSource | undefined
+    private readonly senderSilenceMs: number
+    private readonly videoSubscriptionsEnabled: boolean
     private readonly redOptions: boolean | MLowRedOptions | undefined
     private readonly playout: WaJitterBuffer
     /** The call's media clock; its origin is the caller's warmup or the start of the flow. */
@@ -364,6 +443,21 @@ export class WaCallMediaPlane {
     private relays: WaCallMediaRelays | null = null
     private ssrcs: WaCallMediaSsrcs | null = null
     private keyEpoch: number | null = null
+    /** Generation of the relays held; see `WaCallMediaRelays.generation`. */
+    private relayGeneration = 0
+
+    /** Set by a non-null `group` section: a decoder per remote sender, mixed for playout. */
+    private groupAudio: AudioReceiveSet | null = null
+    private groupSenders: WaCallMediaGroup['senders'] = []
+    /** SSRCs the group's receive keying is installed on, in SRTP and SRTCP alike. */
+    private readonly groupRecvSsrcs = new Set<number>()
+    /** The one group stream the audio REMB names: the first heard, until its sender leaves. */
+    private groupRembSsrc = 0
+    private senderSilenceTimer: ReturnType<typeof setInterval> | null = null
+    /** Whether the relay was handed a video subscription; see `WaCallMediaGroup.videoSubscriptions`. */
+    private rxSubscriptionsDeclared = false
+    /** Inbound video streams reassembled at once: the default, or two per group sender. */
+    private maxVideoStreams = MAX_H264_DEPACKETIZERS
 
     private codec: MLowCodec | null = null
     private rtpSession: RtpSession | null = null
@@ -379,6 +473,8 @@ export class WaCallMediaPlane {
     private subscriptionSsrc = 0
     /** Our stream the relay registration names, as last handed to the relay. */
     private registeredSelfSsrc = 0
+    /** Whether the relay was handed our streams by layer; see `WaCallMediaSsrcs.selfLayers`. */
+    private selfLayersDeclared = false
     /** Set while an update is applied, so the relay replays its registrations once at the end. */
     private deferResend = false
     private resendPending = false
@@ -482,6 +578,12 @@ export class WaCallMediaPlane {
     private srtpAuthFailureCount = 0
     private srtpOtherErrorCount = 0
     private relayPacketCount = 0
+    private warpFrameCount = 0
+    private warpControlFrameCount = 0
+    private warpOverrunCount = 0
+    /** Group packets on an SSRC the plan keys for no sender, dropped before SRTP. */
+    private unplannedPacketCount = 0
+    private readonly pt122Probe = new AudioPayloadProbe()
 
     private encodeBufferA: Float32Array | null = null
     private encodeBufferB: Float32Array | null = null
@@ -608,8 +710,11 @@ export class WaCallMediaPlane {
         this.events = options
         this.crypto = options.crypto
         this.useOriginalRelayPort = options.useOriginalRelayPort ?? false
+        this.rawUdpLegs = options.rawUdpLegs ?? 'all'
         this.companionModel = options.mlowCompanionModel
         this.redOptions = options.mlowRed
+        this.senderSilenceMs = options.senderSilenceMs ?? DEFAULT_SENDER_SILENCE_MS
+        this.videoSubscriptionsEnabled = options.videoSubscriptions ?? false
         this.clock = new WaMediaClock(options.now)
         this.playout = new WaJitterBuffer(
             PLAYOUT_CAPACITY_SAMPLES,
@@ -620,6 +725,7 @@ export class WaCallMediaPlane {
             crypto: options.crypto,
             createPeerConnection: options.createPeerConnection,
             createRawUdpLeg: options.createRawUdpLeg,
+            rawUdpLegs: this.rawUdpLegs,
             now: options.now,
             onConnected: () => this.onRelayConnected(),
             onLost: (reason) => this.onRelayLost(reason),
@@ -681,6 +787,7 @@ export class WaCallMediaPlane {
             if (update.settings !== undefined) this.applySettings(update.settings)
             if (update.ssrcs !== undefined) this.applySsrcs(update.ssrcs)
             if (update.keys !== undefined) this.applyKeys(update.keys)
+            if (update.group !== undefined) this.applyGroup(update.group)
             if (update.muted !== undefined) this.muted = update.muted
             if (update.video !== undefined) this.applyVideo(update.video)
             if (update.relays !== undefined) await this.applyRelays(update.relays)
@@ -755,10 +862,7 @@ export class WaCallMediaPlane {
             this.ensureVideoRtpSession()
         }
 
-        for (const ssrc of ssrcs.peerAppData) {
-            if (this.peerAppDataSsrcs.size >= MAX_TRACKED_PEER_APP_DATA_SSRCS) break
-            this.peerAppDataSsrcs.add(ssrc)
-        }
+        this.refreshPeerAppData()
         this.openAppDataStream(ssrcs.selfAppData)
 
         /** A peer stream seen on the wire outranks the derived one, signaling's best guess. */
@@ -774,6 +878,12 @@ export class WaCallMediaPlane {
             this.requestResend()
         }
         this.refreshStreams()
+        /** A plan without layers leaves the relay on the 1:1 declaration it never left. */
+        const selfLayers = ssrcs.selfLayers ?? null
+        if (selfLayers || this.selfLayersDeclared) {
+            this.selfLayersDeclared = selfLayers !== null
+            this.sctpRelay.setSelfLayers(selfLayers)
+        }
 
         this.logger.debug('media ssrcs applied', {
             selfSsrc: `0x${ssrcs.selfAudio.toString(16)}`,
@@ -794,7 +904,185 @@ export class WaCallMediaPlane {
         )
         this.srtcpContext = new SrtcpContext(this.crypto, keys.send)
         this.srtcpRecvSession = new SrtcpSession(this.crypto, keys.recv)
+        this.groupRecvSsrcs.clear()
+        this.installGroupRecvKeys()
         this.logger.debug('srtp keys applied', { epoch: keys.epoch })
+    }
+
+    /**
+     * Applies a group call's senders: each gets a decoder and its receive keying on every one
+     * of its SSRCs. `null` leaves group mode, the 1:1 receive path taking over again.
+     */
+    private applyGroup(group: WaCallMediaGroup | null): void {
+        if (!group) {
+            if (!this.groupAudio) return
+            this.groupSenders = []
+            this.installGroupRecvKeys()
+            for (const senderId of this.groupAudio.sync([])) this.emitSenderMedia(senderId, false)
+            this.groupAudio.clear()
+            this.groupAudio = null
+            this.stopSenderSilenceCheck()
+            this.maxVideoStreams = MAX_H264_DEPACKETIZERS
+            this.refreshPeerAppData()
+            this.applyVideoSubscriptions(null)
+            this.logger.debug('group senders cleared')
+            return
+        }
+
+        const senders =
+            group.senders.length > MAX_GROUP_SENDERS
+                ? group.senders.slice(0, MAX_GROUP_SENDERS)
+                : group.senders
+        if (!this.groupAudio) {
+            this.groupAudio = new AudioReceiveSet({
+                clockRate: AUDIO_CLOCK_RATE,
+                videoClockRate: VIDEO_CLOCK_RATE,
+                playoutCapacity: PLAYOUT_CAPACITY_SAMPLES,
+                maxSenders: MAX_GROUP_SENDERS,
+                createDecoder: () => this.createSenderDecoder(),
+                onSenderAudio: this.events.onSenderAudio,
+                logger: this.logger.child({ component: 'group-audio' })
+            })
+            this.playout.reset()
+        }
+        this.groupSenders = senders
+        for (const senderId of this.groupAudio.sync(senders)) this.emitSenderMedia(senderId, false)
+        this.installGroupRecvKeys()
+        this.maxVideoStreams = Math.max(
+            MAX_H264_DEPACKETIZERS,
+            senders.length * VIDEO_STREAMS_PER_SENDER
+        )
+        this.refreshPeerAppData()
+        this.applyVideoSubscriptions(group)
+        this.startSenderSilenceCheck()
+        this.logger.debug('group senders applied', {
+            senders: senders.length,
+            ignored: group.senders.length - senders.length,
+            keyedSsrcs: this.groupRecvSsrcs.size
+        })
+    }
+
+    /**
+     * Keys every SSRC of the group's senders on the receive sessions and drops the SSRCs no
+     * longer listed. Same material keeps a context, its ROC and replay window; the bound grows
+     * first so no planned context is evicted, and leaves room for streams keyed lazily.
+     */
+    private installGroupRecvKeys(): void {
+        const srtp = this.srtpSession
+        const srtcp = this.srtcpRecvSession
+        if (!srtp || !srtcp) return
+
+        const wanted = new Map<number, SrtpKeyingMaterial>()
+        for (const sender of this.groupSenders) {
+            wanted.set(sender.audio, sender.recv)
+            for (const ssrc of sender.streams) wanted.set(ssrc, sender.recv)
+        }
+        for (const ssrc of this.groupRecvSsrcs) {
+            if (wanted.has(ssrc)) continue
+            srtp.deleteRecvContext(ssrc)
+            srtcp.deleteRecvContext(ssrc)
+            this.groupRecvSsrcs.delete(ssrc)
+        }
+
+        const bound = wanted.size + SRTP_MAX_RECV_CONTEXTS
+        if (bound > srtp.maxRecvContexts) {
+            srtp.setMaxRecvContexts(bound)
+            srtcp.setMaxRecvContexts(bound)
+        }
+        for (const [ssrc, keying] of wanted) {
+            srtp.setRecvKeying(ssrc, keying)
+            srtcp.setRecvKeying(ssrc, keying)
+            this.groupRecvSsrcs.add(ssrc)
+        }
+        if (bound < srtp.maxRecvContexts) {
+            srtp.setMaxRecvContexts(bound)
+            srtcp.setMaxRecvContexts(bound)
+        }
+    }
+
+    /**
+     * Recognizes inbound app data by the plan's SSRCs: a group plan's list replaces the set
+     * whole, a 1:1 one only adds to it, up to its bound.
+     */
+    private refreshPeerAppData(): void {
+        const listed = this.ssrcs?.peerAppData ?? []
+        if (this.groupAudio) {
+            this.peerAppDataSsrcs.clear()
+            for (const ssrc of listed) this.peerAppDataSsrcs.add(ssrc)
+            return
+        }
+        for (const ssrc of listed) {
+            if (this.peerAppDataSsrcs.size >= MAX_TRACKED_PEER_APP_DATA_SSRCS) break
+            this.peerAppDataSsrcs.add(ssrc)
+        }
+    }
+
+    /**
+     * Hands the relay the video asked of each sender, by the sender's pid; a sender without one
+     * yet is left out. Off unless the plane was built with `videoSubscriptions`.
+     */
+    private applyVideoSubscriptions(group: WaCallMediaGroup | null): void {
+        if (!this.videoSubscriptionsEnabled) return
+        const wanted = group?.videoSubscriptions ?? []
+        if (wanted.length === 0 && !this.rxSubscriptionsDeclared) return
+
+        const pids = new Map<string, number>()
+        for (const sender of group?.senders ?? []) {
+            if (sender.pid !== undefined) pids.set(sender.id, sender.pid)
+        }
+        const infos: RxVideoSubscription[] = []
+        for (const subscription of wanted) {
+            const pid = pids.get(subscription.senderId)
+            if (pid !== undefined) infos.push({ pid, quality: subscription.quality })
+        }
+        if (infos.length < wanted.length) {
+            this.logger.debug('video subscriptions without a pid left out', {
+                asked: wanted.length,
+                sent: infos.length
+            })
+        }
+        this.rxSubscriptionsDeclared = infos.length > 0
+        this.sctpRelay.setRxSubscriptions(infos.length > 0 ? buildRxSubscriptions(infos) : null)
+    }
+
+    private startSenderSilenceCheck(): void {
+        if (this.senderSilenceTimer || this.stopped) return
+        this.senderSilenceTimer = setInterval(
+            () => {
+                const group = this.groupAudio
+                if (!group) return
+                for (const senderId of group.takeSilent(this.clock.now(), this.senderSilenceMs)) {
+                    this.emitSenderMedia(senderId, false)
+                }
+            },
+            Math.min(SENDER_SILENCE_CHECK_MS, this.senderSilenceMs)
+        )
+        unrefTimer(this.senderSilenceTimer)
+    }
+
+    private stopSenderSilenceCheck(): void {
+        if (!this.senderSilenceTimer) return
+        clearInterval(this.senderSilenceTimer)
+        this.senderSilenceTimer = null
+    }
+
+    private emitSenderMedia(senderId: string, receiving: boolean): void {
+        if (this.stopped) return
+        this.logger.debug('group sender media', { senderId, receiving })
+        try {
+            this.events.onSenderMedia?.(senderId, receiving)
+        } catch (err: unknown) {
+            this.logger.warn('sender media handler failed', { message: toError(err).message })
+        }
+    }
+
+    /** The decoder of one group sender: no encoder, the call's Companion if it has one. */
+    private createSenderDecoder(): Promise<MLowCodec> {
+        return MLowCodec.create({
+            logger: this.logger.child({ component: 'mlow' }),
+            companionModel: this.companionModel,
+            decodeOnly: true
+        })
     }
 
     private applyVideo(video: WaCallMediaVideo): void {
@@ -813,10 +1101,23 @@ export class WaCallMediaPlane {
 
     private async applyRelays(relays: WaCallMediaRelays | null): Promise<void> {
         if (!relays) return
+        const generation = relays.generation ?? 0
+        if (generation < this.relayGeneration) {
+            this.logger.debug('relays of an older generation ignored', {
+                generation,
+                held: this.relayGeneration
+            })
+            return
+        }
+        const moved = generation > this.relayGeneration
         this.relays = relays
+        this.relayGeneration = generation
 
-        /** With a leg open, new relays are kept for a redial after every leg is lost. */
-        if (this.sctpRelay.hasConnection()) return
+        /**
+         * With a leg open, relays of the same generation are kept for a redial after every leg
+         * is lost; a newer generation is where the server moved the call, dialled at once.
+         */
+        if (this.sctpRelay.hasConnection() && !moved) return
         await this.connectRelays(relays)
 
         if (
@@ -858,14 +1159,15 @@ export class WaCallMediaPlane {
 
     /**
      * Fills `out` with the next speaker samples and returns how many are the peer's audio;
-     * the rest is silence. Called on the host's own clock, any block size.
+     * the rest is silence. In a group call it is every sender's audio, summed and clipped.
+     * Called on the host's own clock, any block size.
      */
     pullPlayout(out: Float32Array): number {
         if (!this.flowing) {
             out.fill(0)
             return 0
         }
-        return this.playout.read(out)
+        return this.groupAudio ? this.groupAudio.pullPlayout(out) : this.playout.read(out)
     }
 
     /**
@@ -925,7 +1227,7 @@ export class WaCallMediaPlane {
                 this.videoPacketCount,
                 this.videoOctetCount,
                 this.timestampAtAssembly(timestamp, captureMs, VIDEO_CLOCK_RATE),
-                this.videoReception,
+                this.groupAudio ?? this.videoReception,
                 true
             )
         }
@@ -959,6 +1261,15 @@ export class WaCallMediaPlane {
 
     getStats(): WaCallMediaStats {
         const codecStats = this.codec?.getStats()
+        const senders = this.groupAudio?.stats()
+        let decoded = codecStats?.success ?? 0
+        let decodeErrors = codecStats?.errors ?? 0
+        if (senders) {
+            for (const sender of senders) {
+                decoded += sender.decoded
+                decodeErrors += sender.decodeErrors
+            }
+        }
         return {
             relayPackets: this.relayPacketCount,
             audioSent: this.audioSendCount,
@@ -975,9 +1286,13 @@ export class WaCallMediaPlane {
             videoFramesSent: this.videoSendFrames,
             videoPacketsReceived: this.videoRecvPackets,
             videoFecDiscarded: this.reedSolomonFecPackets,
-            decoded: codecStats?.success ?? 0,
-            decodeErrors: codecStats?.errors ?? 0,
-            playout: this.playout.stats
+            decoded,
+            decodeErrors,
+            playout: this.groupAudio ? this.groupAudio.playoutStats : this.playout.stats,
+            ...(senders ? { senders, unplannedPackets: this.unplannedPacketCount } : {}),
+            warpFrames: this.warpFrameCount,
+            warpControlFrames: this.warpControlFrameCount,
+            warpOverruns: this.warpOverrunCount
         }
     }
 
@@ -1003,13 +1318,20 @@ export class WaCallMediaPlane {
             videoFecDiscarded: stats.videoFecDiscarded,
             redDiscarded: stats.audioRedDiscarded,
             opusOk: stats.decoded,
-            opusErr: stats.decodeErrors
+            opusErr: stats.decodeErrors,
+            warpFrames: stats.warpFrames,
+            warpControlFrames: stats.warpControlFrames,
+            warpOverruns: stats.warpOverruns,
+            groupSenders: stats.senders?.length,
+            unplannedPackets: stats.unplannedPackets,
+            pt122: this.pt122Probe.received > 0 ? this.pt122Probe.summary() : undefined
         })
 
         if (this.subscriptionRefreshTimer) {
             clearInterval(this.subscriptionRefreshTimer)
             this.subscriptionRefreshTimer = null
         }
+        this.stopSenderSilenceCheck()
         this.sctpRelay.cleanup()
 
         this.codec?.destroy()
@@ -1025,6 +1347,9 @@ export class WaCallMediaPlane {
         for (const stream of this.inboundVideoStreams.values()) stream.depacketizer.reset()
         this.inboundVideoStreams.clear()
         this.playout.reset()
+        this.groupAudio?.clear()
+        this.groupAudio = null
+        this.groupRecvSsrcs.clear()
         this.encodeBuffer = null
         this.encodeBufferPos = 0
         this.pendingAudio = null
@@ -1496,7 +1821,7 @@ export class WaCallMediaPlane {
                     this.audioSendCount,
                     this.audioOctetCount,
                     this.timestampAtAssembly(timestamp, captureMs, AUDIO_CLOCK_RATE),
-                    this.audioReception
+                    this.groupAudio ?? this.audioReception
                 )
             }
             if (this.audioSendCount === 1 || this.audioSendCount % 500 === 0) {
@@ -1548,7 +1873,7 @@ export class WaCallMediaPlane {
         let reactions: readonly WaCallReaction[]
         try {
             const packet = this.srtpSession.unprotect(data)
-            this.notePeerMedia(connectionId)
+            this.notePeerMedia(connectionId, ssrc)
             stream.observeInboundPayloadType(payloadType)
             reactions = stream.receive(packet.payload, ssrc)
         } catch (err: unknown) {
@@ -1557,9 +1882,10 @@ export class WaCallMediaPlane {
         }
 
         /** Outside the decode catch: a failing handler is not a bad packet. */
+        const senderId = reactions.length > 0 ? this.groupAudio?.senderIdOf(ssrc) : undefined
         for (const reaction of reactions) {
             try {
-                this.events.onReaction?.(reaction)
+                this.events.onReaction?.(reaction, senderId)
             } catch (err: unknown) {
                 this.logger.warn('reaction handler failed', { message: toError(err).message })
             }
@@ -1581,6 +1907,7 @@ export class WaCallMediaPlane {
         this.clock.start()
         this.resetEncodeState()
         this.playout.reset()
+        this.groupAudio?.resetPlayout()
         this.flowing = true
         this.silenceWarmup = false
         this.sctpRelay.setMediaFlowing()
@@ -1610,30 +1937,73 @@ export class WaCallMediaPlane {
         this.events.onRelayLost?.(reason)
     }
 
-    /** Peer media that authenticated on a relay leg, which the relay follows; see `notePeerMedia`. */
-    private notePeerMedia(connectionId: string | undefined): void {
+    /**
+     * Peer media on `ssrc` that authenticated on a relay leg, which the relay follows (see
+     * `notePeerMedia`); in a group call it also marks the sender as heard.
+     */
+    private notePeerMedia(connectionId: string | undefined, ssrc: number): void {
         if (connectionId !== undefined) this.sctpRelay.notePeerMedia(connectionId)
+        const started = this.groupAudio?.noteHeard(ssrc, this.clock.now())
+        if (started !== undefined) this.emitSenderMedia(started, true)
     }
 
-    private onRelayData(data: Uint8Array, connectionId?: string): void {
+    /** Takes the conference relay's frame off a datagram; `null` for a frame with no media in it. */
+    private unframeRelayData(data: Uint8Array): Uint8Array | null {
+        const frame = readWarpFrame(data)
+        switch (frame.kind) {
+            case 'not_framed':
+                return data
+            case 'framed':
+                if (++this.warpFrameCount === 1) {
+                    this.logger.debug('relay frame taken off inbound media', {
+                        headerLength: frame.headerLength
+                    })
+                }
+                return frame.rtp
+            case 'no_rtp_inside':
+                this.warpControlFrameCount++
+                return null
+            case 'header_overruns': {
+                const overruns = ++this.warpOverrunCount
+                if (overruns === 1 || overruns % 100 === 0) {
+                    this.logger.debug('relay frame header runs past the datagram', {
+                        overruns,
+                        headerLength: frame.headerLength,
+                        bytes: data.length
+                    })
+                }
+                return null
+            }
+        }
+    }
+
+    private onRelayData(datagram: Uint8Array, connectionId?: string): void {
         this.relayPacketCount++
 
-        if (isStunPacket(data)) return
+        const data = this.unframeRelayData(datagram)
+        if (!data || isStunPacket(data)) return
 
         if (isRtcpPacket(data)) {
-            if (!this.srtcpRecvSession) return
+            if (!this.srtcpRecvSession || this.dropsUnplanned(readUInt32BE(data, 4))) return
             try {
                 const rtcp = this.srtcpRecvSession.unprotect(data)
-                this.notePeerMedia(connectionId)
+                this.notePeerMedia(connectionId, readUInt32BE(data, 4))
                 const arrivedAt = Date.now()
-                this.audioReception.observeSenderReport(rtcp, arrivedAt)
-                this.videoReception.observeSenderReport(rtcp, arrivedAt)
+                if (this.groupAudio) {
+                    this.groupAudio.observeSenderReport(rtcp, arrivedAt)
+                } else {
+                    this.audioReception.observeSenderReport(rtcp, arrivedAt)
+                    this.videoReception.observeSenderReport(rtcp, arrivedAt)
+                }
                 this.logger.trace('srtcp packet received', {
                     packetType: rtcp[1],
                     feedbackFormat: rtcp[0] & 0x1f,
                     bytes: rtcp.length
                 })
             } catch (err: unknown) {
+                if (err instanceof SrtpError && err.type === 'auth_failed') {
+                    this.groupAudio?.noteAuthFailure(readUInt32BE(data, 4))
+                }
                 this.logger.trace('srtcp unprotect failed', { message: toError(err).message })
             }
             return
@@ -1656,11 +2026,12 @@ export class WaCallMediaPlane {
                 this.onAppDataPacket(data, pt, ssrc, connectionId)
                 return
             }
+            if (this.dropsUnplanned(ssrc)) return
         }
 
         try {
             const rtpPacket = this.srtpSession.unprotect(data)
-            this.notePeerMedia(connectionId)
+            this.notePeerMedia(connectionId, rtpPacket.header.ssrc)
             if (pt === PayloadType.WhatsAppOpus) {
                 this.onAudioPacket(rtpPacket.header, rtpPacket.payload, 0)
             } else if (pt === PayloadType.WhatsAppMlowRed) {
@@ -1673,6 +2044,9 @@ export class WaCallMediaPlane {
                 } else {
                     this.discardRedAudio(rtpPacket.payload, rtpPacket.header.ssrc)
                 }
+            } else if (pt === MLOW_ALT_PAYLOAD_TYPE) {
+                const outcome = this.onAudioPacket(rtpPacket.header, rtpPacket.payload, 0)
+                this.notePt122(rtpPacket.header, rtpPacket.payload, outcome)
             } else if (pt === PayloadType.WhatsAppH264) {
                 this.onVideoPacket(rtpPacket.header, rtpPacket.payload, pt)
             } else if (isReedSolomonFecPayloadType(pt)) {
@@ -1694,11 +2068,18 @@ export class WaCallMediaPlane {
      * Decodes one peer audio packet: `stream` 0 is PT 120, 1 is PT 121, numbered apart on the
      * one timeline. PT 121 on an SSRC other than the one the reception follows stays out of it.
      */
-    private onAudioPacket(header: RtpHeader, payload: Uint8Array, stream: 0 | 1): void {
+    private onAudioPacket(
+        header: RtpHeader,
+        payload: Uint8Array,
+        stream: 0 | 1
+    ): MLowDecodeOutcome | null {
+        if (this.groupAudio) {
+            return this.onGroupAudioPacket(this.groupAudio, header, payload, stream)
+        }
         const ssrc = header.ssrc
         this.latchPeerSsrc(ssrc)
         const codec = this.codec
-        if (!codec) return
+        if (!codec) return null
 
         this.audioRecvCount++
         const seq = header.sequenceNumber
@@ -1708,12 +2089,18 @@ export class WaCallMediaPlane {
             this.sendAudioReceiverEstimate(ssrc)
         }
 
-        if (payload.length === 0) return
+        if (payload.length === 0) return 'empty'
 
         if (payload.length <= 2) this.recvDtxCount++
         else this.recvRealCount++
 
-        codec.decodeSequenced(seq, payload, this.onDecodedAudio, header.timestamp, stream)
+        const outcome = codec.decodeSequenced(
+            seq,
+            payload,
+            this.onDecodedAudio,
+            header.timestamp,
+            stream
+        )
 
         if (this.audioRecvCount % 100 === 0) {
             codec.setExpectedPacketLossPercent(this.audioReception.lossPercent)
@@ -1729,6 +2116,82 @@ export class WaCallMediaPlane {
                 late: stats.late,
                 redundant: stats.redundant,
                 redRecovered: stats.redRecovered
+            })
+        }
+        return outcome
+    }
+
+    /**
+     * In a group call, drops a packet on an SSRC the plan keys for no sender before SRTP sees
+     * it: a context keyed lazily with the call's own key could evict one of a sender's.
+     */
+    private dropsUnplanned(ssrc: number): boolean {
+        if (!this.groupAudio || this.groupRecvSsrcs.has(ssrc)) return false
+        const dropped = ++this.unplannedPacketCount
+        if (dropped === 1 || dropped % 500 === 0) {
+            this.logger.debug('group packet on an unplanned ssrc dropped', {
+                packets: dropped,
+                ssrc: `0x${ssrc.toString(16)}`
+            })
+        }
+        return true
+    }
+
+    /**
+     * Decodes one group sender's audio on that sender's own decoder. Nothing latches: every
+     * sender's SSRC comes from the plan.
+     */
+    private onGroupAudioPacket(
+        group: AudioReceiveSet,
+        header: RtpHeader,
+        payload: Uint8Array,
+        stream: 0 | 1
+    ): MLowDecodeOutcome | null {
+        const ssrc = header.ssrc
+        this.audioRecvCount++
+        if (payload.length <= 2) this.recvDtxCount++
+        else this.recvRealCount++
+        const outcome = group.receive(
+            ssrc,
+            header.sequenceNumber,
+            header.timestamp,
+            payload,
+            stream,
+            Date.now()
+        )
+        if (this.groupRembSsrc === 0 || !group.has(this.groupRembSsrc)) this.groupRembSsrc = ssrc
+        if (ssrc === this.groupRembSsrc) this.sendAudioReceiverEstimate(ssrc)
+
+        if (this.audioRecvCount % 100 === 0) {
+            this.codec?.setExpectedPacketLossPercent(group.peakLossPercent())
+            this.logger.debug('group audio recv stats', {
+                recvCount: this.audioRecvCount,
+                real: this.recvRealCount,
+                dtx: this.recvDtxCount,
+                senders: group.size
+            })
+        }
+        return outcome
+    }
+
+    /**
+     * Describes a PT 122 packet after SRTP and counts what its decoder made of it, so a call
+     * shows the payload is the MLow it is decoded as. A rejected packet plays nothing: its slot
+     * is concealed when the stream's next packet arrives.
+     */
+    private notePt122(
+        header: RtpHeader,
+        payload: Uint8Array,
+        outcome: MLowDecodeOutcome | null
+    ): void {
+        const probe = this.pt122Probe
+        probe.note(header.ssrc, header.timestamp, payload, outcome)
+        this.groupAudio?.countPt122(header.ssrc, outcome)
+        const packets = probe.received
+        if (packets === 1 || packets === 10 || packets === 50 || packets % 250 === 0) {
+            this.logger.debug('pt 122 audio received', {
+                ssrc: `0x${header.ssrc.toString(16)}`,
+                ...probe.summary()
             })
         }
     }
@@ -1748,12 +2211,14 @@ export class WaCallMediaPlane {
     /** Counts an inbound RTP packet the receive path dropped: a replay, a bad auth tag, or else. */
     private countReceiveError(err: unknown, data: Uint8Array): void {
         const type = err instanceof SrtpError ? err.type : null
+        const ssrc = data.length >= 12 ? readUInt32BE(data, 8) : 0
         let errorCount: number
         if (type === 'replay') errorCount = ++this.srtpReplayCount
-        else if (type === 'auth_failed') errorCount = ++this.srtpAuthFailureCount
-        else errorCount = ++this.srtpOtherErrorCount
+        else if (type === 'auth_failed') {
+            errorCount = ++this.srtpAuthFailureCount
+            this.groupAudio?.noteAuthFailure(ssrc)
+        } else errorCount = ++this.srtpOtherErrorCount
         if (errorCount <= 5) {
-            const ssrc = data.length >= 12 ? readUInt32BE(data, 8) : 0
             this.logger.debug('srtp recv error', {
                 type: type ?? 'other',
                 errorCount,
@@ -1791,12 +2256,17 @@ export class WaCallMediaPlane {
         // plan, so the media itself opens the path.
         this.ensureVideoReceivePath()
         this.videoRecvPackets++
-        this.videoReception.observe(
-            header.ssrc,
-            header.sequenceNumber,
-            header.timestamp,
-            Date.now()
-        )
+        const group = this.groupAudio
+        if (group) {
+            group.observeVideo(header.ssrc, header.sequenceNumber, header.timestamp, Date.now())
+        } else {
+            this.videoReception.observe(
+                header.ssrc,
+                header.sequenceNumber,
+                header.timestamp,
+                Date.now()
+            )
+        }
         this.videoRecvOctets += payload.length
         this.sendReceiverEstimate(header.ssrc)
         if (this.videoRecvPackets === 1 || this.videoRecvPackets % 100 === 0) {
@@ -1821,13 +2291,15 @@ export class WaCallMediaPlane {
             })
         }
         if (!payload.length) return
+        const senderId = group?.senderIdOf(header.ssrc)
         this.events.onInboundVideoRtp?.({
             payloadType: pt,
             sequenceNumber: header.sequenceNumber,
             timestamp: header.timestamp,
             ssrc: header.ssrc,
             marker: header.marker,
-            payload
+            payload,
+            senderId
         })
         let stream = this.inboundVideoStreams.get(header.ssrc)
         if (!stream) {
@@ -1840,7 +2312,7 @@ export class WaCallMediaPlane {
                 this.inboundVideoStreams,
                 header.ssrc,
                 stream,
-                MAX_H264_DEPACKETIZERS,
+                this.maxVideoStreams,
                 (_ssrc, evicted) => evicted.depacketizer.reset()
             )
         }
@@ -1854,9 +2326,14 @@ export class WaCallMediaPlane {
             if (frame.keyFrame) stream.keyFrameReceived = true
             if (!stream.keyFrameReceived) {
                 const now = Date.now()
+                /**
+                 * The whole plane's floor: every tracked stream keeps its own pace, and a peer
+                 * minting new SSRCs draws no more requests than all of them together.
+                 */
                 if (
                     now - stream.lastKeyFrameRequestAt >= KEY_FRAME_REQUEST_INTERVAL_MS &&
-                    now - this.lastKeyFrameRequestAt >= KEY_FRAME_REQUEST_FLOOR_MS
+                    now - this.lastKeyFrameRequestAt >=
+                        KEY_FRAME_REQUEST_INTERVAL_MS / this.maxVideoStreams
                 ) {
                     stream.lastKeyFrameRequestAt = now
                     this.lastKeyFrameRequestAt = now
@@ -1873,7 +2350,8 @@ export class WaCallMediaPlane {
                 ssrc: header.ssrc,
                 timestamp: frame.timestamp,
                 keyFrame: frame.keyFrame,
-                data: frame.data
+                data: frame.data,
+                senderId
             })
         }
     }
@@ -1891,7 +2369,10 @@ export class WaCallMediaPlane {
     }
 
     private async connectRelays(relays: WaCallMediaRelays): Promise<void> {
-        this.logger.debug('connecting relays', { endpointCount: relays.endpoints.length })
+        this.logger.debug('connecting relays', {
+            endpointCount: relays.endpoints.length,
+            generation: relays.generation ?? 0
+        })
 
         // A relay answers only on the port it advertises, and the endpoints
         // carry a mix. WhatsApp Web dials them all on the web client port and
@@ -1913,7 +2394,8 @@ export class WaCallMediaPlane {
             // The port the relay advertised for itself, kept alongside the
             // dialled one so a raw UDP leg can reach the relay where it
             // says it listens instead of on the web client's rewrite.
-            originalPort: ep.port
+            originalPort: ep.port,
+            transport: ep.transport
         }))
 
         if (configs.length === 0) {
@@ -1927,7 +2409,9 @@ export class WaCallMediaPlane {
         this.sctpRelay.setParticipantIds(relays.selfPid, relays.peerPid)
 
         try {
-            await this.sctpRelay.configureRelays(configs)
+            await this.sctpRelay.configureRelays(configs, {
+                generation: relays.generation ?? 0
+            })
             this.logger.debug('sctp relays configured', {
                 connected: this.sctpRelay.getConnectedCount()
             })
@@ -1952,17 +2436,17 @@ export class WaCallMediaPlane {
      * from here as a parameter instead of being deduced from the SSRC further
      * down.
      *
-     * The block count and the trailer stay as the builder defines them: the
-     * count derived from `packetCount`, which is already monotonic per call, and
-     * the form with a trailer, which is the one of the one-to-one call this
-     * client places.
+     * The block counter stays as the builder derives it from `packetCount`, which
+     * is already monotonic per call. A group call's report carries a block per
+     * sender heard on that stream kind; only a single block carries the packet
+     * trailer.
      */
     private sendSenderReport(
         senderSsrc: number,
         packetCount: number,
         octetCount: number,
         rtpTimestamp: number,
-        reception: RtpStreamReception,
+        reception: RtpStreamReception | AudioReceiveSet,
         whatsappVideoProfile = false
     ): void {
         const srtcpContext = this.srtcpContext
@@ -1975,15 +2459,24 @@ export class WaCallMediaPlane {
         }
 
         try {
+            const now = Date.now()
+            let blocks: SenderReportReception | readonly SenderReportReception[]
+            if (reception instanceof AudioReceiveSet) {
+                blocks = whatsappVideoProfile
+                    ? reception.videoReceptionReports(now)
+                    : reception.receptionReports(now)
+            } else {
+                blocks = reception.report(now)
+            }
             const report = buildSenderReportWithSdes(
                 senderSsrc,
                 packetCount,
                 octetCount,
                 rtpTimestamp,
                 cname,
-                reception.report(Date.now()),
+                blocks,
                 undefined,
-                true,
+                !Array.isArray(blocks) || blocks.length <= 1,
                 whatsappVideoProfile
             )
             this.sctpRelay.sendMedia(toArrayBuffer(srtcpContext.protect(report, senderSsrc)))
@@ -2005,7 +2498,9 @@ export class WaCallMediaPlane {
 
     /**
      * The audio REMB (PSFB 206, FMT 15) once per RTCP interval, from our audio stream on the
-     * peer's: its UAQC only leaves probing on one. The video REMB gate does not apply.
+     * peer's: its UAQC only leaves probing on one. The video REMB gate does not apply. A group
+     * call keeps one REMB too, on one sender's stream with that sender's loss: whether the relay
+     * wants one per sender, or ends it, is not known.
      */
     private sendAudioReceiverEstimate(mediaSsrc: number): void {
         if (!this.flowing || !this.audioReceiverEstimateSchedule.shouldReport(this.clock.now())) {
@@ -2017,7 +2512,9 @@ export class WaCallMediaPlane {
 
         const bitrate = nextAudioReceiverEstimate(
             this.audioReceiverEstimateBitrate,
-            this.audioReception.takeLossPercent()
+            this.groupAudio
+                ? this.groupAudio.takeLossPercent(mediaSsrc)
+                : this.audioReception.takeLossPercent()
         )
         this.audioReceiverEstimateBitrate = bitrate
         const senderSsrc = rtpSession.getSsrc()
@@ -2057,6 +2554,9 @@ export class WaCallMediaPlane {
      * The per-packet cost is one addition and one subtraction; the rest only
      * runs on the packet that closes the interval.
      *
+     * In a group call the one estimate covers every sender's video heard, listed
+     * together, against the worst sender's loss.
+     *
      * A server that turned the REMB off cancels the send. That feedback
      * transport is off per call, and a REMB emitted anyway is a correct packet
      * the peer does not process. Only the send is conditional: the ceiling is
@@ -2073,11 +2573,12 @@ export class WaCallMediaPlane {
         }
         if (!this.receiverEstimateSchedule.shouldReport(now)) return
 
+        const group = this.groupAudio
         const bitrate = nextReceiverMaxBitrate(
             this.receiverEstimateBitrate,
             this.videoRecvOctets,
             now - this.receiverEstimateWindowStartedAt,
-            this.videoReception.lossPercent
+            group ? group.videoPeakLossPercent() : this.videoReception.lossPercent
         )
         this.receiverEstimateBitrate = bitrate
         this.videoRecvOctets = 0
@@ -2090,8 +2591,13 @@ export class WaCallMediaPlane {
         if (!srtcpContext || !videoRtpSession) return
 
         const senderSsrc = videoRtpSession.getSsrc()
+        const heard = group?.videoSourceSsrcs()
         try {
-            const remb = buildReceiverEstimatedMaxBitrate(senderSsrc, mediaSsrc, bitrate)
+            const remb = buildReceiverEstimatedMaxBitrate(
+                senderSsrc,
+                heard && heard.length > 0 ? heard : mediaSsrc,
+                bitrate
+            )
             this.sctpRelay.sendMedia(toArrayBuffer(srtcpContext.protect(remb, senderSsrc)))
             this.logger.trace('receiver estimate sent', {
                 mediaSsrc: `0x${mediaSsrc.toString(16)}`,

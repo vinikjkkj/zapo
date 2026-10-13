@@ -10,7 +10,8 @@ import {
     nextAudioReceiverEstimate,
     nextReceiverMaxBitrate,
     RtpStreamReception,
-    SenderReportSchedule
+    SenderReportSchedule,
+    senderReportSourceSsrc
 } from '../rtcp.js'
 
 const REPORT_BLOCK_OFFSET = 28
@@ -1223,4 +1224,28 @@ test('the audio estimate never drops below 16 kbps however heavy the loss', () =
         assert.ok(estimate >= AUDIO_REMB_MIN_BITRATE)
     }
     assert.equal(estimate, AUDIO_REMB_MIN_BITRATE)
+})
+
+test('a compound packet that opens with a sender report names the source it describes', () => {
+    const report = buildSenderReportWithSdes(0xdeadbeef, 10, 100, 960)
+    const remb = buildReceiverEstimatedMaxBitrate(0x11111111, 0x22222222, 30_000)
+
+    assert.equal(senderReportSourceSsrc(report), 0xdeadbeef)
+    assert.equal(senderReportSourceSsrc(remb), null)
+    assert.equal(senderReportSourceSsrc(report.subarray(0, 27)), null)
+})
+
+test('a REMB lists every source a group estimate covers, and one source stays the 1:1 shape', () => {
+    const many = buildReceiverEstimatedMaxBitrate(0x11111111, [0x0a0a0a03, 0x0b0b0b03], 300_000)
+    const one = buildReceiverEstimatedMaxBitrate(0x11111111, 0x0a0a0a03, 300_000)
+
+    assert.equal(many.length, one.length + 4)
+    assert.equal(readUInt16BE(many, 2), many.length / 4 - 1)
+    assert.equal(many[16], 2)
+    assert.deepEqual([readUInt32BE(many, 20), readUInt32BE(many, 24)], [0x0a0a0a03, 0x0b0b0b03])
+    assert.deepEqual(
+        buildReceiverEstimatedMaxBitrate(0x11111111, [0x0a0a0a03], 300_000),
+        one,
+        'a list of one is the single-source packet'
+    )
 })

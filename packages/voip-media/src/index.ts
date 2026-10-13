@@ -3,22 +3,30 @@ export type { WaAppDataPayload, WaCallArEffect, WaCallReaction } from './app-dat
 export { WA_APP_DATA_PAYLOAD_TYPE, WaAppDataStream } from './app-data/WaAppDataStream.js'
 export type { WaAppDataStreamOptions } from './app-data/WaAppDataStream.js'
 
-export { dialableRelayEndpoints } from './call/plan.js'
+export { dialableRelayEndpoints, WA_VIDEO_QUALITY } from './call/plan.js'
 export type {
+    WaCallMediaGroup,
     WaCallMediaKeys,
     WaCallMediaPlan,
     WaCallMediaPlanUpdate,
     WaCallMediaRelay,
     WaCallMediaRelays,
+    WaCallMediaSender,
     WaCallMediaSettings,
     WaCallMediaSsrcs,
-    WaCallMediaVideo
+    WaCallMediaStreamLayer,
+    WaCallMediaVideo,
+    WaCallMediaVideoSubscription
 } from './call/plan.js'
 export {
     decodeCallMediaEvent,
     decodeCallMediaMessage,
     encodeCallMediaEvent,
     encodeCallMediaMessage,
+    WA_CALL_MEDIA_FEATURE_GROUP,
+    WA_CALL_MEDIA_FEATURE_GROUP_ATTRIBUTION,
+    WA_CALL_MEDIA_FEATURE_GROUP_VIDEO,
+    WA_CALL_MEDIA_FEATURE_RAW_UDP,
     WA_CALL_MEDIA_WIRE_VERSION,
     WaCallMediaMessageSequencer,
     WaCallMediaReceiver
@@ -33,6 +41,7 @@ export { WaCallMediaPlane } from './call/WaCallMediaPlane.js'
 export type {
     WaCallMediaPlaneEvents,
     WaCallMediaPlaneOptions,
+    WaCallMediaSenderStats,
     WaCallMediaStats
 } from './call/WaCallMediaPlane.js'
 

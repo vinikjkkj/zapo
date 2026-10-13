@@ -47,6 +47,11 @@ export interface WaWebCallVideoReceiverOptions {
     readonly hardwareAcceleration?: HardwareAcceleration
     /** A decoder failure; the stream resumes on its next key frame. */
     readonly onError?: (error: unknown, ssrc: number) => void
+    /**
+     * Streams decoded at once, 4 by default; the oldest is closed to make room. A group call
+     * shows one per sender.
+     */
+    readonly maxStreams?: number
 }
 
 export interface WaWebCallVideoReceiverStats {
@@ -80,8 +85,8 @@ const MAX_ENCODE_QUEUE = 2
 /** Decoder backlog past which the stream is cut back to its next key frame. */
 const MAX_DECODE_QUEUE = 30
 
-/** Peer streams decoded at once; the oldest is closed to make room. */
-const MAX_DECODED_STREAMS = 4
+/** Peer streams decoded at once by default; the oldest is closed to make room. */
+const DEFAULT_MAX_DECODED_STREAMS = 4
 
 /** RTP clock rate of H.264. */
 const VIDEO_CLOCK_KHZ = 90
@@ -367,6 +372,7 @@ export class WaWebCallVideoReceiver {
     private readonly onFrameDecoded: (frame: VideoFrame, ssrc: number) => void
     private readonly onError: ((error: unknown, ssrc: number) => void) | undefined
     private readonly hardwareAcceleration: HardwareAcceleration | undefined
+    private readonly maxStreams: number
     private readonly streams = new Map<number, DecodedStream>()
     private closed = false
     private framesReceived = 0
@@ -382,6 +388,7 @@ export class WaWebCallVideoReceiver {
         this.onFrameDecoded = options.onFrame
         this.onError = options.onError
         this.hardwareAcceleration = options.hardwareAcceleration
+        this.maxStreams = Math.max(1, Math.trunc(options.maxStreams ?? DEFAULT_MAX_DECODED_STREAMS))
     }
 
     get stats(): WaWebCallVideoReceiverStats {
@@ -448,7 +455,7 @@ export class WaWebCallVideoReceiver {
     private streamFor(ssrc: number): DecodedStream {
         let stream = this.streams.get(ssrc)
         if (stream) return stream
-        if (this.streams.size >= MAX_DECODED_STREAMS) {
+        if (this.streams.size >= this.maxStreams) {
             const [oldestSsrc, oldest] = this.streams.entries().next().value as [
                 number,
                 DecodedStream

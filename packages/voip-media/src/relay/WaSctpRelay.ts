@@ -9,12 +9,15 @@ import {
     buildBindingRequestWithSubs,
     buildSenderSubscriptions,
     buildSSRCSubscriptionList,
+    buildStreamDescriptor,
     buildWhatsAppPing,
     classifyPacket,
     createStunTransactionId,
     formatStunResponse,
-    parseStunResponse
+    parseStunResponse,
+    type StreamLayerSsrcs
 } from './stun.js'
+import { isWarpFramedPacket, readWarpFrame } from './warp-frame.js'
 
 function closeQuietly(closeable: { close(): void } | null | undefined, logger: Logger): void {
     try {
@@ -78,6 +81,53 @@ const PORT_FALLBACK_AFTER_OPEN_MS =
  */
 const PORT_FALLBACK_UNOPENED_MS = 5_000
 
+/** Media on the newest generation's legs, or on older ones while those dial or for want of any. */
+type ElectionScope = 'newest' | 'awaiting' | 'older'
+
+/**
+ * Whether a leg to the same address can take `next`'s credentials without a new socket. A raw
+ * leg always can; a WebRTC leg keeps its connection through a rotated auth token, but not
+ * through a new relay key or auth token id.
+ */
+function canReregisterInPlace(held: RelayInfo, next: RelayInfo): boolean {
+    if (held.transport !== next.transport) return false
+    if (held.transport === 'raw-udp') return true
+    return held.key === next.key && held.authTokenId === next.authTokenId
+}
+
+function sameOptionalBytes(a: Uint8Array | null, b: Uint8Array | null): boolean {
+    if (a === b) return true
+    if (!a || !b || a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false
+    }
+    return true
+}
+
+/** The address part of a relay key, without its auth token id. */
+function relayAddressOf(relayKey: string): string {
+    const hash = relayKey.indexOf('#')
+    return hash < 0 ? relayKey : relayKey.slice(0, hash)
+}
+
+/** Keys the one-way credential fingerprints logs carry instead of the credentials. */
+const CREDENTIAL_FINGERPRINT_KEY = TEXT_ENCODER.encode('relay-credential-fingerprint')
+
+function sameStreamLayers(
+    a: readonly StreamLayerSsrcs[] | null,
+    b: readonly StreamLayerSsrcs[] | null
+): boolean {
+    if (a === b) return true
+    if (!a || !b || a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+        if (a[i].layer !== b[i].layer || a[i].ssrcs.length !== b[i].ssrcs.length) return false
+        for (let j = 0; j < a[i].ssrcs.length; j++) {
+            if (a[i].ssrcs[j] !== b[i].ssrcs[j]) return false
+        }
+    }
+    return true
+}
+
 enum ConnectionState {
     None = 'None',
     Connecting = 'Connecting',
@@ -127,6 +177,8 @@ export interface RelayInfo {
      * answers on `port`: which of the two answers follows the account class the server assigns.
      */
     fallbackPort?: number
+    /** `'raw-udp'` when this leg rides raw UDP; absent, it rides WebRTC. */
+    transport?: 'raw-udp'
 }
 
 export interface Connection {
@@ -140,8 +192,11 @@ export interface Connection {
     bufferedBytes: number
     /** Identifies the connection's slot in `connections` and its keepalive timer; never reassigned after registration. */
     readonly id: string
-    /** Carries the STUN/allocate credentials `resendSubscriptions` replays; never reassigned after construction. */
-    readonly relayInfo: RelayInfo
+    /**
+     * The credentials every registration of this leg reads when it goes out. Replaced in place
+     * when a newer generation re-issues the same address with new credentials.
+     */
+    relayInfo: RelayInfo
     connectionTimeout: ReturnType<typeof setTimeout> | null
     /**
      * Set while the leg's peer connection negotiates; ending the leg calls it, since a closed
@@ -161,6 +216,8 @@ export interface Connection {
     stableRoutingConnId: bigint
     /** Born with the connection, and used by every STUN message it emits. */
     readonly stunTransactionId: Uint8Array
+    /** The relay generation this leg belongs to; see `configureRelays`. */
+    generation: number
     readonly stats: {
         sentPackets: number
         receivedPackets: number
@@ -175,11 +232,13 @@ export interface WaSctpRelayOptions {
     readonly crypto: WaMediaCrypto
     /** Builds the peer connection of each WebRTC leg, so the host picks the implementation. */
     readonly createPeerConnection: (configuration: RTCConfiguration) => Promise<RTCPeerConnection>
-    /**
-     * Builds a raw UDP leg. Set, it moves every leg off WebRTC and onto raw
-     * UDP; see `WaVoipCoordinatorOptions.useRawUdpTransport`.
-     */
+    /** Builds a raw UDP leg; which legs ride one is {@link rawUdpLegs}. */
     readonly createRawUdpLeg?: (options: RawUdpLegOptions) => RawUdpLeg
+    /**
+     * With `createRawUdpLeg`, `'all'` (the default) dials every leg over raw UDP and `'required'`
+     * only the relays configured with `transport: 'raw-udp'`, leaving the rest on WebRTC.
+     */
+    readonly rawUdpLegs?: 'all' | 'required'
     /** A leg opened and is carrying traffic. */
     readonly onConnected?: () => void
     /** The call has no leg left, open or dialling; see `announceLastLegLost`. */
@@ -203,6 +262,7 @@ export class WaSctpRelay {
     private readonly crypto: WaMediaCrypto
     private readonly createPeerConnection: WaSctpRelayOptions['createPeerConnection']
     private readonly createRawUdpLeg: WaSctpRelayOptions['createRawUdpLeg']
+    private readonly rawUdpLegs: NonNullable<WaSctpRelayOptions['rawUdpLegs']>
     private readonly onConnected: WaSctpRelayOptions['onConnected']
     private readonly onLost: WaSctpRelayOptions['onLost']
     private readonly onRelayAnswered: WaSctpRelayOptions['onRelayAnswered']
@@ -210,7 +270,21 @@ export class WaSctpRelay {
     private readonly now: () => number
     private connections = new Map<string, Connection>()
     private readonly answeredRelayNames = new Set<string>()
+    /** The attribute layout of each leg's last allocate, logged when it changes. */
+    private readonly allocateLayouts = new WeakMap<Connection, string>()
+    /** The relays of {@link generation}, by relay key; older ones leave it when it advances. */
     private relayMap = new Map<string, RelayInfo>()
+    /** The newest relay generation; media is elected among its legs while one is open. */
+    private generation = 0
+    /** Legs of generations below this one were retired; see {@link retireOlderGenerations}. */
+    private retiredBelow = 0
+    /**
+     * When media first went out on a leg of the newest generation before any of its legs heard
+     * the peer; `RX_ELECTION_HOLD_MS` after it, the peer is followed back to an older leg.
+     */
+    private newestSendingSince: number | null = null
+    /** The scope of the last election, logged when it changes. */
+    private electionScope: ElectionScope = 'newest'
     private stats = {
         sent: 0,
         received: 0,
@@ -223,6 +297,10 @@ export class WaSctpRelay {
     private peerStreamSsrcs: number[] = []
     private selfPid = 0
     private peerPid = 0
+    /** Set, allocates carry the layered descriptor of these streams; see {@link setSelfLayers}. */
+    private selfLayers: readonly StreamLayerSsrcs[] | null = null
+    /** Set, allocates carry this `0x4021`; see {@link setRxSubscriptions}. */
+    private rxSubscriptions: Uint8Array | null = null
     /** The one leg media goes out on; see {@link sendMedia}. */
     private mediaLeg: Connection | null = null
     private pingIntervalMs = CONFIG.PING_SETUP_INTERVAL_MS
@@ -232,6 +310,7 @@ export class WaSctpRelay {
         this.crypto = options.crypto
         this.createPeerConnection = options.createPeerConnection
         this.createRawUdpLeg = options.createRawUdpLeg
+        this.rawUdpLegs = options.rawUdpLegs ?? 'all'
         this.onConnected = options.onConnected
         this.onLost = options.onLost
         this.onRelayAnswered = options.onRelayAnswered
@@ -275,6 +354,33 @@ export class WaSctpRelay {
         }
     }
 
+    /**
+     * Sets the streams this side sends, in which case every allocate carries the self-only
+     * layered descriptor instead of the 1:1 SSRC list; `null` goes back to the 1:1 list. A change
+     * is re-announced on the open legs.
+     */
+    setSelfLayers(layers: readonly StreamLayerSsrcs[] | null): void {
+        if (sameStreamLayers(this.selfLayers, layers)) return
+        this.selfLayers = layers
+        this.logger.debug('sctp self stream layers set', {
+            layers: layers?.length ?? null,
+            ssrcs: layers?.reduce((sum, layer) => sum + layer.ssrcs.length, 0) ?? null
+        })
+        if (this.hasConnection()) this.resendSubscriptions()
+    }
+
+    /**
+     * Sets the `0x4021` video subscription every allocate carries (see `buildRxSubscriptions`);
+     * `null` or empty leaves it out. A change is re-announced on the open legs.
+     */
+    setRxSubscriptions(bytes: Uint8Array | null): void {
+        const next = bytes && bytes.length > 0 ? bytes.slice() : null
+        if (sameOptionalBytes(this.rxSubscriptions, next)) return
+        this.rxSubscriptions = next
+        this.logger.debug('sctp rx subscriptions set', { size: next?.length ?? 0 })
+        if (this.hasConnection()) this.resendSubscriptions()
+    }
+
     resendSubscriptions(): void {
         for (const conn of this.connections.values()) {
             if (conn.state !== ConnectionState.Open) continue
@@ -285,14 +391,14 @@ export class WaSctpRelay {
                  * already registered, and this pass only refreshes the SSRC
                  * list it carries.
                  */
-                if (conn.rawLeg.isOpen && this.sendRawAllocate(conn, conn.relayInfo, 'resend')) {
+                if (conn.rawLeg.isOpen && this.sendRawAllocate(conn, 'resend')) {
                     this.logger.debug('raw udp allocate resent', { connectionId: conn.id })
                 }
                 continue
             }
 
             if (conn.channel && conn.channel.readyState === 'open') {
-                this.sendStunAllocateOnOpen(conn, conn.relayInfo)
+                this.sendStunAllocateOnOpen(conn)
                 this.logger.debug('sctp subscriptions resent', { connectionId: conn.id })
             }
         }
@@ -376,7 +482,7 @@ export class WaSctpRelay {
      * while the rest of the batch is still invisible, and the call would be
      * declared dead with relays nobody had touched yet.
      */
-    private registerConnection(relayInfo: RelayInfo): Connection {
+    private registerConnection(relayInfo: RelayInfo, generation: number): Connection {
         const connectionId = this.makeConnectionId(
             relayInfo.ip,
             relayInfo.port,
@@ -385,7 +491,9 @@ export class WaSctpRelay {
 
         this.logger.debug('sctp connecting to relay', {
             connectionId,
-            relayName: relayInfo.name
+            relayName: relayInfo.name,
+            transport: relayInfo.transport ?? 'webrtc',
+            generation
         })
 
         const conn: Connection = {
@@ -408,6 +516,7 @@ export class WaSctpRelay {
             localUfrag: '',
             stableRoutingConnId: 0n,
             stunTransactionId: createStunTransactionId(),
+            generation,
             stats: { sentPackets: 0, receivedPackets: 0, sentBytes: 0, receivedBytes: 0 }
         }
 
@@ -438,9 +547,9 @@ export class WaSctpRelay {
          * 1761 uplink packets and forward not one packet of the peer's stream
          * back. The raw transport is proven against the relays that already
          * work over WebRTC, which is where it changes nothing, so nothing
-         * selects it on its own.
+         * selects it on its own: `rawUdpLegs` and the relay's `transport` do.
          */
-        if (this.createRawUdpLeg) {
+        if (relayInfo.transport === 'raw-udp' && this.createRawUdpLeg) {
             this.openRawUdpLeg(conn, relayInfo, this.createRawUdpLeg)
             return conn
         }
@@ -607,7 +716,7 @@ export class WaSctpRelay {
                     conn.connectionTimeout = null
                 }
 
-                this.sendStunAllocateOnOpen(conn, relayInfo)
+                this.sendStunAllocateOnOpen(conn)
                 this.armAnswerFallback(conn)
 
                 this.startKeepalive(connectionId, conn)
@@ -750,15 +859,30 @@ export class WaSctpRelay {
             port,
             reason
         })
-        return this.registerConnection(relayInfo)
+        return this.registerConnection(relayInfo, conn.generation)
     }
 
-    /** Whether the configured relay `relayKey` already has a leg, on either port. */
-    private hasLegFor(relayKey: string): boolean {
+    /**
+     * A leg of an older generation at `relayKey`'s address under another auth token id, which
+     * a newer generation re-issued; `null` when there is none or the batch still names it.
+     */
+    private olderLegAtSameAddress(relayKey: string, generation: number): Connection | null {
+        const address = relayAddressOf(relayKey)
         for (const conn of this.connections.values()) {
-            if (conn.relayInfo.id === relayKey) return true
+            const key = conn.relayInfo.id
+            if (conn.generation >= generation || key === relayKey || this.relayMap.has(key))
+                continue
+            if (relayAddressOf(key) === address) return conn
         }
-        return false
+        return null
+    }
+
+    /** The leg of the configured relay `relayKey`, on either port, if it has one. */
+    private legFor(relayKey: string): Connection | null {
+        for (const conn of this.connections.values()) {
+            if (conn.relayInfo.id === relayKey) return conn
+        }
+        return null
     }
 
     /**
@@ -853,18 +977,8 @@ export class WaSctpRelay {
                     port: relayInfo.port
                 })
 
-                this.sendRawAllocate(conn, relayInfo, 'initial')
+                this.registerRawLeg(conn, 'initial')
                 this.armAnswerFallback(conn)
-                for (const delayMs of REGISTRATION_RETRY_DELAYS_MS) {
-                    /**
-                     * Unreferenced: a replay of a registration the relay has
-                     * most likely already taken is never a reason to hold the
-                     * process open on its own.
-                     */
-                    unrefTimer(
-                        setTimeout(() => this.sendRawAllocate(conn, relayInfo, 'retry'), delayMs)
-                    )
-                }
 
                 this.startKeepalive(connectionId, conn)
                 this.drainBuffer(connectionId)
@@ -912,8 +1026,9 @@ export class WaSctpRelay {
      * relay forwards to the address it last saw the client send from, so
      * allocating and then only listening receives nothing.
      */
-    private sendRawAllocate(conn: Connection, relayInfo: RelayInfo, label: string): boolean {
+    private sendRawAllocate(conn: Connection, label: string): boolean {
         if (!this.isConnOpen(conn)) return false
+        const relayInfo = conn.relayInfo
 
         if (!relayInfo.rawToken || relayInfo.rawToken.length === 0) {
             this.logger.debug('raw udp allocate skipped, no relay token', {
@@ -930,11 +1045,13 @@ export class WaSctpRelay {
             TEXT_ENCODER.encode(relayInfo.key),
             relayInfo.ip,
             relayInfo.port,
-            conn.stunTransactionId
+            conn.stunTransactionId,
+            this.rxSubscriptions
         )
 
         const sent = this.sendToChannel(conn, toArrayBuffer(allocate))
         if (sent) conn.allocateSentAt ??= this.now()
+        this.noteAllocateLayout(conn, allocate)
         this.logger.trace('raw udp allocate sent', {
             connectionId: conn.id,
             label,
@@ -944,12 +1061,26 @@ export class WaSctpRelay {
         return sent
     }
 
+    /** Sends a raw leg's allocate and the replays of its registration ladder. */
+    private registerRawLeg(conn: Connection, label: string): void {
+        this.sendRawAllocate(conn, label)
+        for (const delayMs of REGISTRATION_RETRY_DELAYS_MS) {
+            /**
+             * Unreferenced: a replay of a registration the relay has most likely already
+             * taken is never a reason to hold the process open on its own.
+             */
+            unrefTimer(setTimeout(() => this.sendRawAllocate(conn, 'retry'), delayMs))
+        }
+    }
+
     /**
-     * Builds the SSRC list an allocate carries, falling back to the single
-     * inbound and outbound SSRCs when the per-stream lists have not been
-     * handed over yet.
+     * Builds the `0x4024` an allocate carries: the layered descriptor once self layers are set,
+     * else the 1:1 list, falling back to the single inbound and outbound SSRCs when the
+     * per-stream lists have not been handed over yet.
      */
     private buildAllocateSsrcList(): Uint8Array {
+        if (this.selfLayers) return buildStreamDescriptor(this.selfLayers)
+
         const selfSsrcs = this.selfStreamSsrcs.length ? this.selfStreamSsrcs : [this.audioSsrc]
         const peerSsrcs = this.peerStreamSsrcs.length
             ? this.peerStreamSsrcs
@@ -960,23 +1091,27 @@ export class WaSctpRelay {
         return buildSSRCSubscriptionList(selfSsrcs, peerSsrcs, this.selfPid, this.peerPid)
     }
 
-    private sendStunAllocateOnOpen(conn: Connection, relayInfo: RelayInfo): void {
-        const connectionId = `${relayInfo.ip}:${relayInfo.port}`
-
-        const remoteUfrag = relayInfo.authToken || relayInfo.token
-        if (!remoteUfrag) {
-            this.logger.debug('stun registration skipped, no ufrag', { connectionId })
+    /** Runs a WebRTC leg's registration ladder; each send reads the leg's current credentials. */
+    private sendStunAllocateOnOpen(conn: Connection): void {
+        const opening = conn.relayInfo
+        if (!(opening.authToken || opening.token)) {
+            this.logger.debug('stun registration skipped, no ufrag', {
+                connectionId: `${opening.ip}:${opening.port}`
+            })
             return
         }
 
         const localUfrag = conn.localUfrag
-        const hmacKey = TEXT_ENCODER.encode(relayInfo.key)
         const transactionId = conn.stunTransactionId
 
         const sendRegistration = (label: string) => {
             if (!this.isConnOpen(conn)) {
                 return
             }
+            const relayInfo = conn.relayInfo
+            const connectionId = `${relayInfo.ip}:${relayInfo.port}`
+            const remoteUfrag = relayInfo.authToken || relayInfo.token
+            const hmacKey = TEXT_ENCODER.encode(relayInfo.key)
 
             const selfSsrc = this.audioSsrc
             const peerSsrc = this.subscriptionSsrc
@@ -1057,11 +1192,13 @@ export class WaSctpRelay {
                     hmacKey,
                     relayInfo.ip,
                     relayInfo.port,
-                    transactionId
+                    transactionId,
+                    this.rxSubscriptions
                 )
                 if (this.sendToChannel(conn, toArrayBuffer(v4))) {
                     conn.allocateSentAt ??= this.now()
                 }
+                this.noteAllocateLayout(conn, v4)
                 this.logger.trace('stun v4 allocate sent', { connectionId, label, size: v4.length })
             }
         }
@@ -1115,6 +1252,8 @@ export class WaSctpRelay {
                     receivedBytes: conn.stats.receivedBytes,
                     pongs: this.pongCount,
                     rtpRecv: this.rtpRecvCount,
+                    warpRecv: this.warpRecvCount,
+                    warpOverruns: this.warpOverrunCount,
                     keepalives: keepaliveCount,
                     globalSend: this.sendCount,
                     bufferedAmount
@@ -1272,6 +1411,8 @@ export class WaSctpRelay {
     private pongCount = 0
     private rtpRecvCount = 0
     private unknownRecvCount = 0
+    private warpRecvCount = 0
+    private warpOverrunCount = 0
 
     private handleRelayMessage(data: Uint8Array, conn: Connection): void {
         conn.stats.receivedPackets++
@@ -1280,10 +1421,19 @@ export class WaSctpRelay {
 
         const firstByte = data[0]
         const twoBits = (firstByte & 0xc0) >> 6
+        /** A WARP frame has STUN's clear high bits, so it is told apart before the STUN branch. */
+        const framed = isWarpFramedPacket(data)
 
         const hexPreview = bytesToHex(data.subarray(0, Math.min(24, data.length)))
-        const pktType =
-            twoBits === 0 ? 'STUN' : twoBits === 2 ? 'RTP/SRTP' : twoBits === 1 ? 'DTLS' : 'UNKNOWN'
+        const pktType = framed
+            ? 'WARP'
+            : twoBits === 0
+              ? 'STUN'
+              : twoBits === 2
+                ? 'RTP/SRTP'
+                : twoBits === 1
+                  ? 'DTLS'
+                  : 'UNKNOWN'
 
         if (!conn.hasReceivedFirstPacket) {
             conn.hasReceivedFirstPacket = true
@@ -1294,7 +1444,8 @@ export class WaSctpRelay {
             this.logger.debug('relay leg answered', {
                 connectionId: conn.id,
                 port: conn.relayInfo.port,
-                rttMs
+                rttMs,
+                firstPacket: classifyPacket(data)
             })
             const name = conn.relayInfo.name
             if (name && !this.answeredRelayNames.has(name)) {
@@ -1307,7 +1458,7 @@ export class WaSctpRelay {
             conn.stats.receivedPackets <= 50 ||
             conn.stats.receivedPackets % 25 === 0 ||
             twoBits === 2 ||
-            (twoBits === 0 && data.length >= 20 && !this.isPong(data))
+            (twoBits === 0 && !framed && data.length >= 20 && !this.isPong(data))
 
         if (shouldLog) {
             this.logger.trace('sctp relay receive', {
@@ -1319,7 +1470,9 @@ export class WaSctpRelay {
             })
         }
 
-        if (twoBits === 0) {
+        if (framed) {
+            this.traceWarpFrame(data, conn)
+        } else if (twoBits === 0) {
             const stunInfo = parseStunResponse(data)
             if (stunInfo) {
                 if (stunInfo.method === 'wa-pong') {
@@ -1415,12 +1568,52 @@ export class WaSctpRelay {
         this.onReceive?.(data, conn.id)
     }
 
+    /** Logs an allocate's attribute types and lengths, never values, when its layout changes. */
+    private noteAllocateLayout(conn: Connection, allocate: Uint8Array): void {
+        const attributes = parseStunResponse(allocate)?.attributes
+        if (!attributes) return
+        const layout = attributes.map((attr) => `${attr.typeName}:${attr.length}`).join(',')
+        if (this.allocateLayouts.get(conn) === layout) return
+        this.allocateLayouts.set(conn, layout)
+        this.logger.debug('relay allocate layout', {
+            connectionId: conn.id,
+            generation: conn.generation,
+            size: allocate.length,
+            attributes: layout
+        })
+    }
+
+    private traceWarpFrame(data: Uint8Array, conn: Connection): void {
+        this.warpRecvCount++
+        const read = readWarpFrame(data)
+        if (read.kind === 'header_overruns') this.warpOverrunCount++
+        const rtp = read.kind === 'framed' ? read.rtp : null
+        this.logger.trace('warp frame received', {
+            count: this.warpRecvCount,
+            kind: read.kind,
+            headerLength: read.kind === 'not_framed' ? undefined : read.headerLength,
+            payloadType: rtp ? rtp[1] & 0x7f : undefined,
+            sequence: rtp ? (rtp[2] << 8) | rtp[3] : undefined,
+            ssrc: rtp ? `0x${readUInt32BE(rtp, 8).toString(16)}` : undefined,
+            size: data.length,
+            connectionId: conn.id
+        })
+    }
+
     private isPong(data: Uint8Array): boolean {
         if (data.length < 2) return false
         const msgType = (data[0] << 8) | data[1]
         return msgType === 0x0802
     }
 
+    /**
+     * Registers relays and dials each one with no leg. A `generation` above the current one
+     * (absent: the current one, 0 at first) moves the call onto this batch: it is dialled even
+     * with legs open and media is elected among its legs while one is open. Older legs stay up
+     * until a leg of the batch hears authenticated peer media, then they are closed for good;
+     * until then the peer is followed back to them if only they hear it. A batch below the
+     * current generation is stale and ignored.
+     */
     async configureRelays(
         relays: Array<{
             ip: string
@@ -1438,11 +1631,42 @@ export class WaSctpRelay {
             relayId: number
             name?: string
             authTokenId?: string
-        }>
+            /** `'raw-udp'`: this relay is only reachable over raw UDP; see `rawUdpLegs`. */
+            transport?: 'raw-udp'
+        }>,
+        options: { readonly generation?: number } = {}
     ): Promise<void> {
-        this.logger.debug('sctp configuring relays', { count: relays.length })
+        const generation = options.generation ?? this.generation
+        if (generation < this.generation) {
+            this.logger.debug('sctp stale relay generation ignored', {
+                generation,
+                current: this.generation,
+                count: relays.length
+            })
+            return
+        }
+        if (generation > this.generation) {
+            this.logger.debug('sctp relay generation advanced', {
+                from: this.generation,
+                to: generation,
+                count: relays.length
+            })
+            this.generation = generation
+            this.newestSendingSince = null
+            this.relayMap.clear()
+        }
 
+        this.logger.debug('sctp configuring relays', { count: relays.length, generation })
+
+        const undialable: string[] = []
         for (const relay of relays) {
+            const rawUdp = relay.transport === 'raw-udp' || this.rawUdpLegs === 'all'
+            if (relay.transport === 'raw-udp' && !this.createRawUdpLeg) {
+                undialable.push(relay.name || relay.ip)
+                continue
+            }
+            const transport = rawUdp && this.createRawUdpLeg ? 'raw-udp' : undefined
+
             const webClientPort = relay.port || CONFIG.TRUE_WEB_CLIENT_RELAY_PORT
 
             /**
@@ -1453,9 +1677,7 @@ export class WaSctpRelay {
              * the media there, so a raw leg keeps the advertised port and
              * inherits none of that rewriting.
              */
-            const port = this.createRawUdpLeg
-                ? (relay.originalPort ?? webClientPort)
-                : webClientPort
+            const port = transport ? (relay.originalPort ?? webClientPort) : webClientPort
 
             const connectionId = this.makeConnectionId(relay.ip, port, relay.authTokenId)
             const otherPort =
@@ -1475,19 +1697,51 @@ export class WaSctpRelay {
                 relayId: relay.relayId,
                 name: relay.name || 'unknown',
                 authTokenId: relay.authTokenId,
-                fallbackPort: otherPort !== port ? otherPort : undefined
+                fallbackPort: otherPort !== port ? otherPort : undefined,
+                transport
             }
 
             this.relayMap.set(connectionId, relayInfo)
+        }
+
+        if (undialable.length > 0) {
+            this.logger.warn('relays that need raw udp skipped, the host has no raw udp leg', {
+                skipped: undialable.length,
+                sample: undialable.slice(0, 3),
+                generation
+            })
         }
 
         this.logger.debug('sctp relays registered', { count: this.relayMap.size })
 
         const legs: Connection[] = []
         for (const [relayKey, relayInfo] of this.relayMap) {
-            if (!this.hasLegFor(relayKey)) {
-                legs.push(this.registerConnection(relayInfo))
+            const leg = this.legFor(relayKey) ?? this.olderLegAtSameAddress(relayKey, generation)
+            if (leg?.generation === generation) continue
+            if (leg && canReregisterInPlace(leg.relayInfo, relayInfo)) {
+                this.reregisterInPlace(leg, relayInfo, generation)
+                continue
             }
+            if (leg) {
+                const iceChanged = leg.relayInfo.transport === relayInfo.transport
+                const context = {
+                    connectionId: leg.id,
+                    generation: leg.generation,
+                    newest: generation,
+                    keyChanged: leg.relayInfo.key !== relayInfo.key,
+                    authTokenIdChanged: leg.relayInfo.authTokenId !== relayInfo.authTokenId
+                }
+                if (iceChanged) {
+                    this.logger.warn(
+                        'relay ice credentials changed at the same address, redialling',
+                        context
+                    )
+                } else {
+                    this.logger.debug('sctp relay leg replaced by a newer generation', context)
+                }
+                this.endLegQuietly(leg)
+            }
+            legs.push(this.registerConnection(relayInfo, generation))
         }
 
         await Promise.all(legs.map((conn) => this.startConnection(conn)))
@@ -1496,27 +1750,136 @@ export class WaSctpRelay {
     }
 
     /**
+     * Moves a leg onto a newer generation's credentials for the same address and registers it
+     * again over the same socket or data channel, keeping its 5-tuple, counters and return path.
+     */
+    private reregisterInPlace(conn: Connection, relayInfo: RelayInfo, generation: number): void {
+        const heldUfrag = conn.relayInfo.authToken || conn.relayInfo.token
+        const nextUfrag = relayInfo.authToken || relayInfo.token
+        if (conn.relayInfo.transport !== 'raw-udp' && heldUfrag !== nextUfrag) {
+            this.logger.info('relay ice credential rotated, kept the connection', {
+                connectionId: conn.id,
+                generation,
+                from: this.fingerprint(heldUfrag),
+                to: this.fingerprint(nextUfrag)
+            })
+        }
+        conn.relayInfo = {
+            ...relayInfo,
+            port: conn.relayInfo.port,
+            fallbackPort: conn.relayInfo.fallbackPort
+        }
+        conn.generation = generation
+        this.logger.debug('sctp relay leg re-registered in place with new credentials', {
+            connectionId: conn.id,
+            generation,
+            open: this.isConnOpen(conn)
+        })
+        if (!this.isConnOpen(conn)) return
+        if (conn.rawLeg) this.registerRawLeg(conn, 'reissue')
+        else this.sendStunAllocateOnOpen(conn)
+    }
+
+    /** A short one-way fingerprint that tells two credentials apart without showing either. */
+    private fingerprint(credential: string): string {
+        const digest = this.crypto.hmacSha1(
+            CREDENTIAL_FINGERPRINT_KEY,
+            TEXT_ENCODER.encode(credential)
+        )
+        return bytesToHex(digest.subarray(0, 4))
+    }
+
+    /**
+     * Takes a leg out of the call without announcing a loss or redialling it: its keepalive,
+     * registration replays and dial stop, and its socket or peer connection closes.
+     */
+    private endLegQuietly(conn: Connection): void {
+        this.connections.delete(conn.id)
+        this.releaseConnected(conn)
+        conn.state = ConnectionState.Closed
+        conn.abortDial?.()
+
+        this.stopKeepalive(conn.id)
+        if (conn.connectionTimeout) clearTimeout(conn.connectionTimeout)
+        closeQuietly(conn.channel, this.logger)
+        for (const ch of conn.incomingChannels) closeQuietly(ch, this.logger)
+        closeQuietly(conn.peerConnection, this.logger)
+        closeQuietly(conn.rawLeg, this.logger)
+    }
+
+    /**
+     * Closes every leg of an older generation once `conn`, an open leg of the newest one, heard
+     * authenticated peer media: an answered allocate is no proof. Once per generation.
+     */
+    private retireOlderGenerations(conn: Connection): void {
+        if (conn.generation !== this.generation || this.newestProved()) return
+        if (!this.isConnOpen(conn)) return
+        this.retiredBelow = this.generation
+
+        for (const old of [...this.connections.values()]) {
+            if (old.generation >= this.generation) continue
+            this.logger.info('retired by a newer relay generation', {
+                connectionId: old.id,
+                generation: old.generation,
+                newest: this.generation,
+                state: old.state,
+                proof: 'peer_media',
+                provedBy: conn.id
+            })
+            this.endLegQuietly(old)
+        }
+    }
+
+    /**
      * Sends on the one leg elected for media and reports whether it took it; with no leg open
      * nothing goes out. Allocates and keepalives keep reaching every leg, so any can take over.
      */
     sendMedia(data: ArrayBuffer): boolean {
         const leg = this.electMediaLeg()
-        return leg !== null && this.sendToChannel(leg, data)
+        if (leg === null || !this.sendToChannel(leg, data)) return false
+        if (this.newestSendingSince === null && leg.generation === this.generation) {
+            if (!this.newestProved()) this.newestSendingSince = this.now()
+        }
+        return true
+    }
+
+    /** Whether a leg of the newest generation heard the peer, or there is no older one. */
+    private newestProved(): boolean {
+        return this.retiredBelow >= this.generation
+    }
+
+    /**
+     * Whether the peer is followed back to an older generation: the newest one carried our media
+     * for `RX_ELECTION_HOLD_MS` and none of its legs heard the peer.
+     */
+    private followsPeerToOlder(now: number): boolean {
+        return (
+            !this.newestProved() &&
+            this.newestSendingSince !== null &&
+            now - this.newestSendingSince >= CONFIG.RX_ELECTION_HOLD_MS
+        )
     }
 
     /**
      * Records that the peer's media authenticated on a leg, and follows the peer there: when
      * our media leg has not heard the peer for `RX_ELECTION_HOLD_MS`, this leg takes it over.
+     * A leg of the newest generation takes over a leg of an older one at once; an older leg
+     * takes over a newest one only once {@link followsPeerToOlder}.
      */
     notePeerMedia(connectionId: string): void {
         const conn = this.connections.get(connectionId)
         if (!conn) return
         const now = this.now()
         conn.peerMediaAt = now
+        if (this.isConnOpen(conn)) this.retireOlderGenerations(conn)
 
         const current = this.mediaLeg
         if (conn === current || conn.unresponsive || !this.isConnOpen(conn)) return
+        const newest = conn.generation === this.generation
+        if (!newest && this.hasOpenLegOf(this.generation) && !this.followsPeerToOlder(now)) return
+        const leavesOlder = newest && current !== null && current.generation !== this.generation
         if (
+            !leavesOlder &&
             current &&
             this.isElectable(current) &&
             current.peerMediaAt !== null &&
@@ -1526,36 +1889,67 @@ export class WaSctpRelay {
         }
 
         this.mediaLeg = conn
-        this.logger.debug('sctp media leg follows the peer', {
-            connectionId,
-            relayId: conn.relayInfo.relayId,
-            replaces: current?.id
-        })
+        this.logger.debug(
+            newest
+                ? 'sctp media leg follows the peer'
+                : 'sctp media leg follows the peer to an older relay generation',
+            {
+                connectionId,
+                relayId: conn.relayInfo.relayId,
+                generation: conn.generation,
+                newest: this.generation,
+                replaces: current?.id
+            }
+        )
     }
 
     private isElectable(conn: Connection): boolean {
         return this.connections.get(conn.id) === conn && this.isConnOpen(conn) && !conn.unresponsive
     }
 
+    private hasOpenLegOf(generation: number): boolean {
+        for (const conn of this.connections.values()) {
+            if (conn.generation === generation && this.isConnOpen(conn)) return true
+        }
+        return false
+    }
+
     /**
      * Keeps the leg in use while it is open and answering pings, since the peer's stream
      * returns where our media leaves. Else the first such leg in dial order, off the dropped
-     * leg's relay, which never re-points; with none answering, any open leg.
+     * leg's relay, which never re-points; with none answering, any open leg. While a leg of
+     * the newest generation is open, only those legs are candidates.
      */
     private electMediaLeg(): Connection | null {
         const current = this.mediaLeg
-        if (current && this.isElectable(current)) return current
+        if (current && current.generation === this.generation && this.isElectable(current)) {
+            return current
+        }
+        if (current && this.isElectable(current) && current.peerMediaAt !== null) {
+            const now = this.now()
+            const hearing = now - current.peerMediaAt < CONFIG.RX_ELECTION_HOLD_MS
+            if (hearing && this.followsPeerToOlder(now)) return current
+        }
+
+        const scoped = this.generation > 0 && this.hasOpenLegOf(this.generation)
+        if (this.generation > 0) this.noteElectionScope(scoped)
+        if (current && !scoped && this.isElectable(current)) return current
 
         let elected: Connection | null = null
         let sameRelay: Connection | null = null
         let unresponsive: Connection | null = null
         for (const conn of this.connections.values()) {
             if (!this.isConnOpen(conn)) continue
+            if (scoped && conn.generation !== this.generation) continue
             if (conn.unresponsive) {
                 unresponsive ??= conn
                 continue
             }
-            if (current && conn.relayInfo.relayId === current.relayInfo.relayId) {
+            if (
+                current &&
+                conn.generation === current.generation &&
+                conn.relayInfo.relayId === current.relayInfo.relayId
+            ) {
                 sameRelay ??= conn
                 continue
             }
@@ -1569,12 +1963,50 @@ export class WaSctpRelay {
             this.logger.debug('sctp media leg elected', {
                 connectionId: elected.id,
                 relayId: elected.relayInfo.relayId,
+                generation: elected.generation,
                 replaces: current?.id
             })
         } else if (!elected && current) {
             this.logger.debug('sctp media leg lost, no open leg left', { connectionId: current.id })
         }
         return elected
+    }
+
+    /**
+     * Logs where media is elected once a newer generation exists, on change only: its legs,
+     * an older leg while they still dial, or an older leg because none of them is left (never
+     * once the older legs were retired).
+     */
+    private noteElectionScope(scoped: boolean): void {
+        let scope: ElectionScope = 'newest'
+        let dialling = 0
+        let open = 0
+        if (!scoped) {
+            for (const conn of this.connections.values()) {
+                if (this.isConnOpen(conn)) open++
+                else if (
+                    conn.generation === this.generation &&
+                    conn.state === ConnectionState.Connecting
+                ) {
+                    dialling++
+                }
+            }
+            scope = dialling > 0 ? 'awaiting' : 'older'
+        }
+        if (scope === this.electionScope || (scope === 'older' && open === 0)) return
+        this.electionScope = scope
+
+        const context = { generation: this.generation, dialling, openLegs: open }
+        if (scope === 'older') {
+            this.logger.warn(
+                'no leg of the newest relays is open, media falls back to older legs',
+                context
+            )
+        } else if (scope === 'awaiting') {
+            this.logger.debug('newest relays still dialling, media stays on older legs', context)
+        } else {
+            this.logger.debug('media elected among the newest relays', context)
+        }
     }
 
     /**
@@ -1630,6 +2062,10 @@ export class WaSctpRelay {
 
         this.relayMap.clear()
         this.answeredRelayNames.clear()
+        this.generation = 0
+        this.retiredBelow = 0
+        this.newestSendingSince = null
+        this.electionScope = 'newest'
         this.stats.connected = 0
         this.audioSsrc = 0
         this.subscriptionSsrc = 0
@@ -1637,11 +2073,15 @@ export class WaSctpRelay {
         this.peerStreamSsrcs = []
         this.selfPid = 0
         this.peerPid = 0
+        this.selfLayers = null
+        this.rxSubscriptions = null
         this.mediaLeg = null
         this.pingIntervalMs = CONFIG.PING_SETUP_INTERVAL_MS
         this.pongCount = 0
         this.rtpRecvCount = 0
         this.unknownRecvCount = 0
+        this.warpRecvCount = 0
+        this.warpOverrunCount = 0
         this.sendCount = 0
 
         this.logger.debug('sctp all connections cleaned')

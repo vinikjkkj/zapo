@@ -187,6 +187,16 @@ interface MutableReception {
 }
 
 /**
+ * The SSRC a compound RTCP packet's opening sender report describes, or `null` when it does not
+ * open with one: in a group call it names the sender whose reception tracker the report feeds.
+ */
+export function senderReportSourceSsrc(rtcp: Uint8Array): number | null {
+    if (rtcp.length < SR_REPORT_BLOCK_OFFSET) return null
+    if ((rtcp[0] & 0xc0) !== 0x80 || rtcp[1] !== PT_SENDER_REPORT) return null
+    return readUInt32BE(rtcp, 4)
+}
+
+/**
  * Reception statistics of one inbound RTP stream, kept so the sender report of
  * the matching outbound stream can carry a real report block.
  *
@@ -789,6 +799,8 @@ const REMB_FCI_LENGTH = 12
 const REMB_BAND_OFFSET = 16
 /** Where the listed SSRC starts inside the packet. */
 const REMB_SSRC_OFFSET = 20
+/** Sources one REMB lists: the count is one byte. */
+const REMB_MAX_SSRCS = 0xff
 
 const MS_PER_SECOND = 1000
 const BITS_PER_OCTET = 8
@@ -988,22 +1000,31 @@ function encodeRembBitrate(bitsPerSecond: number): number {
  *
  * The header media SSRC stays at zero, as in the Full Intra Request: the source
  * the estimate refers to is the one listed in the FCI, and it is `mediaSsrc`,
- * the peer's video or audio SSRC this endpoint is receiving.
+ * the peer's video or audio SSRC this endpoint is receiving. A list names several
+ * sources the one bitrate covers together, at most 255.
  */
 export function buildReceiverEstimatedMaxBitrate(
     senderSsrc: number,
-    mediaSsrc: number,
+    mediaSsrc: number | readonly number[],
     bitsPerSecond: number
 ): Uint8Array {
+    const list = typeof mediaSsrc === 'number' ? null : mediaSsrc
+    const count = list ? Math.min(list.length, REMB_MAX_SSRCS) : 1
     const packet = buildPayloadSpecificFeedback(
         FMT_RECEIVER_ESTIMATED_MAX_BITRATE,
         senderSsrc,
         0,
-        REMB_FCI_LENGTH
+        REMB_FCI_LENGTH + (count - 1) * 4
     )
     writeUInt32BE(packet, REMB_IDENTIFIER, 12)
-    const band = ((1 << REMB_SSRC_COUNT_SHIFT) | encodeRembBitrate(bitsPerSecond)) >>> 0
+    const band = ((count << REMB_SSRC_COUNT_SHIFT) | encodeRembBitrate(bitsPerSecond)) >>> 0
     writeUInt32BE(packet, band, REMB_BAND_OFFSET)
-    writeUInt32BE(packet, mediaSsrc, REMB_SSRC_OFFSET)
+    for (let index = 0; index < count; index++) {
+        writeUInt32BE(
+            packet,
+            list ? list[index] : (mediaSsrc as number),
+            REMB_SSRC_OFFSET + index * 4
+        )
+    }
     return packet
 }

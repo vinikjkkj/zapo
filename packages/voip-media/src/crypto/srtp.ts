@@ -9,9 +9,10 @@ const SRTP_REPLAY_WINDOW = 64n
 const SRTP_INDEX_MASK = (1n << 64n) - 1n
 
 /**
- * Upper bound on the number of per-SSRC receive contexts an {@link SrtpSession}
+ * Default upper bound on the number of per-SSRC receive contexts an {@link SrtpSession}
  * or {@link SrtcpSession} keeps at once. Past this bound, the oldest tracked
- * SSRC is evicted to admit a new one.
+ * SSRC is evicted to admit a new one. Each session counts on its own and can be
+ * resized with `setMaxRecvContexts`.
  */
 export const SRTP_MAX_RECV_CONTEXTS = 32
 
@@ -241,7 +242,6 @@ export class SrtpContext {
 }
 
 export class SrtpSession {
-    private static readonly MAX_RECV_CONTEXTS = SRTP_MAX_RECV_CONTEXTS
     private readonly crypto: WaMediaCrypto
     private readonly sendKey: SrtpKeyingMaterial
     private readonly recvKey: SrtpKeyingMaterial
@@ -249,6 +249,9 @@ export class SrtpSession {
     private readonly recvAuthLen?: number
     private readonly sendContexts = new Map<number, SrtpContext>()
     private readonly recvContexts = new Map<number, SrtpContext>()
+    /** The material each entry of `recvContexts` was built from, under the same key. */
+    private readonly recvKeyings = new Map<number, SrtpKeyingMaterial>()
+    private maxRecv = SRTP_MAX_RECV_CONTEXTS
     private sendAuthKeying: SrtpKeyingMaterial | null = null
 
     constructor(
@@ -284,15 +287,58 @@ export class SrtpSession {
         if (!ctx) {
             ctx = new SrtpContext(this.crypto, this.recvKey, this.recvAuthLen)
             const packet = ctx.unprotect(data)
-            setBoundedMapEntry(this.recvContexts, header.ssrc, ctx, SrtpSession.MAX_RECV_CONTEXTS)
+            this.admitRecvContext(header.ssrc, ctx, this.recvKey)
             return packet
         }
         return ctx.unprotect(data)
     }
 
+    /**
+     * Keys the receive context of `ssrc` with `keying` instead of the session's own receive key.
+     * The same material again keeps the context, its ROC and replay window; other material
+     * replaces it. Returns whether a new context was installed.
+     */
+    setRecvKeying(ssrc: number, keying: SrtpKeyingMaterial): boolean {
+        const ctx = this.recvContexts.get(ssrc)
+        const held = this.recvKeyings.get(ssrc)
+        if (ctx && held && sameKeying(held, keying)) {
+            this.admitRecvContext(ssrc, ctx, held)
+            return false
+        }
+        this.admitRecvContext(ssrc, new SrtpContext(this.crypto, keying, this.recvAuthLen), keying)
+        return true
+    }
+
+    /** Drops the receive context of `ssrc`; a later packet on it is keyed lazily again. */
+    deleteRecvContext(ssrc: number): boolean {
+        this.recvKeyings.delete(ssrc)
+        return this.recvContexts.delete(ssrc)
+    }
+
+    get recvContextCount(): number {
+        return this.recvContexts.size
+    }
+
+    get maxRecvContexts(): number {
+        return this.maxRecv
+    }
+
+    /** Resizes the receive-context bound; shrinking evicts the oldest contexts past it. */
+    setMaxRecvContexts(max: number): void {
+        this.maxRecv = checkMaxRecvContexts(max)
+        trimBoundedContexts(this.recvContexts, this.recvKeyings, this.maxRecv)
+    }
+
     setSendAuthKeying(keying: SrtpKeyingMaterial): void {
         this.sendAuthKeying = keying
         for (const ctx of this.sendContexts.values()) ctx.setAuthKeying(keying)
+    }
+
+    private admitRecvContext(ssrc: number, ctx: SrtpContext, keying: SrtpKeyingMaterial): void {
+        this.recvKeyings.set(ssrc, keying)
+        setBoundedMapEntry(this.recvContexts, ssrc, ctx, this.maxRecv, (evicted) =>
+            this.recvKeyings.delete(evicted)
+        )
     }
 }
 
@@ -487,11 +533,13 @@ export class SrtcpContext {
  * way {@link SrtpSession} already does per-SSRC for RTP.
  */
 export class SrtcpSession {
-    private static readonly MAX_RECV_CONTEXTS = SRTP_MAX_RECV_CONTEXTS
     private readonly crypto: WaMediaCrypto
     private readonly keying: SrtpKeyingMaterial
     private readonly authTagLen: number
     private readonly contexts = new Map<number, SrtcpContext>()
+    /** The material each entry of `contexts` was built from, under the same key. */
+    private readonly keyings = new Map<number, SrtpKeyingMaterial>()
+    private maxRecv = SRTP_MAX_RECV_CONTEXTS
 
     constructor(
         crypto: WaMediaCrypto,
@@ -531,10 +579,84 @@ export class SrtcpSession {
         if (!ctx) {
             ctx = new SrtcpContext(this.crypto, this.keying, this.authTagLen)
             const packet = ctx.unprotect(data)
-            setBoundedMapEntry(this.contexts, ssrc, ctx, SrtcpSession.MAX_RECV_CONTEXTS)
+            this.admitContext(ssrc, ctx, this.keying)
             return packet
         }
         return ctx.unprotect(data)
+    }
+
+    /**
+     * Keys the context of sender `ssrc` with `keying` instead of the session's own. The same
+     * material again keeps the context and its replay window; other material replaces it.
+     * Returns whether a new context was installed.
+     */
+    setRecvKeying(ssrc: number, keying: SrtpKeyingMaterial): boolean {
+        const ctx = this.contexts.get(ssrc)
+        const held = this.keyings.get(ssrc)
+        if (ctx && held && sameKeying(held, keying)) {
+            this.admitContext(ssrc, ctx, held)
+            return false
+        }
+        this.admitContext(ssrc, new SrtcpContext(this.crypto, keying, this.authTagLen), keying)
+        return true
+    }
+
+    /** Drops the context of sender `ssrc`; a later packet on it is keyed lazily again. */
+    deleteRecvContext(ssrc: number): boolean {
+        this.keyings.delete(ssrc)
+        return this.contexts.delete(ssrc)
+    }
+
+    get recvContextCount(): number {
+        return this.contexts.size
+    }
+
+    get maxRecvContexts(): number {
+        return this.maxRecv
+    }
+
+    /** Resizes the context bound; shrinking evicts the oldest contexts past it. */
+    setMaxRecvContexts(max: number): void {
+        this.maxRecv = checkMaxRecvContexts(max)
+        trimBoundedContexts(this.contexts, this.keyings, this.maxRecv)
+    }
+
+    private admitContext(ssrc: number, ctx: SrtcpContext, keying: SrtpKeyingMaterial): void {
+        this.keyings.set(ssrc, keying)
+        setBoundedMapEntry(this.contexts, ssrc, ctx, this.maxRecv, (evicted) =>
+            this.keyings.delete(evicted)
+        )
+    }
+}
+
+function sameKeying(a: SrtpKeyingMaterial, b: SrtpKeyingMaterial): boolean {
+    return a === b || (sameBytes(a.masterKey, b.masterKey) && sameBytes(a.masterSalt, b.masterSalt))
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false
+    }
+    return true
+}
+
+function checkMaxRecvContexts(max: number): number {
+    if (!Number.isInteger(max) || max < 1) {
+        throw new RangeError(`max receive contexts must be a positive integer, got ${max}`)
+    }
+    return max
+}
+
+function trimBoundedContexts<C>(
+    contexts: Map<number, C>,
+    keyings: Map<number, SrtpKeyingMaterial>,
+    max: number
+): void {
+    for (const ssrc of contexts.keys()) {
+        if (contexts.size <= max) return
+        contexts.delete(ssrc)
+        keyings.delete(ssrc)
     }
 }
 

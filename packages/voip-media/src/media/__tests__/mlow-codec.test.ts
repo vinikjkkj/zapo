@@ -229,6 +229,54 @@ test('MLowCodec does not re-emit frames when a rejected packet is followed by an
     }
 })
 
+test('decodeSequenced says what became of the packet itself', async () => {
+    const sender = await MLowCodec.create()
+    const receiver = await MLowCodec.create()
+    try {
+        const packet = sender.encode(voicedFrame())
+        const ignore = (): void => {}
+
+        assert.equal(receiver.decodeSequenced(1, packet, ignore), 'decoded')
+        assert.equal(receiver.decodeSequenced(1, packet, ignore), 'late')
+        assert.equal(receiver.decodeSequenced(2, new Uint8Array(0), ignore), 'empty')
+        assert.equal(
+            receiver.decodeSequenced(2, Uint8Array.of(0xff, 0xff, 0xff, 0xff), ignore),
+            'rejected'
+        )
+    } finally {
+        sender.destroy()
+        receiver.destroy()
+    }
+})
+
+/** A group call runs one decoder per remote sender; none of them needs an encoder. */
+test('a decode-only codec decodes and conceals but refuses to encode or pack', async () => {
+    const sender = await MLowCodec.create({ packetLossPercent: 20 })
+    const receiver = await MLowCodec.create({ decodeOnly: true, red: true })
+    try {
+        const first = sender.encode(voicedFrame())
+        sender.encode(voicedFrame(960))
+        const third = sender.encode(voicedFrame(2 * 960))
+        const frames: number[] = []
+        const collect = (pcm: Float32Array): void => {
+            frames.push(pcm.length)
+        }
+
+        assert.equal(receiver.decodeSequenced(1, first, collect), 'decoded')
+        assert.equal(receiver.decodeSequenced(3, third, collect), 'decoded')
+
+        assert.deepEqual(frames, [960, 960, 960], 'the lost packet is filled before the third')
+        assert.equal(receiver.redActive, false)
+        assert.throws(() => receiver.encode(voicedFrame()), /encoder not initialized/)
+        assert.throws(() => receiver.packFrames([first, third]), /repacketizer not initialized/)
+        receiver.setExpectedPacketLossPercent(30)
+        assert.equal(receiver.getExpectedPacketLossPercent(), 30)
+    } finally {
+        sender.destroy()
+        receiver.destroy()
+    }
+})
+
 test('MLowCodec does not conceal across a sequence number wrap', async () => {
     const codec = await MLowCodec.create()
     try {

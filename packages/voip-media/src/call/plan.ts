@@ -16,6 +16,8 @@ export interface WaCallMediaPlan {
     readonly keys: WaCallMediaKeys | null
     readonly settings: WaCallMediaSettings | null
     readonly video: WaCallMediaVideo
+    /** The remote senders of a group call; absent or `null` on a 1:1 call. */
+    readonly group?: WaCallMediaGroup | null
 }
 
 /** A change to the plan: the sections present replace the ones held, the rest stay. */
@@ -41,6 +43,8 @@ export interface WaCallMediaRelay {
     readonly relayId: number
     readonly name?: string
     readonly authTokenId?: string
+    /** `raw-udp` dials this endpoint as a raw UDP leg, whatever the host's default. */
+    readonly transport?: 'raw-udp'
 }
 
 export interface WaCallMediaRelays {
@@ -48,6 +52,12 @@ export interface WaCallMediaRelays {
     /** Participant ids the relay allocation carries; see `WaSctpRelay.setParticipantIds`. */
     readonly selfPid?: number
     readonly peerPid?: number
+    /**
+     * 0 or absent for the offer's relays. Higher than the one held means the server moved the
+     * call: they are dialled at once, even with legs open, and media is elected among this
+     * generation's legs while any is open. Older legs stay up, unelected.
+     */
+    readonly generation?: number
 }
 
 /**
@@ -89,6 +99,62 @@ export interface WaCallMediaSsrcs {
     readonly peerVideoStreams: readonly number[]
     /** The app-data streams of every device of the peer: inbound app data is told apart by these. */
     readonly peerAppData: readonly number[]
+    /**
+     * Our streams declared to the relay layer by layer. Set, it replaces the legacy
+     * declaration built from `selfAudio` and the pids; a 1:1 call leaves it out.
+     */
+    readonly selfLayers?: readonly WaCallMediaStreamLayer[]
+}
+
+/** One layer of our streams as the relay declaration lists it. */
+export interface WaCallMediaStreamLayer {
+    /** 0 audio, 1 video main, 2 video secondary, 5 app data. */
+    readonly layer: number
+    /** In position order: media, then FEC, then NACK. */
+    readonly ssrcs: readonly number[]
+}
+
+/** The remote senders of a group call, the whole set: a sender left out is torn down. */
+export interface WaCallMediaGroup {
+    readonly senders: readonly WaCallMediaSender[]
+    /**
+     * Video asked of the relay, by sender; absent or empty asks for none. A host without the
+     * `group-video/1` feature ignores it.
+     */
+    readonly videoSubscriptions?: readonly WaCallMediaVideoSubscription[]
+}
+
+/** One sender's video asked of the relay. */
+export interface WaCallMediaVideoSubscription {
+    readonly senderId: string
+    /** A {@link WA_VIDEO_QUALITY} value. */
+    readonly quality: number
+}
+
+/** Video quality a subscription asks for. */
+export const WA_VIDEO_QUALITY = Object.freeze({
+    Default: 0,
+    Low: 1,
+    Medium: 2,
+    High: 3,
+    Hd: 4
+} as const)
+
+/**
+ * One remote device sending into a group call.
+ *
+ * @sensitive `recv` decrypts this sender's media.
+ */
+export interface WaCallMediaSender {
+    /** Opaque and stable for the device; no jid crosses the plan. */
+    readonly id: string
+    /** The sender's main audio stream, which gets a decoder ahead of its first packet. */
+    readonly audio: number
+    /** Every stream of the sender, each keyed with `recv` for SRTP and SRTCP. */
+    readonly streams: readonly number[]
+    readonly recv: SrtpKeyingMaterial
+    /** The relay's id for the device, from the latest roster that carried one; 0 is an id. */
+    readonly pid?: number
 }
 
 /**

@@ -357,6 +357,11 @@ export interface MLowCodecOptions {
      * {@link MLowCodec.lastSecondary}. Turns DTX off on this encoder, as RED requires.
      */
     readonly red?: boolean | MLowRedOptions
+    /**
+     * Builds the decoder alone, for one inbound stream of a group call: no encoder and no
+     * repacketizer, so encoding and packing throw and the loss percent is only recorded.
+     */
+    readonly decodeOnly?: boolean
     readonly logger?: Logger
 }
 
@@ -382,6 +387,12 @@ export interface MLowCodecStats {
     /** Sub-frames and RED copies played in the place of a lost packet, carried by a later one. */
     readonly redRecovered: number
 }
+
+/**
+ * What {@link MLowCodec.decodeSequenced} did with the packet itself, apart from the gap before it:
+ * played (whole, in part, or found redundant), rejected by the decoder, late, or empty.
+ */
+export type MLowDecodeOutcome = 'decoded' | 'rejected' | 'late' | 'empty'
 
 /** The RED settings the options ask for, or `null` when RED stays off. */
 function resolveRed(red: MLowCodecOptions['red']): Required<MLowRedOptions> | null {
@@ -475,6 +486,9 @@ export class MLowCodec {
         try {
             if (opts.companionModel !== undefined) {
                 await this.attachCompanion(opts.companionModel)
+            }
+            if (opts.decodeOnly) {
+                return
             }
             this.encoder = await lib.createEncoder({
                 channels: MLOW_CHANNELS,
@@ -612,6 +626,8 @@ export class MLowCodec {
      * next packet's FEC copy to recover. Leaving the position further back would
      * hand that already-covered ground to the next gap too, emitting the same
      * frames twice.
+     *
+     * Returns what became of the packet itself; see {@link MLowDecodeOutcome}.
      */
     decodeSequenced(
         seq: number,
@@ -619,12 +635,12 @@ export class MLowCodec {
         onFrame: (pcm: Float32Array) => void,
         timestamp?: number,
         stream: 0 | 1 = 0
-    ): void {
+    ): MLowDecodeOutcome {
         if (!this.decoder) {
             throw new Error('[MLowCodec] decoder not initialized')
         }
         if (packet.length === 0) {
-            return
+            return 'empty'
         }
 
         const current = seq & 0xffff
@@ -639,7 +655,7 @@ export class MLowCodec {
                     lastSeq,
                     stream
                 })
-                return
+                return 'late'
             }
             missing = delta - 1
         }
@@ -660,6 +676,7 @@ export class MLowCodec {
                 : this.playWhole(packet, timestamp, missing, onFrame)
         }
         this.lastSeqs[stream] = played ? current : (current - 1 + SEQ_SPACE) % SEQ_SPACE
+        return played ? 'decoded' : 'rejected'
     }
 
     /**

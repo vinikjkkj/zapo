@@ -235,6 +235,51 @@ test('media coming back confirms the leg and keeps it alive', async () => {
     }
 })
 
+/** A WARP frame whose attribute bytes spell the STUN magic cookie at bytes 4 to 7. */
+const WARP_FRAMED_RTP = new Uint8Array([
+    0x09,
+    0x07,
+    0x02,
+    0x41,
+    0x21,
+    0x12,
+    0xa4,
+    0x42,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    ...RTP_PACKET
+])
+
+test('relay-framed media confirms the return path, cookie bytes or not', async () => {
+    const relay = await startFakeRelay()
+    const harness = createLeg(relay.port, SHORT_RETURN_PATH_TIMEOUT_MS)
+
+    try {
+        harness.leg.open()
+        assert.ok(await waitFor(harness.opened, 2_000), 'leg never opened')
+
+        harness.leg.send(RTP_PACKET)
+        await waitFor(() => relay.received.length >= 1, 2_000)
+        relay.reply(WARP_FRAMED_RTP)
+        assert.ok(await waitFor(() => harness.leg.hasReturnPath, 2_000), 'return path not seen')
+        assert.deepEqual(harness.inbound[0], WARP_FRAMED_RTP, 'delivered as it arrived')
+
+        await new Promise<void>((resolve) => setTimeout(resolve, SHORT_RETURN_PATH_TIMEOUT_MS * 3))
+        assert.deepEqual(harness.failures, [])
+    } finally {
+        harness.leg.close()
+        await relay.close()
+    }
+})
+
 /**
  * The allocate and the keepalive ask the relay for nothing it has to forward,
  * so they must not start the clock: a leg that registers and waits for the
@@ -430,6 +475,55 @@ test('a wall-clock step back does not hold a stalled leg open', async (t) => {
         assert.equal(harness.leg.isOpen, false)
     } finally {
         harness.leg.close()
+        await relay.close()
+    }
+})
+
+/** The rollback log carries how long a confirmed leg went quiet, and no idle time for one never confirmed. */
+test('the rollback reports idle time only for a leg that had confirmed its return path', async () => {
+    const relay = await startFakeRelay()
+    const rollbacks: Array<Readonly<Record<string, unknown>> | undefined> = []
+    const logger = createNoopLogger()
+    logger.warn = (_message, context) => {
+        rollbacks.push(context)
+    }
+    const legOptions = {
+        ip: '127.0.0.1',
+        port: relay.port,
+        logger,
+        returnPathTimeoutMs: SHORT_RETURN_PATH_TIMEOUT_MS,
+        stallTimeoutMs: SHORT_STALL_MS,
+        onOpen: () => undefined,
+        onMessage: () => undefined
+    }
+    const failures: string[] = []
+    const unconfirmed = new WaRawUdpLeg({ ...legOptions, onFailure: (r) => failures.push(r) })
+    const confirmed = new WaRawUdpLeg({ ...legOptions, onFailure: (r) => failures.push(r) })
+
+    try {
+        unconfirmed.open()
+        assert.ok(await waitFor(() => unconfirmed.isOpen, 2_000), 'leg never opened')
+        unconfirmed.send(RTP_PACKET)
+        assert.ok(await waitFor(() => failures.length === 1, 2_000), 'never rolled back')
+        assert.equal(rollbacks[0]?.confirmed, false)
+        assert.equal(rollbacks[0]?.idleMs, undefined, 'no inbound media means no idle time')
+
+        confirmed.open()
+        assert.ok(await waitFor(() => confirmed.isOpen, 2_000), 'leg never opened')
+        confirmed.send(RTP_PACKET)
+        await waitFor(() => relay.received.length >= 2, 2_000)
+        relay.reply(RTP_PACKET)
+        assert.ok(await waitFor(() => confirmed.hasReturnPath, 2_000), 'return path not seen')
+        assert.ok(await waitFor(() => failures.length === 2, 2_000), 'never rolled back')
+        const idleMs = rollbacks[1]?.idleMs
+        assert.equal(rollbacks[1]?.confirmed, true)
+        assert.ok(
+            typeof idleMs === 'number' && idleMs >= SHORT_STALL_MS && idleMs < 5_000,
+            `idle time ${String(idleMs)} is the silence since the last media`
+        )
+    } finally {
+        unconfirmed.close()
+        confirmed.close()
         await relay.close()
     }
 })

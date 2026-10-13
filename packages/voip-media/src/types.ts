@@ -30,6 +30,8 @@ export interface InboundVideoRtpPacket {
     readonly marker: boolean
     /** Decrypted RTP payload of the inbound H.264 stream, payload type 97. */
     readonly payload: Uint8Array
+    /** The group sender whose stream this is; absent on a 1:1 call or an unlisted stream. */
+    readonly senderId?: string
 }
 
 /** One H.264 access unit of the peer, reassembled from its RTP packets. */
@@ -45,6 +47,8 @@ export interface InboundVideoFrame {
     readonly keyFrame: boolean
     /** Complete Annex-B access unit. */
     readonly data: Uint8Array
+    /** The group sender whose stream this is; absent on a 1:1 call or an unlisted stream. */
+    readonly senderId?: string
 }
 
 export const SRTP_SEND_AUTH_TAG_LEN = 4

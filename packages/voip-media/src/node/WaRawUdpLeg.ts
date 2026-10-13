@@ -238,7 +238,7 @@ export class WaRawUdpLeg implements RawUdpLeg {
                 ip: this.options.ip,
                 port: this.options.port,
                 confirmed: this.returnPathSeen,
-                idleMs
+                idleMs: this.returnPathSeen ? Math.round(idleMs) : undefined
             })
             this.fail(RAW_UDP_NO_RETURN_PATH)
         }, timeoutMs)

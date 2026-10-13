@@ -12,6 +12,8 @@ import type { WaMediaCrypto } from '../crypto/primitives.js'
 import { randomBytes } from '../crypto/random.js'
 import { encodeProtoLengthDelimited, encodeProtoVarintField } from '../protobuf.js'
 
+import { isWarpFramedPacket, warpFrameHeaderLength } from './warp-frame.js'
+
 const STUN_MAGIC_COOKIE = 0x2112a442
 const STUN_FINGERPRINT_XOR = 0x5354554e
 
@@ -30,11 +32,12 @@ const ATTR_PRIORITY = 0x0024
  *
  * It is not a subscription attribute despite the `SENDER-SUBSCRIPTIONS` label
  * that circulated for it. The real subscription attributes are
- * `SENDER-SUBSCRIPTIONS` (0x4025) and `RECEIVER-SUBSCRIPTION` (0x4021), neither
- * of which this file emits. Treating 0x4000 as a droppable subscription blob
+ * `SENDER-SUBSCRIPTIONS` (0x4025, not emitted) and `RECEIVER-SUBSCRIPTION` (0x4021,
+ * see {@link buildRxSubscriptions}). Treating 0x4000 as a droppable subscription blob
  * and replacing it with a `USERNAME` cost every allocate on the wire.
  */
 const ATTR_RELAY_CREDENTIAL = 0x4000
+const ATTR_RX_SUBSCRIPTIONS = 0x4021
 const ATTR_SSRC_LIST = 0x4024
 const ATTR_ICE_CONTROLLING = 0x802a
 const ATTR_FINGERPRINT = 0x8028
@@ -173,6 +176,71 @@ export function buildSenderSubscriptions(ssrc: number): Uint8Array {
     return encodeProtoLengthDelimited(1, inner)
 }
 
+/** One stream this side sends: its layer and its SSRCs in payload order (media, FEC, NACK). */
+export interface StreamLayerSsrcs {
+    readonly layer: number
+    readonly ssrcs: readonly number[]
+}
+
+/** Field 2 of a descriptor entry, read off the SSRC's position in its stream. */
+const STREAM_PAYLOAD_TYPE_BY_POSITION = [0, 1, 2] as const
+
+/** The app-data layer has one stream, declared under payload type 4 rather than by position. */
+const STREAM_LAYER_APP_DATA = 5
+const APP_DATA_PAYLOAD_TYPES = [4] as const
+
+/**
+ * Builds the self-only `0x4024` stream descriptor: one `{1: layer, 2: payload type, 3: ssrc}`
+ * entry per SSRC, fields at their default omitted and field 4 never written. A zero SSRC drops
+ * its entry without shifting the rest, and positions past NACK are dropped (past the first on
+ * the app-data layer).
+ */
+export function buildStreamDescriptor(layers: readonly StreamLayerSsrcs[]): Uint8Array {
+    const entries: Uint8Array[] = []
+
+    for (const { layer, ssrcs } of layers) {
+        const payloadTypes =
+            layer === STREAM_LAYER_APP_DATA
+                ? APP_DATA_PAYLOAD_TYPES
+                : STREAM_PAYLOAD_TYPE_BY_POSITION
+        const count = Math.min(ssrcs.length, payloadTypes.length)
+        for (let position = 0; position < count; position++) {
+            const ssrc = ssrcs[position]
+            if (!ssrc) continue
+            const payloadType = payloadTypes[position]
+            const fields: Uint8Array[] = []
+            if (layer !== 0) fields.push(encodeProtoUint32Field(1, layer))
+            if (payloadType !== 0) fields.push(encodeProtoUint32Field(2, payloadType))
+            fields.push(encodeProtoUint32Field(3, ssrc))
+            entries.push(encodeProtoLengthDelimited(1, concatBytes(fields)))
+        }
+    }
+
+    return concatBytes(entries)
+}
+
+/** One participant whose video this side asks the relay for, at a `VideoQuality` value. */
+export interface RxVideoSubscription {
+    readonly pid: number
+    readonly quality: number
+}
+
+/**
+ * Builds the `0x4021` `RxSubscriptions`: one field-2 `{1: pid, 2: quality}` entry per
+ * participant, fields at their default omitted. Field 1 (`vid_rx_pids`) is never written.
+ */
+export function buildRxSubscriptions(infos: readonly RxVideoSubscription[]): Uint8Array {
+    const entries: Uint8Array[] = []
+    for (const { pid, quality } of infos) {
+        const fields: Uint8Array[] = []
+        if (pid !== 0) fields.push(encodeProtoUint32Field(1, pid))
+        if (quality !== 0) fields.push(encodeProtoUint32Field(2, quality))
+        entries.push(encodeProtoLengthDelimited(2, concatBytes(fields)))
+    }
+    return concatBytes(entries)
+}
+
+/** The 1:1 `0x4024`: every self and peer SSRC under its participant id, payload type 1. */
 export function buildSSRCSubscriptionList(
     selfSsrcs: number[],
     peerSsrcs: number[],
@@ -445,6 +513,8 @@ function encodeXorRelayedAddress(
  * bytes. `transactionId` is the id of the connection this allocate belongs to,
  * and it lands both in the header and in the IPv6 XOR key; leaving it out is
  * only correct outside a connection, where a one-off id is all there is.
+ * `rxSubscriptions`, when non-empty, goes in `0x4021` between the credential and
+ * the stream descriptor, the order the official allocate uses.
  */
 export function buildAllocateForRelay(
     crypto: WaMediaCrypto,
@@ -453,11 +523,15 @@ export function buildAllocateForRelay(
     hmacKey: Uint8Array,
     relayIp?: string,
     relayPort?: number,
-    transactionId: Uint8Array = createStunTransactionId()
+    transactionId: Uint8Array = createStunTransactionId(),
+    rxSubscriptions?: Uint8Array | null
 ): Uint8Array {
     const parts: Uint8Array[] = []
 
     parts.push(encodeAttribute(ATTR_RELAY_CREDENTIAL, relayCredential))
+    if (rxSubscriptions && rxSubscriptions.length > 0) {
+        parts.push(encodeAttribute(ATTR_RX_SUBSCRIPTIONS, rxSubscriptions))
+    }
     parts.push(encodeAttribute(ATTR_SSRC_LIST, ssrcList))
 
     if (relayIp && relayPort) {
@@ -547,9 +621,14 @@ export function buildWhatsAppPing(
     return header
 }
 
+/**
+ * Whether a datagram is STUN control. Decided by the magic cookie, or the cookieless ping and
+ * pong types; a WARP frame shares STUN's clear high bits and is never STUN, whatever its bytes.
+ */
 export function isStunPacket(data: Uint8Array): boolean {
     if (data.length < 2) return false
     if ((data[0] & 0xc0) !== 0) return false
+    if (isWarpFramedPacket(data)) return false
     const type = readUInt16BE(data, 0)
     if (type === WHATSAPP_PING || type === WHATSAPP_PONG) return true
     return data.length >= 8 && readUInt32BE(data, 4) === STUN_MAGIC_COOKIE
@@ -741,6 +820,10 @@ export function classifyPacket(data: Uint8Array): string {
 
     const firstByte = data[0]
     const twoBits = (firstByte & 0xc0) >> 6
+
+    if (isWarpFramedPacket(data)) {
+        return `WARP frame hdr=${warpFrameHeaderLength(data)} (${data.length}B)`
+    }
 
     if (twoBits === 0) {
         const info = parseStunResponse(data)

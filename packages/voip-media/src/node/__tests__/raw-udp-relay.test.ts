@@ -294,3 +294,130 @@ test('the raw transport stays off unless it is asked for', async () => {
         await onFake.close()
     }
 })
+
+/** A re-issued relay's credential: past the 256-character `ice-ufrag` ceiling, with no auth token. */
+const OVERSIZED_TOKEN = 'T'.repeat(260)
+
+function mediaCount(fake: FakeRelay): number {
+    return fake.received.filter((packet) => packet.length === RTP_PACKET.length).length
+}
+
+/**
+ * With raw legs only where required, a relay configured for raw UDP gets a socket on its
+ * advertised port while the relay beside it stays on WebRTC and opens none.
+ */
+test('a relay that requires raw udp rides it while the others stay on WebRTC', async () => {
+    const flaggedFake = await startFakeRelay()
+    const plainFake = await startFakeRelay()
+    let webrtcDials = 0
+    const relay = new WaSctpRelay({
+        crypto: nodeCrypto,
+        createPeerConnection: () => {
+            webrtcDials++
+            return Promise.reject(new Error('no WebRTC in this test'))
+        },
+        createRawUdpLeg: (options) => new WaRawUdpLeg(options),
+        rawUdpLegs: 'required'
+    })
+
+    try {
+        relay.setSsrc(0x11223344)
+        await relay.configureRelays([
+            {
+                ip: '127.0.0.1',
+                port: WEB_CLIENT_PORT,
+                originalPort: flaggedFake.port,
+                token: OVERSIZED_TOKEN,
+                rawToken: RELAY_TOKEN_BYTES,
+                key: 'relay-key',
+                relayId: 1,
+                name: 'reissued',
+                transport: 'raw-udp'
+            },
+            {
+                ip: '127.0.0.1',
+                port: WEB_CLIENT_PORT,
+                originalPort: plainFake.port,
+                token: 'relay-token',
+                rawToken: RELAY_TOKEN_BYTES,
+                key: 'relay-key',
+                relayId: 2,
+                name: 'offer',
+                authTokenId: 'offer'
+            }
+        ])
+
+        assert.ok(
+            await waitFor(() => flaggedFake.received.some(isAllocate), 3_000),
+            'the raw relay never registered'
+        )
+        const credential = readStunAttribute(
+            flaggedFake.received.find(isAllocate) ?? new Uint8Array(),
+            ATTR_RELAY_CREDENTIAL
+        )
+        assert.deepEqual([...(credential ?? [])], [...RELAY_TOKEN_BYTES])
+        assert.ok(webrtcDials >= 1, 'the offer relay was dialled over WebRTC')
+        assert.deepEqual(plainFake.received, [], 'the offer relay opened no raw socket')
+    } finally {
+        relay.cleanup()
+        await flaggedFake.close()
+        await plainFake.close()
+    }
+})
+
+function rawRelayConfig(advertisedPort: number, name: string) {
+    return {
+        ip: '127.0.0.1',
+        port: WEB_CLIENT_PORT,
+        originalPort: advertisedPort,
+        token: 'relay-token',
+        rawToken: RELAY_TOKEN_BYTES,
+        key: 'relay-key',
+        relayId: 1,
+        name,
+        authTokenId: name,
+        transport: 'raw-udp' as const
+    }
+}
+
+/** Media after a re-issue reaches the newest relay alone; the older relay keeps being probed. */
+test('media after a re-issue reaches the newest relay alone', async () => {
+    const older = await startFakeRelay()
+    const newest = await startFakeRelay()
+    const relay = createRawRelay()
+
+    try {
+        relay.setSsrc(0x11223344)
+        await relay.configureRelays([rawRelayConfig(older.port, 'older')])
+        assert.ok(await waitFor(() => older.received.some(isAllocate), 3_000), 'older never opened')
+        relay.sendMedia(RTP_PACKET.slice().buffer)
+        assert.ok(
+            await waitFor(() => mediaCount(older) === 1, 3_000),
+            'no media before the re-issue'
+        )
+
+        await relay.configureRelays([rawRelayConfig(newest.port, 'newest')], { generation: 1 })
+        assert.ok(
+            await waitFor(() => newest.received.some(isAllocate), 3_000),
+            'newest never opened'
+        )
+
+        for (let i = 0; i < 5; i++) relay.sendMedia(RTP_PACKET.slice().buffer)
+        assert.ok(
+            await waitFor(() => mediaCount(newest) >= 5, 3_000),
+            'the newest relay got no media'
+        )
+        assert.equal(mediaCount(older), 1, 'media kept reaching the relay the call left')
+
+        const probesBefore = older.received.length
+        relay.setMediaFlowing()
+        assert.ok(
+            await waitFor(() => older.received.slice(probesBefore).some(isPing), 3_000),
+            'the older leg stopped being probed'
+        )
+    } finally {
+        relay.cleanup()
+        await older.close()
+        await newest.close()
+    }
+})
