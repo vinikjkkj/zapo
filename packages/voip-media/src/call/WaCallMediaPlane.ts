@@ -963,8 +963,9 @@ export class WaCallMediaPlane {
 
     /**
      * Keys every SSRC of the group's senders on the receive sessions and drops the SSRCs no
-     * longer listed. Same material keeps a context, its ROC and replay window; the bound grows
-     * first so no planned context is evicted, and leaves room for streams keyed lazily.
+     * longer listed, with their video reassembly. Same material keeps a context, its ROC and
+     * replay window; the bound grows first so no planned context is evicted, and leaves room
+     * for streams keyed lazily.
      */
     private installGroupRecvKeys(): void {
         const srtp = this.srtpSession
@@ -981,6 +982,8 @@ export class WaCallMediaPlane {
             srtp.deleteRecvContext(ssrc)
             srtcp.deleteRecvContext(ssrc)
             this.groupRecvSsrcs.delete(ssrc)
+            this.inboundVideoStreams.get(ssrc)?.depacketizer.reset()
+            this.inboundVideoStreams.delete(ssrc)
         }
 
         const bound = wanted.size + SRTP_MAX_RECV_CONTEXTS

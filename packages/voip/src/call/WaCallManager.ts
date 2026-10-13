@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 
 import { createNoopLogger, type Logger } from 'zapo-js'
 import { isLidJid } from 'zapo-js/protocol'
-import { type BinaryNode, hasNodeChild } from 'zapo-js/transport'
+import { type BinaryNode, findNodeChild, hasNodeChild } from 'zapo-js/transport'
 import { resolvePositive, setBoundedMapEntry, toError, tryAsNumber } from 'zapo-js/util'
 
 import type {
@@ -102,6 +102,8 @@ export interface WaJoinableCall {
     voipSettings?: WaVoipSettings
     /** The newest `<relay>` seen for the call. */
     relayData?: RelayData
+    /** The `transaction-id` of the update that carried {@link relayData}, `null` when unknown. */
+    relayTransactionId: number | null
     /** The newest roster seen for the call, with its `transaction-id`. */
     participants?: readonly WaGroupParticipant[]
     rosterTransactionId: number | null
@@ -966,6 +968,7 @@ export class WaCallManager extends EventEmitter {
                 mediaType: info.mediaType,
                 voipSettings: info.voipSettings,
                 relayData: info.relayData,
+                relayTransactionId: null,
                 participants: info.groupComposition?.participants,
                 rosterTransactionId: info.groupComposition?.lastTransactionId ?? null
             },
@@ -981,8 +984,16 @@ export class WaCallManager extends EventEmitter {
         const call = this.joinableCalls.get(callId)
         if (!call) return false
 
+        const transactionId =
+            tryAsNumber(findNodeChild(inner, 'group_info')?.attrs?.['transaction-id']) ??
+            tryAsNumber(inner.attrs?.['transaction-id'])
         const relay = parseRelayFromAck(inner)
-        if (relay.relays.length > 0) {
+        const staleRelay =
+            transactionId !== null &&
+            call.relayTransactionId !== null &&
+            transactionId < call.relayTransactionId
+        if (relay.relays.length > 0 && !staleRelay) {
+            if (transactionId !== null) call.relayTransactionId = transactionId
             call.relayData = {
                 endpoints: relay.relays,
                 participantJids: relay.participantJids,
@@ -998,8 +1009,6 @@ export class WaCallManager extends EventEmitter {
         try {
             const roster = readGroupCallRoster(inner)
             if (roster.kind === 'roster') {
-                const transactionId =
-                    roster.info.transactionId ?? tryAsNumber(inner.attrs?.['transaction-id'])
                 const stale =
                     transactionId !== null &&
                     call.rosterTransactionId !== null &&

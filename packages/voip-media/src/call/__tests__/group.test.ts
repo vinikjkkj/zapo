@@ -1148,14 +1148,54 @@ test('the plan sizes the video streams reassembled at once', async (t) => {
 
     assert.equal(internals.maxVideoStreams, 24)
     assert.equal(internals.inboundVideoStreams.size, 12, 'more than the 1:1 bound of 8')
-    const oldest = [...internals.inboundVideoStreams.keys()].slice(0, 4)
     await plane.apply({ group: null })
     assert.equal(internals.maxVideoStreams, 8)
-    assert.equal(internals.inboundVideoStreams.size, 8, 'the streams past the lower bound go')
-    assert.ok(
-        oldest.every((ssrc) => !internals.inboundVideoStreams.has(ssrc)),
-        'oldest first'
+    assert.equal(internals.inboundVideoStreams.size, 0, 'the group streams leave with the plan')
+})
+
+/** Reassembly is evicted oldest first, so a departed sender's stream must not outlive the plan. */
+test('a sender that leaves the plan takes its video streams, and the active ones keep theirs', async (t) => {
+    const { plane, internals } = createPlane()
+    t.after(() => plane.stop())
+    const senders = Array.from({ length: 5 }, (_, index) => {
+        const base = 0x1000 * (index + 1)
+        return {
+            id: `s${index}`,
+            audio: base,
+            streams: [base, base + 3, base + 4],
+            recv: material(index + 10)
+        }
+    })
+    await plane.apply({ ssrcs: SSRCS, keys: keys(1), group: { senders } })
+    for (const sender of senders) {
+        internals.onRelayData(videoKeyFrame(sender, sender.audio + 3))
+        internals.onRelayData(videoKeyFrame(sender, sender.audio + 4))
+    }
+    assert.equal(internals.inboundVideoStreams.size, 10)
+
+    const staying = senders.filter((_, index) => index !== 2)
+    await plane.apply({ group: { senders: staying } })
+
+    assert.equal(internals.maxVideoStreams, 8)
+    assert.deepEqual(
+        [...internals.inboundVideoStreams.keys()],
+        staying.flatMap((sender) => [sender.audio + 3, sender.audio + 4]),
+        'the departed sender lost its streams, not the oldest active one'
     )
+})
+
+test('leaving group mode drops the group video streams and keeps the 1:1 ones', async (t) => {
+    const { plane, internals } = createPlane()
+    t.after(() => plane.stop())
+    await plane.apply({ ssrcs: SSRCS, keys: keys(1) })
+    internals.onRelayData(videoKeyFrame({ ...FULL_A, recv: keys(1).recv }, NOBODY))
+    await plane.apply({ ssrcs: FULL_SSRCS, group: group(FULL_A) })
+    internals.onRelayData(videoKeyFrame(FULL_A, A_VIDEO))
+    assert.equal(internals.inboundVideoStreams.size, 2)
+
+    await plane.apply({ group: null })
+
+    assert.deepEqual([...internals.inboundVideoStreams.keys()], [NOBODY])
 })
 
 test('a sender is heard on its first authenticated packet and silent after the silence', async (t) => {

@@ -1220,3 +1220,30 @@ test('a call key ahead of a roster-only group offer keys the call once the offer
     assert.equal(call?.isGroupCall, true)
     assert.deepEqual(call?.encryptionKey, CALL_KEY)
 })
+
+test('a joinable call keeps the relay of its newest update, and a join seeds that one', async () => {
+    const mock = createMock()
+    const manager = createManager(mock)
+    await manager.handleCallOffer(joinableGroupOffer('JR'), CREATOR_DEVICE)
+    await manager.rejectCall('JR')
+    const invited = { ...EVERYONE, '1111111111@lid': 'invited' }
+
+    await routeCallStanza(
+        manager,
+        mock.deps,
+        groupUpdate('JR', [relayNode('5'), rosterNode('30', invited)])
+    )
+    await routeCallStanza(
+        manager,
+        mock.deps,
+        groupUpdate('JR', [relayNode('4'), rosterNode('29', invited)])
+    )
+
+    const joinable = manager.getJoinableCall('JR')
+    assert.equal(joinable?.relayData?.selfPid, 5, 'the late, older relay is dropped')
+    assert.equal(joinable?.relayTransactionId, 30)
+    assert.equal(joinable?.rosterTransactionId, 30)
+
+    await manager.joinCall('JR')
+    assert.equal(manager.getCall('JR')?.relayData?.selfPid, 5)
+})
