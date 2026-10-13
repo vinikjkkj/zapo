@@ -8,6 +8,7 @@ import type { WaCallMediaGroup, WaCallMediaRelays } from '@zapo-js/voip-media'
 
 import { derivePerJidSrtpKey } from '../../crypto/encryption.js'
 import { generateSecureSsrc, WA_SSRC_SLOT } from '../../crypto/ssrc.js'
+import { WaVoipSettings } from '../../signaling/voip-settings.js'
 import {
     CallMediaType,
     CallState,
@@ -859,7 +860,11 @@ test('on a group call we placed, an accept connects once and sends nothing back'
 
     assert.equal(harness.call.stateData.state, CallState.Connecting)
     assert.equal(harness.link.plan.accepted, true)
-    assert.deepEqual(harness.sent, [], 'no terminate elsewhere, transport or receipt')
+    assert.deepEqual(
+        harness.sent.map((node) => [innerOf(node).tag, node.attrs.to]),
+        [['heartbeat', `${ID}@call`]],
+        'no terminate elsewhere, transport or receipt: only the heartbeat of a joined call'
+    )
     assert.equal(harness.link.sections('keys').length, 0)
 })
 
@@ -1614,32 +1619,60 @@ test('the app can choose whose video to ask for, and nobody is asked for in a ca
     assert.equal(lastGroup(pair.link)?.videoSubscriptions, undefined)
 })
 
-test('a sender unheard for 20 s is the one we would report, never when nobody is heard', async () => {
+test('a member unheard for 20 s is reported invisible once, never when nobody is heard', async () => {
     const harness = await activeGroupSession()
     await harness.session.applyCallKey(CALL_KEY, 1)
     const senderOf = (device: string) =>
         [...harness.call.groupSenders].find(([, jid]) => jid === device)?.[0] as string
     const sweep = () =>
         (harness.session as unknown as { sweepInvisibleSenders(): void }).sweepInvisibleSenders()
-    const reported = () =>
-        harness.logs
-            .filter(([message]) => message === 'would report peer invisible')
-            .map(([, context]) => context?.participantJid)
 
     // Nobody heard: our own path is down, nobody is accused.
     sweep()
     harness.clock.now += 25_000
     sweep()
-    assert.deepEqual(reported(), [])
+    assert.deepEqual(sentWithTag(harness, 'peer_state'), [])
 
+    // One device of PEER heard: PEER is on the call, whatever its other device does.
     harness.session.handleSenderMedia(senderOf(PEER_DEVICE), true)
     sweep()
     harness.clock.now += 21_000
     sweep()
     sweep()
-    assert.deepEqual(reported(), [PEER_SECOND_DEVICE, THIRD_KEY], 'each once')
+
+    const reports = sentWithTag(harness, 'peer_state')
+    assert.equal(reports.length, 1, 'once')
+    assert.equal(reports[0].attrs.to, `${ID}@call`)
+    const report = innerOf(reports[0])
+    assert.equal(report.attrs['call-id'], ID)
+    assert.match(report.attrs.t, /^\d+$/)
+    assert.deepEqual(
+        (report.content as BinaryNode[]).map((user) => user.attrs),
+        [{ state: 'invisible', jid: THIRD }]
+    )
     assert.deepEqual(harness.events, [['participant_media', PEER_DEVICE, true]])
-    assert.equal(harness.call.participantMedia.get(PEER_DEVICE)?.receiving, true)
+})
+
+test('a member heard again can be reported again later', async () => {
+    const harness = await activeGroupSession()
+    await harness.session.applyCallKey(CALL_KEY, 1)
+    const senderOf = (device: string) =>
+        [...harness.call.groupSenders].find(([, jid]) => jid === device)?.[0] as string
+    const sweep = () =>
+        (harness.session as unknown as { sweepInvisibleSenders(): void }).sweepInvisibleSenders()
+    harness.session.handleSenderMedia(senderOf(PEER_DEVICE), true)
+
+    sweep()
+    harness.clock.now += 21_000
+    sweep()
+    harness.session.handleSenderMedia(senderOf(THIRD_KEY), true)
+    harness.session.handleSenderMedia(senderOf(THIRD_KEY), false)
+    harness.clock.now += 19_000
+    sweep()
+    assert.equal(sentWithTag(harness, 'peer_state').length, 1, 'not yet: silent for 19 s')
+    harness.clock.now += 2_000
+    sweep()
+    assert.equal(sentWithTag(harness, 'peer_state').length, 2)
 })
 
 test('a re-rung group offer with no relay takes the one the ack of our accept brings', async () => {
@@ -1794,4 +1827,96 @@ test('a group call joined after its ring accepts to the call and takes its relay
     )
     assert.ok(harness.call.encryptionKey)
     assert.equal(harness.call.groupComposition?.lastTransactionId, 22)
+})
+
+test('a group call sends the call a heartbeat every 10 s from the accept, and stops at the end', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const harness = await createSession({ relayData: offerRelayData() })
+    const heartbeats = () => sentWithTag(harness, 'heartbeat')
+
+    await harness.session.acceptCall()
+    assert.equal(heartbeats().length, 1)
+    assert.equal(heartbeats()[0].attrs.to, `${ID}@call`)
+    assert.deepEqual(innerOf(heartbeats()[0]).attrs, { 'call-id': ID, 'call-creator': PEER_DEVICE })
+
+    t.mock.timers.tick(10_000)
+    t.mock.timers.tick(10_000)
+    assert.equal(heartbeats().length, 3)
+
+    // Media going active does not start a second timer.
+    harness.link.events.onActive()
+    t.mock.timers.tick(10_000)
+    assert.equal(heartbeats().length, 4)
+
+    await harness.session.leaveCall()
+    t.mock.timers.tick(30_000)
+    assert.equal(heartbeats().length, 4)
+})
+
+test('the heartbeat follows the server interval, and stops when the call is ended for us', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const harness = await createSession({ relayData: offerRelayData() })
+    harness.session.applyVoipSettings(
+        WaVoipSettings.fromJson(JSON.stringify({ options: { heartbeat_interval_s: '5' } }))
+    )
+
+    await harness.session.acceptCall()
+    t.mock.timers.tick(5_000)
+    assert.equal(sentWithTag(harness, 'heartbeat').length, 2)
+
+    // The manager ending the call here (user_invisible) runs the session's cleanup.
+    harness.session.cleanup()
+    t.mock.timers.tick(60_000)
+    assert.equal(sentWithTag(harness, 'heartbeat').length, 2)
+})
+
+test('a 1:1 call sends no heartbeat', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const harness = await createSession({ group: false, relayData: offerRelayData() })
+    harness.call.encryptionKey = CALL_KEY
+
+    await harness.session.acceptCall()
+    harness.link.events.onActive()
+    t.mock.timers.tick(30_000)
+
+    assert.deepEqual(sentWithTag(harness, 'heartbeat'), [])
+})
+
+test('somebody arriving gets our mute state again, and our hand only while it is up', async () => {
+    const harness = await activeGroupSession()
+    harness.session.setMute(true)
+    const sentBefore = harness.sent.length
+    const afterJoin = () =>
+        harness.sent
+            .slice(sentBefore)
+            .map((node) => [innerOf(node).tag, node.attrs.to, innerOf(node).attrs['mute-state']])
+
+    const fourWay = [...THREE_WAY, { jid: FOURTH, devices: [FOURTH_DEVICE], state: 'outgoing' }]
+    await harness.session.handleCallGroupUpdate(
+        groupUpdate({ transactionId: 5, roster: toRoster(fourWay) })
+    )
+    assert.deepEqual(afterJoin(), [['mute_v2', `${ID}@call`, '1']])
+
+    // The same roster again brings nobody.
+    await harness.session.handleCallGroupUpdate(
+        groupUpdate({ transactionId: 6, roster: toRoster(fourWay) })
+    )
+    assert.equal(afterJoin().length, 1)
+
+    // Hand up, and the newcomer connects: both go out again.
+    await harness.session.setHandRaised(true)
+    const connected = fourWay.map((entry) => ({ ...entry, state: CONNECTED }))
+    await harness.session.handleCallGroupUpdate(
+        groupUpdate({ transactionId: 7, roster: toRoster(connected) })
+    )
+    assert.deepEqual(
+        afterJoin().map(([tag, to]) => [tag, to]),
+        [
+            ['mute_v2', `${ID}@call`],
+            ['user_action', `${ID}@call`],
+            ['mute_v2', `${ID}@call`],
+            ['user_action', `${ID}@call`]
+        ]
+    )
+    assert.deepEqual(sentWithTag(harness, 'video'), [], 'video is not replayed')
 })

@@ -79,14 +79,18 @@ interface PendingCallKey {
 /** How many joinable calls this side is off are remembered at once. */
 const MAX_JOINABLE_CALLS = 16
 
+/** The `<terminate>` reason of the server taking a member whose media stopped off a group call. */
+const WA_USER_INVISIBLE_REASON = 'user_invisible'
+
 /** Why this side is off a joinable call that goes on. */
-export type WaJoinableCallCause = 'declined' | 'rung_out' | 'left'
+export type WaJoinableCallCause = 'declined' | 'rung_out' | 'left' | 'invisible'
 
 /**
- * A joinable group call that goes on without this side, kept for a later join and followed
- * through the `group_update`s that still arrive for it. Dropped on `group_call_ended`.
+ * A joinable group call that goes on without this side, kept for {@link WaCallManager.joinCall}
+ * and followed through the `group_update`s that still arrive for it. Dropped on
+ * `group_call_ended`.
  *
- * @internal no join is offered yet.
+ * @internal
  */
 export interface WaJoinableCall {
     readonly callId: string
@@ -841,7 +845,11 @@ export class WaCallManager extends EventEmitter {
               )
             : undefined
         if (action && this.isRingOut(session.info, node, action)) {
-            await this.endRungOut(session)
+            await this.endHere(session, EndCallReason.Timeout, 'rung_out')
+            return
+        }
+        if (action && this.isRemovedAsInvisible(session.info, node, action)) {
+            await this.endHere(session, EndCallReason.Invisible, 'invisible')
             return
         }
         if (session.info.joinable && !groupCallEnded) {
@@ -908,12 +916,28 @@ export class WaCallManager extends EventEmitter {
         )
     }
 
-    /** Ends our ring with nothing sent, and remembers the call for a later join. */
-    private async endRungOut(session: WaCallMediaSession): Promise<void> {
+    /**
+     * The server taking this side off a group call that goes on, its media no longer reaching
+     * the others: `user_invisible` from the call itself, which sends it to the removed member only.
+     */
+    private isRemovedAsInvisible(info: CallInfo, node: BinaryNode, action: BinaryNode): boolean {
+        return (
+            info.isGroupCall &&
+            action.attrs?.reason === WA_USER_INVISIBLE_REASON &&
+            node.attrs?.from === toCallServerJid(info.callId)
+        )
+    }
+
+    /** Ends the call here with nothing sent, the call going on, and remembers it for a join. */
+    private async endHere(
+        session: WaCallMediaSession,
+        reason: EndCallReason,
+        cause: WaJoinableCallCause
+    ): Promise<void> {
         const info = session.info
-        this.rememberJoinable(info, 'rung_out')
-        info.applyTransition({ type: 'terminated', reason: EndCallReason.Timeout })
-        this.logger.debug('group call rang out here, the call goes on', { callId: info.callId })
+        this.rememberJoinable(info, cause)
+        info.applyTransition({ type: 'terminated', reason })
+        this.logger.debug('group call ended here, the call goes on', { callId: info.callId, cause })
         this.emitEnded(info)
         this.emitState(info)
         session.cleanup()

@@ -1029,6 +1029,53 @@ export function buildMuteV2Stanza(
     }
 }
 
+/**
+ * Builds the `<call><heartbeat>` every connected member of a group call sends the call itself,
+ * every 10 s, whether it answered, placed or joined the call.
+ */
+export function buildHeartbeatStanza(callId: string, callCreator: string): BinaryNode {
+    return {
+        tag: 'call',
+        attrs: { to: toCallServerJid(callId), id: generateCallStanzaId() },
+        content: [{ tag: 'heartbeat', attrs: { 'call-id': callId, 'call-creator': callCreator } }]
+    }
+}
+
+/** The `state` a `<peer_state>` reports for a peer; only `Invisible` has been seen on the wire. */
+export const WA_PEER_STATE = Object.freeze({ Invisible: 'invisible', Visible: 'visible' } as const)
+
+/** One of the values of {@link WA_PEER_STATE}. */
+export type WaPeerState = (typeof WA_PEER_STATE)[keyof typeof WA_PEER_STATE]
+
+/**
+ * Builds the `<call><peer_state>` telling the server what this side sees of one group-call member,
+ * named by its account (a device suffix is dropped). `Invisible` is a member whose media stopped
+ * reaching us; the server takes it off the call. `t` is in epoch milliseconds.
+ */
+export function buildPeerStateStanza(
+    callId: string,
+    callCreator: string,
+    peerAccountJid: string,
+    state: WaPeerState,
+    nowMs: number = Date.now()
+): BinaryNode {
+    return {
+        tag: 'call',
+        attrs: { to: toCallServerJid(callId), id: generateCallStanzaId() },
+        content: [
+            {
+                tag: 'peer_state',
+                attrs: {
+                    'call-id': callId,
+                    'call-creator': callCreator,
+                    t: String(Math.floor(nowMs))
+                },
+                content: [{ tag: 'user', attrs: { state, jid: toUserJid(peerAccountJid) } }]
+            }
+        ]
+    }
+}
+
 /** `request-state` of a `<mute_v2>` asking its target to mute; the only value seen on the wire. */
 export const WA_MUTE_REQUEST_STATE = Object.freeze({ Mute: '1' } as const)
 

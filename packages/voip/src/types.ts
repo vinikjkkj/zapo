@@ -42,6 +42,11 @@ export enum EndCallReason {
     RelayLost = 'relay_lost',
     /** The server refused our offer; the peers were told `setup_failed`. */
     SetupFailed = 'setup_failed',
+    /**
+     * The server took this side off a group call that goes on, because the others stopped
+     * receiving its media (`user_invisible`). It can be joined again with `joinCall`.
+     */
+    Invisible = 'invisible',
     DoNotDisturb = 'do_not_disturb',
     Unknown = 'unknown',
     /** Another device of this account answered the incoming call. */

@@ -171,15 +171,21 @@ await client.voip.endCall(callId)
 
 No member can end a group call for everybody, the creator included: `leaveCall` and `endCall` both send the call itself one terminate with no reason, which takes this side off the call. The call ends for everybody when its last member leaves, and the server then sends `group_call_ended`, as with the official client. Either way the local call is over and `voip_call_ended` fires. A call that loses its media path leaves rather than ending it for the others. `leaveCall` throws on a 1:1 call.
 
-On our side, a participant's terminate takes only that participant off an established call; only `group_call_ended` ends it.
+On our side, a participant's terminate takes only that participant off an established call; only `group_call_ended`, or the server taking this side itself off (see below), ends it.
 
 When the last other member leaves, the server ends the call within a fraction of a second: there is no state where this side waits alone on the call.
+
+### Staying on the call
+
+Every connected member, this side included, sends the call a heartbeat every 10 seconds for as long as it is on it. Members also watch each other's media: once none of a member's media has reached this side for about 20 seconds, while others' still does, this side reports it to the server as invisible, and the official clients do the same after about 30. The server then takes that member off the call.
+
+When that member is this side, the call goes on without it: `voip_call_ended` fires with `EndCallReason.Invisible` and nothing is sent. The call can be joined again with `joinCall`.
 
 ### Ringing, re-ringing and joining
 
 When this side lets a group call ring unanswered, the server ends our ring after about 45 seconds while the call goes on for the others: `voip_call_ended` fires with `EndCallReason.Timeout` and nothing is sent. A participant ringing this side again arrives as a new `voip_call_incoming` for the same call id, with no relay until the server sends one.
 
-A group call this side declined, let ring out or left can be joined while it goes on, under the same call id:
+A group call this side declined, let ring out, left or was taken off as invisible can be joined while it goes on, under the same call id:
 
 ```ts
 import { EndCallReason } from '@zapo-js/voip'

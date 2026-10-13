@@ -8,9 +8,11 @@ import {
     buildAcceptStanza,
     buildEncRekeyReceiptStanza,
     buildEncRekeyStanza,
+    buildHeartbeatStanza,
     buildMuteRequestStanza,
     buildMuteV2Stanza,
     buildOfferStanza,
+    buildPeerStateStanza,
     buildPreacceptStanza,
     buildRaiseHandStanza,
     buildRejectStanza,
@@ -31,6 +33,7 @@ import {
     parseVideoStateNode,
     toCallServerJid,
     WA_MUTE_REQUEST_STATE,
+    WA_PEER_STATE,
     WA_VIDEO_STATE,
     withMlowRedCapability
 } from '../signaling.js'
@@ -944,4 +947,56 @@ test('callIdOfCallServerJid reads the call a call address names, and nothing els
     assert.equal(callIdOfCallServerJid('50062877036657:87@lid'), null)
     assert.equal(callIdOfCallServerJid('@call'), null)
     assert.equal(callIdOfCallServerJid(undefined), null)
+})
+
+/** What every connected member of a group call sends the call every 10 s. */
+test('the heartbeat goes to the call itself, naming it and nothing else', () => {
+    const callId = '0066C98AE4BB07A4C97A575B7D8A3ACA'
+    const node = buildHeartbeatStanza(callId, '50062877036657:87@lid')
+
+    assert.equal(node.attrs.to, `${callId}@call`)
+    assert.equal(typeof node.attrs.id, 'string')
+    assert.deepEqual(node.content, [
+        {
+            tag: 'heartbeat',
+            attrs: { 'call-id': callId, 'call-creator': '50062877036657:87@lid' }
+        }
+    ])
+})
+
+/** The report a group member sent about a peer whose media stopped, attribute by attribute. */
+test('a peer state report names the peer by its bare account, stamped in milliseconds', () => {
+    const callId = '005CD73BCDC821735473321395775697'
+    const node = buildPeerStateStanza(
+        callId,
+        '50062877036657:87@lid',
+        '76373846659268:3@lid',
+        WA_PEER_STATE.Invisible,
+        1791858101243
+    )
+
+    assert.equal(node.attrs.to, `${callId}@call`)
+    assert.deepEqual(node.content, [
+        {
+            tag: 'peer_state',
+            attrs: {
+                'call-id': callId,
+                'call-creator': '50062877036657:87@lid',
+                t: '1791858101243'
+            },
+            content: [{ tag: 'user', attrs: { state: 'invisible', jid: '76373846659268@lid' } }]
+        }
+    ])
+
+    const before = Date.now()
+    const visible = buildPeerStateStanza(
+        callId,
+        'c@lid',
+        '76373846659268@lid',
+        WA_PEER_STATE.Visible
+    )
+    const report = (visible.content as BinaryNode[])[0]
+    assert.equal((report.content as BinaryNode[])[0].attrs.state, 'visible')
+    const t = Number(report.attrs.t)
+    assert.ok(t >= before && t <= Date.now(), 'epoch milliseconds, not seconds')
 })

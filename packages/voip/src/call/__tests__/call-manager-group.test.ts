@@ -1126,3 +1126,80 @@ test('every share start and stop of a group call takes the next screen_share_id'
     ])
     assert.ok(sentInner(mock, 'screen_share').every((node) => node.attrs.to === 'S2@call'))
 })
+
+/** The server taking a silent member off the call, as only that member receives it. */
+function removedAsInvisible(callId: string): BinaryNode {
+    return terminate(callId, `${callId}@call`, {
+        'transaction-id': '28',
+        reason: 'user_invisible',
+        joinable: '1'
+    })
+}
+
+test('the server taking this side off as invisible ends the call here, ready to join again', async () => {
+    const mock = createMock()
+    const manager = createManager(mock)
+    const ended: CallInfo[] = []
+    manager.on('call_ended', (call) => ended.push(call))
+    const call = await activeGroupCall(mock, manager, 'IV')
+    const before = mock.sent.length
+
+    await routeCallStanza(manager, mock.deps, removedAsInvisible('IV'))
+
+    assert.equal(call.isEnded, true)
+    assert.equal(call.stateData.endReason, EndCallReason.Invisible)
+    assert.deepEqual(ended, [call])
+    assert.equal(manager.getCall('IV'), null)
+    assert.deepEqual(
+        mock.sent.slice(before).map((node) => node.tag),
+        ['ack'],
+        'nothing to tell the server: it already took us off'
+    )
+    assert.equal(manager.getJoinableCall('IV')?.cause, 'invisible')
+
+    await routeCallStanza(
+        manager,
+        mock.deps,
+        groupUpdate('IV', [rosterNode('28', { ...EVERYONE, '1111111111@lid': 'invited' })])
+    )
+    assert.equal(manager.getJoinableCall('IV')?.rosterTransactionId, 28)
+
+    await manager.joinCall('IV')
+    assert.deepEqual(
+        sentInner(mock, 'accept').map((node) => node.attrs.to),
+        ['IV@call', 'IV@call'],
+        'the first accept, then the one joining again'
+    )
+})
+
+test('user_invisible from a device is about somebody else and keeps the call', async () => {
+    const mock = createMock()
+    const manager = createManager(mock)
+    const call = await activeGroupCall(mock, manager, 'IW')
+
+    await routeCallStanza(
+        manager,
+        mock.deps,
+        terminate('IW', OTHER_DEVICE, { reason: 'user_invisible', joinable: '1' })
+    )
+
+    assert.equal(call.isEnded, false)
+    assert.equal(manager.getJoinableCall('IW'), null)
+})
+
+test('the server acks of heartbeats and peer reports reach their call and change nothing', async () => {
+    const mock = createMock()
+    const manager = createManager(mock)
+    const call = await activeGroupCall(mock, manager, 'HB')
+    const before = mock.sent.length
+
+    for (const type of ['heartbeat', 'peer_state']) {
+        await manager.handleCallAck({
+            tag: 'ack',
+            attrs: { class: 'call', type, from: 'HB@call', id: `${type}-1` }
+        })
+    }
+
+    assert.equal(call.stateData.state, CallState.Active)
+    assert.equal(mock.sent.length, before)
+})

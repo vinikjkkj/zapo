@@ -49,8 +49,10 @@ import {
     buildAcceptReceiptStanza,
     buildAcceptStanza,
     buildEncRekeyStanza,
+    buildHeartbeatStanza,
     buildMuteRequestStanza,
     buildMuteV2Stanza,
+    buildPeerStateStanza,
     buildPreacceptStanza,
     buildRaiseHandStanza,
     buildRejectStanza,
@@ -66,6 +68,7 @@ import {
     parseRaiseHandState,
     parseVideoStateNode,
     toCallServerJid,
+    WA_PEER_STATE,
     WA_VIDEO_STATE,
     WA_VIDEO_UPGRADE_RESULT,
     WA_VIDEO_UPGRADE_TIMEOUT_MS,
@@ -136,8 +139,17 @@ const MAX_TRACKED_PEER_APP_DATA_SSRCS = 32
 /** One entry per device the stanzas name: 32 connected participants, five devices each. */
 const MAX_TRACKED_PARTICIPANT_MEDIA = 160
 
-/** How long a connected sender may go unheard before we would report it invisible. */
+/**
+ * How long a connected sender may go unheard before we report it invisible. The media host
+ * counts its RTCP as heard, so a peer in DTX is not; one that was heard is reported this long
+ * after the host saw it fall silent.
+ */
 const PEER_INVISIBLE_AFTER_MS = 20_000
+
+/** Every connected member of a group call sends the call a `<heartbeat>` this often. */
+const HEARTBEAT_INTERVAL_MS = 10_000
+/** `<voip_settings>` key that overrides it, in seconds (assumed in the `options` section). */
+const HEARTBEAT_INTERVAL_KEY = 'heartbeat_interval_s'
 /** How often that is checked. */
 const PEER_INVISIBLE_SWEEP_MS = 5_000
 
@@ -397,6 +409,7 @@ export class WaCallMediaSession {
     private readonly senderWaitingSince = new Map<string, number>()
     private readonly invisibleReported = new Set<string>()
     private invisibleSweep: ReturnType<typeof setInterval> | null = null
+    private heartbeatTimer: ReturnType<typeof setInterval> | null = null
     private readonly now: () => number
     /** The relays a `group_update` moved the call to, published in place of the offer's. */
     private adoptedRelays: WaCallMediaRelays | null = null
@@ -668,6 +681,7 @@ export class WaCallMediaSession {
                 })
             }
         }
+        this.startHeartbeat()
 
         await this.publish({ relays: this.relaysSection(), accepted: true })
 
@@ -1211,6 +1225,7 @@ export class WaCallMediaSession {
             return
         }
         this.delegate.emitState(this.info)
+        this.startHeartbeat()
         void this.publish({ accepted: true })
     }
 
@@ -1895,7 +1910,11 @@ export class WaCallMediaSession {
 
         this.delegate.emitParticipantsChanged?.(this.info, outcome.diff)
         this.delegate.emitState(this.info)
-        if (joined) await this.publish({ accepted: true })
+        if (joined) {
+            this.startHeartbeat()
+            await this.publish({ accepted: true })
+        }
+        if (this.anyoneArrived(composition, outcome.composition)) this.rebroadcastOwnState()
 
         if (rekeyAccepted) await this.runGroupRekeyFanout(transactionId, listed)
     }
@@ -2525,7 +2544,7 @@ export class WaCallMediaSession {
         }
         if (receiving) {
             this.senderWaitingSince.delete(participantJid)
-            this.invisibleReported.delete(participantJid)
+            this.invisibleReported.delete(groupParticipantAccountKey(participantJid))
         } else {
             this.senderWaitingSince.set(participantJid, this.now())
         }
@@ -2533,9 +2552,10 @@ export class WaCallMediaSession {
     }
 
     /**
-     * Checks every connected sender for media: one unheard for {@link PEER_INVISIBLE_AFTER_MS}
-     * is logged as the peer we would report invisible. Nobody is when nobody at all is heard,
-     * which is our own path down rather than theirs.
+     * Checks every connected member for media and reports, once, each one none of whose
+     * devices was heard for {@link PEER_INVISIBLE_AFTER_MS}: `<peer_state>` naming it invisible,
+     * which the server acts on. Nobody is reported while nobody at all is heard, which is our
+     * own path down rather than theirs.
      */
     private sweepInvisibleSenders(): void {
         const media = this.info.participantMedia
@@ -2545,26 +2565,135 @@ export class WaCallMediaSession {
         const now = this.now()
         for (const participant of this.info.groupComposition?.participants ?? []) {
             if (participant.state !== WA_CALL_PARTICIPANT_STATE.Connected) continue
-            if (groupParticipantAccountKey(participant.jid) === selfKey) continue
+            const accountKey = groupParticipantAccountKey(participant.jid)
+            if (accountKey === selfKey || this.invisibleReported.has(accountKey)) continue
+
+            let silentMs = Infinity
             for (const deviceJid of participant.devices) {
                 const key = this.participantKey(deviceJid)
-                if (media.get(key)?.receiving === true) continue
+                if (media.get(key)?.receiving === true) {
+                    silentMs = -1
+                    break
+                }
                 const since = this.senderWaitingSince.get(key)
-                if (since === undefined) {
-                    this.senderWaitingSince.set(key, now)
-                    continue
-                }
-                if (now - since < PEER_INVISIBLE_AFTER_MS || this.invisibleReported.has(key)) {
-                    continue
-                }
-                this.invisibleReported.add(key)
-                this.logger.debug('would report peer invisible', {
-                    callId: this.info.callId,
-                    participantJid: key,
-                    silentMs: Math.round(now - since)
-                })
+                if (since === undefined) this.senderWaitingSince.set(key, now)
+                silentMs = Math.min(silentMs, since === undefined ? 0 : now - since)
             }
+            if (silentMs < PEER_INVISIBLE_AFTER_MS) continue
+
+            this.invisibleReported.add(accountKey)
+            this.reportPeerInvisible(participant.jid, silentMs)
         }
+    }
+
+    private reportPeerInvisible(peerJid: string, silentMs: number): void {
+        this.logger.debug('reporting a peer invisible', {
+            callId: this.info.callId,
+            peerJid,
+            silentMs: Math.round(silentMs)
+        })
+        const node = buildPeerStateStanza(
+            this.info.callId,
+            this.info.callCreator,
+            peerJid,
+            WA_PEER_STATE.Invisible
+        )
+        void this.deps.lowLevelCoordinator.sendNode(node).catch((err: unknown) => {
+            this.logger.warn('peer_state send failed', {
+                callId: this.info.callId,
+                message: toError(err).message
+            })
+        })
+    }
+
+    /**
+     * Sends the call a `<heartbeat>` now and every {@link HEARTBEAT_INTERVAL_MS} (or the
+     * server's `heartbeat_interval_s`) while this group call lasts. Idempotent; 1:1 calls have
+     * none.
+     */
+    private startHeartbeat(): void {
+        if (!this.isGroupCall || this.heartbeatTimer || this.info.isEnded) return
+        const seconds =
+            this.info.voipSettings?.getNumber(
+                VOIP_SETTINGS_OPTIONS_SECTION,
+                HEARTBEAT_INTERVAL_KEY,
+                0
+            ) ?? 0
+        const intervalMs = seconds > 0 ? seconds * 1000 : HEARTBEAT_INTERVAL_MS
+        this.sendHeartbeat()
+        this.heartbeatTimer = setInterval(() => this.sendHeartbeat(), intervalMs)
+        this.heartbeatTimer.unref?.()
+        this.logger.debug('group heartbeat started', { callId: this.info.callId, intervalMs })
+    }
+
+    private sendHeartbeat(): void {
+        const node = buildHeartbeatStanza(this.info.callId, this.info.callCreator)
+        void this.deps.lowLevelCoordinator.sendNode(node).catch((err: unknown) => {
+            this.logger.trace('heartbeat send failed', {
+                callId: this.info.callId,
+                message: toError(err).message
+            })
+        })
+    }
+
+    /** Whether a roster change brought somebody else in, or connected somebody already listed. */
+    private anyoneArrived(before: WaGroupComposition, after: WaGroupComposition): boolean {
+        const selfKey = this.selfAccountKey()
+        const connectedBefore = new Set(
+            before.participants
+                .filter((participant) => participant.state === WA_CALL_PARTICIPANT_STATE.Connected)
+                .map((participant) => groupParticipantAccountKey(participant.jid))
+        )
+        const listedBefore = new Set(
+            before.participants.map((participant) => groupParticipantAccountKey(participant.jid))
+        )
+        return after.participants.some((participant) => {
+            const key = groupParticipantAccountKey(participant.jid)
+            if (key === selfKey) return false
+            if (!listedBefore.has(key)) return true
+            return (
+                participant.state === WA_CALL_PARTICIPANT_STATE.Connected &&
+                !connectedBefore.has(key)
+            )
+        })
+    }
+
+    /**
+     * Re-announces our own state to the call when somebody arrives, since nothing else tells a
+     * newcomer: our mute state always, our hand only while it is up. Video is not replayed.
+     */
+    private rebroadcastOwnState(): void {
+        if (!this.info.isActive) return
+        const sends = [
+            buildMuteV2Stanza(
+                this.inCallTarget(),
+                this.info.callId,
+                this.info.callCreator,
+                this.info.stateData.audioMuted
+            )
+        ]
+        if (this.info.stateData.handRaised) {
+            sends.push(
+                buildRaiseHandStanza(
+                    this.inCallTarget(),
+                    this.info.callId,
+                    this.info.callCreator,
+                    true
+                )
+            )
+        }
+        for (const node of sends) {
+            void this.deps.lowLevelCoordinator.sendNode(node).catch((err: unknown) => {
+                this.logger.warn('state re-broadcast failed', {
+                    callId: this.info.callId,
+                    message: toError(err).message
+                })
+            })
+        }
+        this.logger.debug('own state re-broadcast to the call', {
+            callId: this.info.callId,
+            handRaised: this.info.stateData.handRaised
+        })
     }
 
     /**
@@ -2976,6 +3105,7 @@ export class WaCallMediaSession {
             this.info.applyTransition({ type: 'media_connected' })
             this.delegate.emitState(this.info)
             this.announceInitialMuteState()
+            this.startHeartbeat()
             if (this.isGroupCall && !this.invisibleSweep) {
                 this.invisibleSweep = setInterval(
                     () => this.sweepInvisibleSenders(),
@@ -3038,6 +3168,8 @@ export class WaCallMediaSession {
         this.acceptedByJid = null
         if (this.invisibleSweep) clearInterval(this.invisibleSweep)
         this.invisibleSweep = null
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+        this.heartbeatTimer = null
         if (this.videoSubscriptionTimer) clearTimeout(this.videoSubscriptionTimer)
         this.videoSubscriptionTimer = null
     }
