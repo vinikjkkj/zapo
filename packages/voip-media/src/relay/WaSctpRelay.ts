@@ -61,6 +61,11 @@ const CONFIG = {
     DOWNLINK_REDIAL_AFTER_MS: 5_000,
     /** Redials of stalled WebRTC legs per call. */
     DOWNLINK_MAX_REDIALS: 3,
+    /**
+     * How long a leg of an older generation must go without authenticated peer media before the
+     * proved newest generation retires it: each sender may be delivered from its own relay.
+     */
+    OLDER_LEG_QUIET_MS: 5_000,
     ICE_DISCONNECT_GRACE_MS: 4000,
     FIXED_FINGERPRINT:
         'sha-256 F9:CA:0C:98:A3:CC:71:D6:42:CE:5A:E2:53:D2:15:20:D3:1B:BA:D8:57:A4:F0:AF:BE:0B:FB:F3:6B:0C:A0:68'
@@ -282,8 +287,10 @@ export class WaSctpRelay {
     private relayMap = new Map<string, RelayInfo>()
     /** The newest relay generation; media is elected among its legs while one is open. */
     private generation = 0
-    /** Legs of generations below this one were retired; see {@link retireOlderGenerations}. */
+    /** The newest generation proved below this one; see {@link retireOlderGenerations}. */
     private retiredBelow = 0
+    /** Whether older legs hearing the peer outlived the proof; see {@link retireQuietOlderLegs}. */
+    private olderLegsHearing = false
     /**
      * When media first went out on a leg of the newest generation before any of its legs heard
      * the peer; `RX_ELECTION_HOLD_MS` after it, the peer is followed back to an older leg.
@@ -1626,9 +1633,9 @@ export class WaSctpRelay {
      * Registers relays and dials each one with no leg. A `generation` above the current one
      * (absent: the current one, 0 at first) moves the call onto this batch: it is dialled even
      * with legs open and media is elected among its legs while one is open. Older legs stay up
-     * until a leg of the batch hears authenticated peer media, then they are closed for good;
-     * until then the peer is followed back to them if only they hear it. A batch below the
-     * current generation is stale and ignored.
+     * until a leg of the batch hears authenticated peer media, then each is closed for good once
+     * it hears none; until then the peer is followed back to them if only they hear it. A batch
+     * below the current generation is stale and ignored.
      */
     async configureRelays(
         relays: Array<{
@@ -1668,6 +1675,7 @@ export class WaSctpRelay {
                 count: relays.length
             })
             this.generation = generation
+            this.olderLegsHearing = false
             this.newestSendingSince = null
             this.relayMap.clear()
         }
@@ -1824,26 +1832,46 @@ export class WaSctpRelay {
     }
 
     /**
-     * Closes every leg of an older generation once `conn`, an open leg of the newest one, heard
-     * authenticated peer media: an answered allocate is no proof. Once per generation.
+     * Proves the newest generation once `conn`, an open leg of it, heard authenticated peer media
+     * (an answered allocate is no proof), and retires the older legs not hearing the peer.
      */
     private retireOlderGenerations(conn: Connection): void {
         if (conn.generation !== this.generation || this.newestProved()) return
         if (!this.isConnOpen(conn)) return
         this.retiredBelow = this.generation
+        this.retireQuietOlderLegs(this.now(), conn.id)
+    }
 
+    /**
+     * Closes each older leg that has not heard authenticated peer media for `OLDER_LEG_QUIET_MS`;
+     * one still hearing a sender stays, receive-only, until it goes quiet.
+     */
+    private retireQuietOlderLegs(now: number, provedBy?: string): void {
+        let hearing = false
         for (const old of [...this.connections.values()]) {
             if (old.generation >= this.generation) continue
+            const quietMs = old.peerMediaAt === null ? null : Math.round(now - old.peerMediaAt)
+            if (quietMs !== null && quietMs < CONFIG.OLDER_LEG_QUIET_MS) {
+                hearing = true
+                continue
+            }
             this.logger.info('retired by a newer relay generation', {
                 connectionId: old.id,
                 generation: old.generation,
                 newest: this.generation,
                 state: old.state,
                 proof: 'peer_media',
-                provedBy: conn.id
+                provedBy,
+                quietMs
             })
             this.endLegQuietly(old)
         }
+        if (hearing && !this.olderLegsHearing) {
+            this.logger.debug('older relay legs kept while they hear the peer', {
+                newest: this.generation
+            })
+        }
+        this.olderLegsHearing = hearing
     }
 
     /**
@@ -1856,6 +1884,7 @@ export class WaSctpRelay {
         if (this.newestSendingSince === null && leg.generation === this.generation) {
             if (!this.newestProved()) this.newestSendingSince = this.now()
         }
+        if (this.olderLegsHearing) this.retireQuietOlderLegs(this.now())
         if (this.mediaFlowing) this.watchDownlink()
         return true
     }
@@ -1957,6 +1986,7 @@ export class WaSctpRelay {
         this.downlinkStalledSince = null
         this.downlinkReallocated = false
         if (this.isConnOpen(conn)) this.retireOlderGenerations(conn)
+        if (this.olderLegsHearing) this.retireQuietOlderLegs(now)
 
         const current = this.mediaLeg
         if (conn === current || conn.unresponsive || !this.isConnOpen(conn)) return
@@ -2149,6 +2179,7 @@ export class WaSctpRelay {
         this.answeredRelayNames.clear()
         this.generation = 0
         this.retiredBelow = 0
+        this.olderLegsHearing = false
         this.newestSendingSince = null
         this.mediaFlowing = false
         this.downlinkStalledSince = null

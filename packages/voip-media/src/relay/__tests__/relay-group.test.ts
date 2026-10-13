@@ -611,7 +611,7 @@ test('a newest generation that answers the allocate but hears no media retires n
     for (const ip of OFFER) assert.equal(harness.leg(ip).closed, false)
 })
 
-test('peer media arriving later on the newest generation retires the older one and takes the send', async (t) => {
+test('peer media arriving later on the newest generation takes the send, older legs retire once quiet', async (t) => {
     const harness = createHarness(t)
     await dialOffer(harness)
     await dialReissue(harness)
@@ -624,8 +624,48 @@ test('peer media arriving later on the newest generation retires the older one a
     harness.relay.notePeerMedia(idOf(REISSUE[1]))
 
     assert.equal(harness.sendMediaVia()?.ip, REISSUE[1])
+    assert.equal(harness.legsTo(OFFER[1])[0].closed, true, 'the leg that never heard the peer')
+    assert.equal(harness.legsTo(OFFER[0])[0].closed, false, 'heard the peer 1.5 s ago')
+
+    harness.setNow(5_500)
+    harness.sendMediaVia()
+    assert.equal(harness.legsTo(OFFER[0])[0].closed, true, 'retired once quiet for 5 s')
     assert.deepEqual(harness.infos, [RETIRED, RETIRED])
-    for (const ip of OFFER) assert.equal(harness.legsTo(ip)[0].closed, true, `${ip} retired`)
+})
+
+/** The P3 shape: one sender still delivered by an older relay while the newest delivers another. */
+test('an older leg still hearing another sender outlives the proof of the newest generation', async (t) => {
+    const harness = createHarness(t)
+    await dialOffer(harness)
+    await dialReissue(harness)
+    harness.relay.notePeerMedia(idOf(OFFER[1]))
+
+    harness.setNow(100)
+    harness.relay.notePeerMedia(idOf(REISSUE[0]))
+
+    assert.equal(harness.legsTo(OFFER[0])[0].closed, true, 'never heard anyone: retired')
+    assert.equal(harness.legsTo(OFFER[1])[0].closed, false, 'still delivering a sender: kept')
+    assert.equal(harness.sendMediaVia()?.ip, REISSUE[0], 'the send stays on the newest generation')
+})
+
+test('an older leg that keeps hearing its sender is kept receive-only for as long as it hears', async (t) => {
+    const harness = createHarness(t)
+    await dialOffer(harness)
+    await dialReissue(harness)
+    harness.relay.notePeerMedia(idOf(OFFER[1]))
+    harness.relay.notePeerMedia(idOf(REISSUE[0]))
+    const kept = harness.legsTo(OFFER[1])[0]
+
+    for (let ms = 0; ms <= 20_000; ms += 100) {
+        harness.setNow(ms)
+        harness.relay.notePeerMedia(idOf(OFFER[1]))
+        assert.equal(harness.sendMediaVia()?.ip, REISSUE[0], `the send stays newest at ${ms} ms`)
+    }
+    assert.equal(kept.closed, false)
+
+    harness.setNow(25_100)
+    harness.relay.notePeerMedia(idOf(REISSUE[0]))
+    assert.equal(kept.closed, true, 'quiet for 5 s, then retired')
 })
 
 test('an older leg that stops hearing the peer gives the send back to the newest generation', async (t) => {
