@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { H264Depacketizer, isH264KeyFrame, packetizeH264Frame } from '../h264.js'
+import { H264Depacketizer, isH264KeyFrame, packetizeH264Frame, readH264Codec } from '../h264.js'
 
 import { referenceIsKeyFrame, referencePacketize } from './_h264-reference.js'
 
@@ -434,4 +434,22 @@ test('the single-scan packetizer sends the same bytes and key-frame flag as befo
         assert.equal(keyFrame, isH264KeyFrame(unit), `round ${round}`)
         if (!zeros) assert.equal(keyFrame, referenceIsKeyFrame(unit), `round ${round}`)
     }
+})
+
+/** SPS of Constrained Baseline 3.1 (`42 C0 1F`), PPS, then an IDR slice. */
+const KEY_FRAME = [
+    0, 0, 0, 1, 0x67, 0x42, 0xc0, 0x1f, 0xda, 0, 0, 0, 1, 0x68, 0xce, 0, 0, 1, 0x65, 0x88
+]
+const DELTA_FRAME = [0, 0, 0, 1, 0x41, 0x9a]
+
+test('readH264Codec reads the SPS behind either start code, and finds none in a delta', () => {
+    assert.equal(readH264Codec(Uint8Array.from(KEY_FRAME)), 'avc1.42C01F')
+    assert.equal(
+        readH264Codec(
+            Uint8Array.from([0, 0, 1, 0x09, 0xf0, 0, 0, 1, 0x67, 0x4d, 0x40, 0x1e, 0x9a])
+        ),
+        'avc1.4D401E'
+    )
+    assert.equal(readH264Codec(Uint8Array.from(DELTA_FRAME)), null)
+    assert.equal(readH264Codec(Uint8Array.from([0, 0, 1, 0x67, 0x42])), null, 'a cut-off SPS')
 })

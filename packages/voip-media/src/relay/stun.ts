@@ -9,8 +9,13 @@ import {
 } from '../bytes.js'
 import type { WaMediaCrypto } from '../crypto/primitives.js'
 import { randomBytes } from '../crypto/random.js'
-import { encodeProtoLengthDelimited, encodeProtoVarintField } from '../protobuf.js'
 
+import {
+    IPV4_ADDRESS_BYTES,
+    IPV6_ADDRESS_BYTES,
+    writeIpv4Address,
+    writeIpv6Address
+} from './ip-address.js'
 import { isWarpFramedPacket, warpFrameHeaderLength } from './warp-frame.js'
 
 const STUN_MAGIC_COOKIE = 0x2112a442
@@ -28,7 +33,7 @@ const ATTR_PRIORITY = 0x0024
 
 /**
  * On an allocate, the relay credential: the raw `<relay>` token, never a `USERNAME`. Binding
- * requests carry {@link buildSenderSubscriptions} in it instead.
+ * requests carry `buildSenderSubscriptions` in it instead.
  */
 const ATTR_RELAY_CREDENTIAL = 0x4000
 const ATTR_RX_SUBSCRIPTIONS = 0x4021
@@ -45,9 +50,6 @@ const RELAY_KEY_WORD_BYTES = 4
 
 const STUN_ADDRESS_FAMILY_IPV4 = 0x01
 const STUN_ADDRESS_FAMILY_IPV6 = 0x02
-
-const IPV4_ADDRESS_BYTES = 4
-const IPV6_ADDRESS_BYTES = 16
 
 /** Zero byte, family byte, XOR-masked port, XOR-masked address. */
 const XOR_RELAYED_IPV4_BYTES = 4 + IPV4_ADDRESS_BYTES
@@ -139,261 +141,6 @@ function buildStunMessage(
     header.set(transactionId, 8)
 
     return concatBytes([header, attrsData])
-}
-
-/** Every subscription field is a `uint32`; `>>> 0` keeps the coercion this file always did. */
-function encodeProtoUint32Field(fieldNumber: number, value: number): Uint8Array {
-    return encodeProtoVarintField(fieldNumber, BigInt(value >>> 0))
-}
-
-export function buildSenderSubscriptions(ssrc: number): Uint8Array {
-    const inner = concatBytes([
-        encodeProtoUint32Field(3, ssrc),
-        encodeProtoUint32Field(5, 0),
-        encodeProtoUint32Field(6, 0)
-    ])
-
-    return encodeProtoLengthDelimited(1, inner)
-}
-
-/** One stream this side sends: its layer and its SSRCs in payload order (media, FEC, NACK). */
-export interface StreamLayerSsrcs {
-    readonly layer: number
-    readonly ssrcs: readonly number[]
-}
-
-/** Field 2 of a descriptor entry, read off the SSRC's position in its stream. */
-const STREAM_PAYLOAD_TYPE_BY_POSITION = [0, 1, 2] as const
-
-/** The app-data layer has one stream, declared under payload type 4 rather than by position. */
-const STREAM_LAYER_APP_DATA = 5
-const APP_DATA_PAYLOAD_TYPES = [4] as const
-
-/**
- * Builds the self-only `0x4024` stream descriptor: one `{1: layer, 2: payload type, 3: ssrc}`
- * entry per SSRC, fields at their default omitted and field 4 never written. A zero SSRC drops
- * its entry without shifting the rest, and positions past NACK are dropped (past the first on
- * the app-data layer).
- */
-export function buildStreamDescriptor(layers: readonly StreamLayerSsrcs[]): Uint8Array {
-    const entries: Uint8Array[] = []
-
-    for (const { layer, ssrcs } of layers) {
-        const payloadTypes =
-            layer === STREAM_LAYER_APP_DATA
-                ? APP_DATA_PAYLOAD_TYPES
-                : STREAM_PAYLOAD_TYPE_BY_POSITION
-        const count = Math.min(ssrcs.length, payloadTypes.length)
-        for (let position = 0; position < count; position++) {
-            const ssrc = ssrcs[position]
-            if (!ssrc) continue
-            const payloadType = payloadTypes[position]
-            const fields: Uint8Array[] = []
-            if (layer !== 0) fields.push(encodeProtoUint32Field(1, layer))
-            if (payloadType !== 0) fields.push(encodeProtoUint32Field(2, payloadType))
-            fields.push(encodeProtoUint32Field(3, ssrc))
-            entries.push(encodeProtoLengthDelimited(1, concatBytes(fields)))
-        }
-    }
-
-    return concatBytes(entries)
-}
-
-/** One participant whose video this side asks the relay for, at a `VideoQuality` value. */
-export interface RxVideoSubscription {
-    readonly pid: number
-    readonly quality: number
-}
-
-/**
- * Builds the `0x4021` `RxSubscriptions`: one field-2 `{1: pid, 2: quality}` entry per
- * participant, fields at their default omitted. Field 1 (`vid_rx_pids`) is never written.
- */
-export function buildRxSubscriptions(infos: readonly RxVideoSubscription[]): Uint8Array {
-    const entries: Uint8Array[] = []
-    for (const { pid, quality } of infos) {
-        const fields: Uint8Array[] = []
-        if (pid !== 0) fields.push(encodeProtoUint32Field(1, pid))
-        if (quality !== 0) fields.push(encodeProtoUint32Field(2, quality))
-        entries.push(encodeProtoLengthDelimited(2, concatBytes(fields)))
-    }
-    return concatBytes(entries)
-}
-
-/** The 1:1 `0x4024`: every self and peer SSRC under its participant id, payload type 1. */
-export function buildSSRCSubscriptionList(
-    selfSsrcs: number[],
-    peerSsrcs: number[],
-    selfPid: number,
-    peerPid: number
-): Uint8Array {
-    const entries: Uint8Array[] = []
-
-    for (const ssrc of selfSsrcs) {
-        if (ssrc === 0) continue
-        const inner = concatBytes([
-            encodeProtoUint32Field(1, selfPid),
-            encodeProtoUint32Field(2, 1),
-            encodeProtoUint32Field(3, ssrc)
-        ])
-        entries.push(encodeProtoLengthDelimited(1, inner))
-    }
-
-    for (const peerSsrc of peerSsrcs) {
-        if (peerSsrc === 0) continue
-        const inner = concatBytes([
-            encodeProtoUint32Field(1, peerPid),
-            encodeProtoUint32Field(2, 1),
-            encodeProtoUint32Field(3, peerSsrc)
-        ])
-        entries.push(encodeProtoLengthDelimited(1, inner))
-    }
-
-    return concatBytes(entries)
-}
-
-const CHAR_ZERO = 0x30
-const CHAR_NINE = 0x39
-const CHAR_UPPER_A = 0x41
-const CHAR_UPPER_F = 0x46
-const CHAR_LOWER_A = 0x61
-const CHAR_LOWER_F = 0x66
-const CHAR_DOT = 0x2e
-const CHAR_COLON = 0x3a
-const CHAR_PERCENT = 0x25
-
-function hexDigit(code: number): number {
-    if (code >= CHAR_ZERO && code <= CHAR_NINE) return code - CHAR_ZERO
-    if (code >= CHAR_LOWER_A && code <= CHAR_LOWER_F) return code - CHAR_LOWER_A + 10
-    if (code >= CHAR_UPPER_A && code <= CHAR_UPPER_F) return code - CHAR_UPPER_A + 10
-    return -1
-}
-
-/** Writes the four dotted-decimal octets of `text[start, end)` into `out` at `offset`. */
-function writeIpv4Address(
-    text: string,
-    start: number,
-    end: number,
-    out: Uint8Array,
-    offset: number
-): boolean {
-    let octets = 0
-    let value = 0
-    let digits = 0
-
-    for (let i = start; i <= end; i++) {
-        const code = i < end ? text.charCodeAt(i) : CHAR_DOT
-
-        if (code === CHAR_DOT) {
-            if (digits === 0 || digits > 3 || value > 0xff || octets === IPV4_ADDRESS_BYTES) {
-                return false
-            }
-            out[offset + octets] = value
-            octets++
-            value = 0
-            digits = 0
-            continue
-        }
-
-        if (code < CHAR_ZERO || code > CHAR_NINE) return false
-        value = value * 10 + (code - CHAR_ZERO)
-        digits++
-    }
-
-    return octets === IPV4_ADDRESS_BYTES
-}
-
-/**
- * Writes the 16 address bytes of an RFC 4291 textual IPv6 address into `out` at
- * `offset`, covering the compressed `::` run anywhere in the address and the
- * mixed `::ffff:1.2.3.4` tail.
- *
- * Groups are written front to back and the `::` run is closed at the end by
- * sliding everything after it against the tail of the field, so the only
- * allocation is the caller's exact-size attribute buffer.
- */
-function writeIpv6Address(text: string, out: Uint8Array, offset: number): boolean {
-    let end = text.length
-    for (let i = 0; i < text.length; i++) {
-        if (text.charCodeAt(i) === CHAR_PERCENT) {
-            end = i
-            break
-        }
-    }
-
-    let hexEnd = end
-    let v4Start = -1
-    for (let i = 0; i < end; i++) {
-        if (text.charCodeAt(i) === CHAR_DOT) {
-            v4Start = text.lastIndexOf(':', i) + 1
-            if (v4Start === 0) return false
-            hexEnd = v4Start
-            break
-        }
-    }
-
-    let written = 0
-    let gapAt = -1
-    let value = 0
-    let digits = 0
-    let i = 0
-
-    if (end > 0 && text.charCodeAt(0) === CHAR_COLON) {
-        if (end < 2 || text.charCodeAt(1) !== CHAR_COLON) return false
-        gapAt = 0
-        i = 2
-    }
-
-    for (; i < hexEnd; i++) {
-        const code = text.charCodeAt(i)
-
-        if (code === CHAR_COLON) {
-            if (digits === 0 || written + 2 > IPV6_ADDRESS_BYTES) return false
-            out[offset + written] = value >>> 8
-            out[offset + written + 1] = value & 0xff
-            written += 2
-            value = 0
-            digits = 0
-
-            if (i + 1 < hexEnd && text.charCodeAt(i + 1) === CHAR_COLON) {
-                if (gapAt >= 0) return false
-                gapAt = written
-                i++
-                continue
-            }
-
-            if (v4Start < 0 && i + 1 === hexEnd) return false
-            continue
-        }
-
-        const digit = hexDigit(code)
-        if (digit < 0) return false
-        value = (value << 4) | digit
-        digits++
-        if (digits > 4) return false
-    }
-
-    if (digits > 0) {
-        if (written + 2 > IPV6_ADDRESS_BYTES) return false
-        out[offset + written] = value >>> 8
-        out[offset + written + 1] = value & 0xff
-        written += 2
-    }
-
-    if (v4Start >= 0) {
-        if (written + IPV4_ADDRESS_BYTES > IPV6_ADDRESS_BYTES) return false
-        if (!writeIpv4Address(text, v4Start, end, out, offset + written)) return false
-        written += IPV4_ADDRESS_BYTES
-    }
-
-    if (gapAt < 0) return written === IPV6_ADDRESS_BYTES
-
-    if (written >= IPV6_ADDRESS_BYTES) return false
-    const tail = written - gapAt
-    const tailAt = IPV6_ADDRESS_BYTES - tail
-    out.copyWithin(offset + tailAt, offset + gapAt, offset + written)
-    out.fill(0, offset + gapAt, offset + tailAt)
-    return true
 }
 
 /**

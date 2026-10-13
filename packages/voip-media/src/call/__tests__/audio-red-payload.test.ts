@@ -8,8 +8,9 @@ import {
     type CapturedMlowPacket,
     WEB_PT121_STREAM
 } from '../../media/__tests__/_mlow-captures.js'
-import { MLowCodec, writeMlowRed } from '../../media/mlow-codec.js'
-import type { RtpStreamReception } from '../../media/rtcp.js'
+import { MLowCodec } from '../../media/mlow-codec.js'
+import { writeMlowRed } from '../../media/mlow-packet.js'
+import type { RtpStreamReception } from '../../media/rtp-stream-reception.js'
 import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { nodeCrypto } from '../../node/crypto.js'
 import { WaCallMediaPlane } from '../WaCallMediaPlane.js'

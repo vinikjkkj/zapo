@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { peerConnectionNotDialled } from '../../__tests__/_helpers.js'
 import { createNoopLogger } from '../../logger.js'
 import { nodeCrypto } from '../../node/crypto.js'
-import { TRUE_WEB_CLIENT_RELAY_PORT } from '../../relay/WaSctpRelay.js'
+import { TRUE_WEB_CLIENT_RELAY_PORT } from '../../relay/relay-info.js'
 import { dialableRelayEndpoints, type WaCallMediaRelay, type WaCallMediaRelays } from '../plan.js'
 import { WaCallMediaPlane } from '../WaCallMediaPlane.js'
 

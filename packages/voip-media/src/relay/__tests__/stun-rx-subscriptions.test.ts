@@ -4,7 +4,8 @@ import { test, type TestContext } from 'node:test'
 import { peerConnectionNotDialled } from '../../__tests__/_helpers.js'
 import { bytesToHex, TEXT_ENCODER } from '../../bytes.js'
 import { nodeCrypto } from '../../node/crypto.js'
-import { buildAllocateForRelay, buildRxSubscriptions, buildStreamDescriptor } from '../stun.js'
+import { buildRxSubscriptions, buildStreamDescriptor } from '../stun-subscriptions.js'
+import { buildAllocateForRelay } from '../stun.js'
 import { WaSctpRelay } from '../WaSctpRelay.js'
 
 const STUN_ALLOCATE = 0x0003

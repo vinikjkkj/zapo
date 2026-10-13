@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import type { BinaryNode } from 'zapo-js/transport'
 
 import type { CallOfferParticipant, WaVoipDeps } from '../../types.js'
-import { buildGroupOfferStanza } from '../signaling.js'
+import { buildGroupOfferStanza } from '../group-call.js'
 
 /**
  * The expected group offer, written out by hand rather than generated

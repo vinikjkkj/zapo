@@ -3,7 +3,8 @@ import { test } from 'node:test'
 
 import { peerConnectionNotDialled } from '../../__tests__/_helpers.js'
 import { nodeCrypto } from '../../node/crypto.js'
-import { type Connection, WaSctpRelay } from '../WaSctpRelay.js'
+import type { Connection } from '../leg.js'
+import { WaSctpRelay } from '../WaSctpRelay.js'
 
 interface RelayInternals {
     connections: Map<string, Connection>

@@ -8,7 +8,7 @@ import {
     WA_VIDEO_STATE,
     WA_VIDEO_UPGRADE_RESULT,
     WA_VIDEO_UPGRADE_TIMEOUT_MS
-} from '../../signaling/signaling.js'
+} from '../../signaling/video-state.js'
 import { WaVoipSettings } from '../../signaling/voip-settings.js'
 import { CallMediaType, type PeerVideoStateChange, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'

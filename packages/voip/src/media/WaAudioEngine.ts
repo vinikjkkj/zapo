@@ -1,14 +1,11 @@
-import { execFile, spawn } from 'node:child_process'
-import { access } from 'node:fs/promises'
 import { performance } from 'node:perf_hooks'
 
 import { createNoopLogger, type Logger } from 'zapo-js'
-import { toBytesView, toError } from 'zapo-js/util'
+import { toError } from 'zapo-js/util'
 
-import { concatBytes, TEXT_DECODER } from '../bytes.js'
 import { type AudioSender, DEFAULT_AUDIO_CONFIG, type WaAudioEngineConfig } from '../types.js'
 
-const FFMPEG_BIN = 'ffmpeg'
+import { decodeAudioFile } from './audio-file.js'
 
 const EXT_FEED_PAUSE_FRACTION = 0.12
 const EXT_FEED_RESUME_FRACTION = 0.06
@@ -18,28 +15,6 @@ const EXT_FEED_RESUME_FRACTION = 0.06
  * longer stall is forgiven rather than replayed, capping a burst at 240 ms.
  */
 const MAX_CATCH_UP_CHUNKS = 4
-
-const MAX_DECODE_BYTES = 128 * 1024 * 1024
-const MAX_STDERR_CHARS = 16 * 1024
-
-const ffmpegProbeCache = new Map<string, boolean>()
-
-function probeBinary(bin: string): Promise<boolean> {
-    return new Promise((resolve) => {
-        execFile(bin, ['-version'], { timeout: 5_000 }, (err) => resolve(!err))
-    })
-}
-
-async function hasFfmpeg(bin: string): Promise<boolean> {
-    let available = ffmpegProbeCache.get(bin)
-    if (available === undefined) {
-        available = await probeBinary(bin)
-        if (available) {
-            ffmpegProbeCache.set(bin, available)
-        }
-    }
-    return available
-}
 
 export interface WaAudioEngineOptions extends Partial<WaAudioEngineConfig> {
     readonly logger?: Logger
@@ -209,18 +184,7 @@ export class WaAudioEngine {
     async loadAudioFile(audioPath: string): Promise<void> {
         this.logger.debug('loading audio file', { audioPath })
 
-        try {
-            await access(audioPath)
-        } catch {
-            throw new Error(`File not found: ${audioPath}`)
-        }
-
-        if (!(await hasFfmpeg(FFMPEG_BIN))) {
-            throw new Error('ffmpeg not found on PATH (install ffmpeg to load audio files)')
-        }
-
-        const pcmData = await this.decodeWithFFmpeg(audioPath)
-        this.audioBuffer = this.int16ToFloat32(pcmData)
+        this.audioBuffer = await decodeAudioFile(audioPath, this.sampleRate)
         this.audioPosition = 0
         this.audioFinished = false
 
@@ -228,75 +192,6 @@ export class WaAudioEngine {
         this.logger.debug('audio file loaded', {
             samples: this.audioBuffer.length,
             durationSec: duration
-        })
-    }
-
-    private int16ToFloat32(pcmData: Int16Array): Float32Array {
-        const float32 = new Float32Array(pcmData.length)
-        for (let i = 0; i < pcmData.length; i++) {
-            float32[i] = pcmData[i] / 32768.0
-        }
-
-        return float32
-    }
-
-    private async decodeWithFFmpeg(inputPath: string): Promise<Int16Array> {
-        return new Promise<Int16Array>((resolve, reject) => {
-            const proc = spawn(
-                FFMPEG_BIN,
-                [
-                    '-hide_banner',
-                    '-loglevel',
-                    'error',
-                    '-i',
-                    inputPath,
-                    '-ac',
-                    '1',
-                    '-ar',
-                    String(this.sampleRate),
-                    '-acodec',
-                    'pcm_s16le',
-                    '-f',
-                    's16le',
-                    'pipe:1'
-                ],
-                { stdio: ['ignore', 'pipe', 'pipe'] }
-            )
-
-            const chunks: Uint8Array[] = []
-            let decodedBytes = 0
-            let stderr = ''
-            let aborted = false
-            proc.stdout?.on('data', (chunk: Uint8Array) => {
-                if (aborted) return
-                decodedBytes += chunk.length
-                if (decodedBytes > MAX_DECODE_BYTES) {
-                    aborted = true
-                    proc.kill('SIGKILL')
-                    reject(
-                        new Error(`ffmpeg output exceeded ${MAX_DECODE_BYTES} bytes: ${inputPath}`)
-                    )
-                    return
-                }
-                chunks.push(toBytesView(chunk))
-            })
-            proc.stderr?.on('data', (chunk: Uint8Array) => {
-                stderr = (stderr + TEXT_DECODER.decode(chunk)).slice(0, MAX_STDERR_CHARS)
-            })
-            proc.on('error', (err) =>
-                reject(new Error(`ffmpeg not available (install ffmpeg on PATH): ${err.message}`))
-            )
-            proc.on('close', (code) => {
-                if (aborted) return
-                if (code !== 0) {
-                    reject(new Error(`ffmpeg exited with code ${code}: ${stderr.trim()}`))
-                    return
-                }
-                const pcmBytes = concatBytes(chunks)
-                resolve(
-                    new Int16Array(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength >> 1)
-                )
-            })
         })
     }
 

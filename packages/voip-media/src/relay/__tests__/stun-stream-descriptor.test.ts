@@ -4,7 +4,11 @@ import { test, type TestContext } from 'node:test'
 import { peerConnectionNotDialled } from '../../__tests__/_helpers.js'
 import { bytesToHex } from '../../bytes.js'
 import { nodeCrypto } from '../../node/crypto.js'
-import { buildSSRCSubscriptionList, buildStreamDescriptor, type StreamLayerSsrcs } from '../stun.js'
+import {
+    buildSSRCSubscriptionList,
+    buildStreamDescriptor,
+    type StreamLayerSsrcs
+} from '../stun-subscriptions.js'
 import { WaSctpRelay } from '../WaSctpRelay.js'
 
 const LAYER = { Audio: 0, VideoMain: 1, VideoSecondary: 2, AppData: 5 } as const

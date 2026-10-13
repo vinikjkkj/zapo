@@ -5,28 +5,26 @@ import { type BinaryNode, encodeBinaryNode } from 'zapo-js/transport'
 import { bytesToHex } from 'zapo-js/util'
 
 import type { WaVoipDeps, WaVoipStores } from '../../types.js'
-import { buildScreenShareStanza } from '../screen-share.js'
 import {
-    buildAcceptReceiptStanza,
-    buildAcceptStanza,
     buildEncRekeyReceiptStanza,
     buildEncRekeyStanza,
     buildGroupOfferStanza,
     buildHeartbeatStanza,
-    buildMuteRequestStanza,
-    buildMuteV2Stanza,
-    buildOfferStanza,
     buildPeerStateStanza,
+    WA_PEER_STATE
+} from '../group-call.js'
+import { buildMuteRequestStanza, buildMuteV2Stanza, buildRaiseHandStanza } from '../in-call.js'
+import {
+    buildAcceptReceiptStanza,
+    buildAcceptStanza,
+    buildOfferStanza,
     buildPreacceptStanza,
-    buildRaiseHandStanza,
     buildRejectStanza,
-    buildRelayLatencyStanza,
-    buildTerminateStanza,
-    buildTransportStanza,
-    buildVideoStateStanza,
-    WA_PEER_STATE,
-    WA_VIDEO_STATE
-} from '../signaling.js'
+    buildTerminateStanza
+} from '../lifecycle.js'
+import { buildScreenShareStanza } from '../screen-share.js'
+import { buildRelayLatencyStanza, buildTransportStanza } from '../transport.js'
+import { buildVideoStateStanza, WA_VIDEO_STATE } from '../video-state.js'
 
 const CALL_ID = 'A1B2C3D4E5F60718293A4B5C6D7E8F90'
 const ME = '1111111111:3@lid'

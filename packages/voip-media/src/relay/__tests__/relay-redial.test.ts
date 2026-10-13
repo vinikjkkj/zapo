@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { nodeCrypto } from '../../node/crypto.js'
-import { type Connection, WaSctpRelay } from '../WaSctpRelay.js'
+import type { Connection } from '../leg.js'
+import { WaSctpRelay } from '../WaSctpRelay.js'
 
 /** `RFC 5245`'s ceiling for an `ice-ufrag`, which a browser enforces on the answer. */
 const MAX_ICE_UFRAG = 256

@@ -3,11 +3,10 @@ import { test } from 'node:test'
 
 import { bytesToHex, TEXT_ENCODER } from '../../bytes.js'
 import { nodeCrypto } from '../../node/crypto.js'
+import { buildSenderSubscriptions, buildSSRCSubscriptionList } from '../stun-subscriptions.js'
 import {
     buildAllocateForRelay,
     buildBindingRequestWithSubs,
-    buildSenderSubscriptions,
-    buildSSRCSubscriptionList,
     buildWhatsAppPing,
     isRtcpPacket,
     isRtpPacket,

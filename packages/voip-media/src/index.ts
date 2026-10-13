@@ -55,6 +55,6 @@ export { isH264KeyFrame } from './media/h264.js'
 export type { MLowCompanionModelSource, MLowRedOptions } from './media/mlow-codec.js'
 export type { WaJitterBufferStats } from './media/WaJitterBuffer.js'
 
-export type { RawUdpLeg, RawUdpLegOptions } from './relay/WaSctpRelay.js'
+export type { RawUdpLeg, RawUdpLegOptions } from './relay/leg.js'
 
 export type { InboundVideoFrame, InboundVideoRtpPacket, SrtpKeyingMaterial } from './types.js'

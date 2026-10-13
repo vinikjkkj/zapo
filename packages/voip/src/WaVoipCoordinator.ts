@@ -10,7 +10,7 @@ import type {
 import type { CallInfo } from './call/call-state.js'
 import { WaCallManager } from './call/WaCallManager.js'
 import { routeCallReceipt, routeCallStanza } from './signaling/bridge.js'
-import type { WaVideoUpgradeResult } from './signaling/signaling.js'
+import type { WaVideoUpgradeResult } from './signaling/video-state.js'
 import type {
     CallManagerEvents,
     CallOfferOptions,

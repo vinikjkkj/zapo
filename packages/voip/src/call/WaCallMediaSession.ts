@@ -30,11 +30,35 @@ import { derivePerJidSrtpKey, generateCallKey } from '../crypto/encryption.js'
 import { WA_AUDIO_CALL_SSRC_SLOTS, WA_SSRC_SLOT, WA_VIDEO_CALL_SSRC_SLOTS } from '../crypto/ssrc.js'
 import { groupParticipantAccountKey, isSameDeviceJid, toDeviceJid } from '../jid.js'
 import { parseRelayFromAck } from '../relay/relay-ack.js'
+import { decryptCallKey } from '../signaling/call-key.js'
+import { extractNodeInfo, toCallServerJid } from '../signaling/call-stanza.js'
+import {
+    buildEncRekeyStanza,
+    buildHeartbeatStanza,
+    buildPeerStateStanza,
+    WA_PEER_STATE
+} from '../signaling/group-call.js'
 import {
     type GroupCallRoster,
     type GroupInfoParticipant,
-    readGroupCallRoster
+    readGroupCallRoster,
+    readGroupUpdateTransactionId
 } from '../signaling/group-info.js'
+import {
+    buildMuteRequestStanza,
+    buildMuteV2Stanza,
+    buildRaiseHandStanza,
+    parseMuteV2,
+    parseRaiseHandState
+} from '../signaling/in-call.js'
+import {
+    buildAcceptReceiptStanza,
+    buildAcceptStanza,
+    buildPreacceptStanza,
+    buildRejectStanza,
+    buildTerminateStanza,
+    needsDecryption
+} from '../signaling/lifecycle.js'
 import {
     buildScreenShareStanza,
     parseScreenShareNode,
@@ -42,34 +66,18 @@ import {
     WA_SCREEN_SHARE_STATE
 } from '../signaling/screen-share.js'
 import {
-    buildAcceptReceiptStanza,
-    buildAcceptStanza,
-    buildEncRekeyStanza,
-    buildHeartbeatStanza,
-    buildMuteRequestStanza,
-    buildMuteV2Stanza,
-    buildPeerStateStanza,
-    buildPreacceptStanza,
-    buildRaiseHandStanza,
-    buildRejectStanza,
     buildRelayLatencyStanza,
-    buildTerminateStanza,
     buildTransportStanza,
+    extractRelayEndpoints
+} from '../signaling/transport.js'
+import {
     buildVideoStateStanza,
-    decryptCallKey,
-    extractNodeInfo,
-    extractRelayEndpoints,
-    needsDecryption,
-    parseMuteV2,
-    parseRaiseHandState,
     parseVideoStateNode,
-    toCallServerJid,
-    WA_PEER_STATE,
     WA_VIDEO_STATE,
     WA_VIDEO_UPGRADE_RESULT,
     WA_VIDEO_UPGRADE_TIMEOUT_MS,
     type WaVideoUpgradeResult
-} from '../signaling/signaling.js'
+} from '../signaling/video-state.js'
 import { parseVoipSettings, type WaVoipSettings } from '../signaling/voip-settings.js'
 import {
     CallDirection,
@@ -85,6 +93,7 @@ import {
     type WaVoipDeps
 } from '../types.js'
 
+import { selfJidOf } from './call-jids.js'
 import { type CallInfo, type WaCallParticipantMedia } from './call-state.js'
 import {
     adoptableRelayEndpoints,
@@ -201,20 +210,6 @@ function toMediaRelay(endpoint: RelayEndpoint): WaCallMediaRelay {
         name: endpoint.relayName,
         authTokenId: endpoint.authTokenId
     }
-}
-
-/** Our own jid as the credentials name it, lid first; empty before login. */
-export function selfJidOf(deps: Pick<WaVoipDeps, 'authClient'>): string {
-    const creds = deps.authClient.getCurrentCredentials()
-    return creds?.meLid || creds?.meJid || ''
-}
-
-/** The `transaction-id` of a `group_update`: its `<group_info>`'s, else the wrapper's. */
-export function readGroupUpdateTransactionId(inner: BinaryNode): number | null {
-    return (
-        tryAsNumber(findNodeChild(inner, 'group_info')?.attrs?.['transaction-id']) ??
-        tryAsNumber(inner.attrs?.['transaction-id'])
-    )
 }
 
 type SendLogLevel = 'trace' | 'warn' | 'error'

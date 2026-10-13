@@ -6,7 +6,6 @@ import type { BinaryNode } from 'zapo-js/transport'
 
 import { CallInfo } from '../call/call-state.js'
 import { groupSenderDeviceJids } from '../call/group-media-plan.js'
-import { WaCallManager } from '../call/WaCallManager.js'
 import { WaCallMediaSession } from '../call/WaCallMediaSession.js'
 import {
     addressDeviceJid,
@@ -14,8 +13,9 @@ import {
     isSameDeviceJid,
     toDeviceJid
 } from '../jid.js'
+import { resolvePeerDeviceJids } from '../peer-devices.js'
 import { normalizeParticipantDeviceJids, parseGroupInfoNode } from '../signaling/group-info.js'
-import { CallMediaType, type WaVoipDeps, type WaVoipStores } from '../types.js'
+import { CallMediaType, type WaVoipDeps } from '../types.js'
 
 /**
  * `[input, device form, addressed form, account key, parsed device form]`, pinned from the four
@@ -141,14 +141,11 @@ test('every call site derives the same jid as before', async () => {
         createMediaLink: () => ({}) as never,
         delegate: {} as never
     }) as unknown as { toAddressedJid(jid: string): string }
-    const manager = new WaCallManager({
-        deps: {
-            signalDeviceSync: {
-                syncDeviceList: () => Promise.reject(new Error('offline'))
-            }
-        } as unknown as WaVoipDeps,
-        stores: {} as WaVoipStores
-    }) as unknown as { resolvePeerDeviceJids(jid: string): Promise<string[]> }
+    const offlineDeps = {
+        signalDeviceSync: {
+            syncDeviceList: () => Promise.reject(new Error('offline'))
+        }
+    } as unknown as WaVoipDeps
 
     for (const [input, device, addressed, , parsed] of TABLE) {
         const composition = {
@@ -157,7 +154,11 @@ test('every call site derives the same jid as before', async () => {
         }
         assert.deepEqual(groupSenderDeviceJids(composition, ''), [device], input)
         assert.equal(session.toAddressedJid(input), addressed, input)
-        assert.equal((await manager.resolvePeerDeviceJids(input))[0], device, input)
+        assert.equal(
+            (await resolvePeerDeviceJids(offlineDeps, input, createNoopLogger()))[0],
+            device,
+            input
+        )
         assert.equal(
             orNull(() => rosterDeviceJid(input)),
             parsed,

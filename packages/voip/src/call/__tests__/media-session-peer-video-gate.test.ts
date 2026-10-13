@@ -12,7 +12,7 @@ import {
 import { nodeMediaHost } from '@zapo-js/voip-media/node'
 
 import { readUInt32BE } from '../../bytes.js'
-import { WA_VIDEO_STATE, WA_VIDEO_UPGRADE_RESULT } from '../../signaling/signaling.js'
+import { WA_VIDEO_STATE, WA_VIDEO_UPGRADE_RESULT } from '../../signaling/video-state.js'
 import { CallMediaType, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'
 import {

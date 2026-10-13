@@ -1,9 +1,11 @@
 import { toError } from '../errors.js'
 import { createNoopLogger, type Logger } from '../logger.js'
 
-import type { MLowCodecStats, MLowDecodeOutcome, MlowPacketRead } from './mlow-codec.js'
-import { RtpStreamReception, type SenderReportReception, senderReportSourceSsrc } from './rtcp.js'
+import type { MlowPacketRead } from './mlow-packet.js'
+import { type SenderReportReception, senderReportSourceSsrc } from './rtcp.js'
+import { RtpStreamReception } from './rtp-stream-reception.js'
 import { WaJitterBuffer, type WaJitterBufferStats } from './WaJitterBuffer.js'
+import type { MLowCodecStats, MLowDecodeOutcome } from './WaMlowDecoder.js'
 
 /** What the set needs of a decoder: the receive half of `MLowCodec`, so a test needs no wasm. */
 export interface AudioStreamDecoder {

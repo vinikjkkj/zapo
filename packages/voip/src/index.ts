@@ -32,13 +32,13 @@ export {
 } from './signaling/screen-share.js'
 export type { PeerScreenShare } from './signaling/screen-share.js'
 
+export { WA_MUTE_REQUEST_STATE } from './signaling/in-call.js'
 export {
-    WA_MUTE_REQUEST_STATE,
     WA_VIDEO_STATE,
     WA_VIDEO_UPGRADE_RESULT,
     WA_VIDEO_UPGRADE_TIMEOUT_MS
-} from './signaling/signaling.js'
-export type { WaVideoUpgradeResult } from './signaling/signaling.js'
+} from './signaling/video-state.js'
+export type { WaVideoUpgradeResult } from './signaling/video-state.js'
 
 export { WaVoipSettings } from './signaling/voip-settings.js'
 

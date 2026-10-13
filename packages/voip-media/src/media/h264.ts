@@ -2,7 +2,7 @@ const START_CODE = new Uint8Array([0, 0, 0, 1])
 
 /** Coded slice of an IDR picture: the only NAL type that makes a key frame. */
 const NAL_TYPE_IDR = 5
-export const NAL_TYPE_SPS = 7
+const NAL_TYPE_SPS = 7
 const NAL_TYPE_STAP_A = 24
 /** Largest NAL unit a STAP-A can carry: its size field is 16 bits. */
 const STAP_A_MAX_NAL = 0xffff
@@ -20,7 +20,7 @@ export interface H264PacketizedFrame {
 }
 
 /** Offset of the next Annex-B start code at or after `from`, or -1. One byte must follow it. */
-export function nextStartCode(data: Uint8Array, from: number): number {
+function nextStartCode(data: Uint8Array, from: number): number {
     for (let i = from; i + 3 < data.length; i++) {
         if (data[i] !== 0 || data[i + 1] !== 0) continue
         if (data[i + 2] === 1 || (data[i + 2] === 0 && data[i + 3] === 1)) return i
@@ -29,7 +29,7 @@ export function nextStartCode(data: Uint8Array, from: number): number {
 }
 
 /** Offset of the NAL header behind the start code at `at`. */
-export function nalHeaderAfter(data: Uint8Array, at: number): number {
+function nalHeaderAfter(data: Uint8Array, at: number): number {
     return at + (data[at + 2] === 1 ? 3 : 4)
 }
 
@@ -136,6 +136,25 @@ export function isH264KeyFrame(data: Uint8Array): boolean {
         at = nextStartCode(data, header)
     }
     return false
+}
+
+/** WebCodecs codec string of H.264 Constrained Baseline 3.1. */
+export const H264_CONSTRAINED_BASELINE_CODEC = 'avc1.42E01F'
+
+/** The WebCodecs codec string read off an access unit's SPS, or `null` without one. */
+export function readH264Codec(data: Uint8Array): string | null {
+    for (let at = nextStartCode(data, 0); at >= 0; ) {
+        const header = nalHeaderAfter(data, at)
+        if (header + 3 < data.length && (data[header] & 0x1f) === NAL_TYPE_SPS) {
+            return `avc1.${hexByte(data[header + 1])}${hexByte(data[header + 2])}${hexByte(data[header + 3])}`
+        }
+        at = nextStartCode(data, header)
+    }
+    return null
+}
+
+function hexByte(value: number): string {
+    return value.toString(16).toUpperCase().padStart(2, '0')
 }
 
 /** RTP sequence numbers wrap at this modulus; used to test fragment contiguity. */

@@ -2,6 +2,7 @@ import type { WaMediaHost } from '../host.js'
 
 import { webCrypto } from './crypto.js'
 
+export { readH264Codec } from '../media/h264.js'
 export { WA_CALL_AUDIO_WORKLET_SOURCE } from './call-audio-worklet.js'
 export { webCrypto } from './crypto.js'
 export {
@@ -10,15 +11,16 @@ export {
     type WaWebCallAudioOptions
 } from './WaWebCallAudio.js'
 export {
-    readH264Codec,
-    type WaCallVideoSink,
     WaWebCallVideoReceiver,
     type WaWebCallVideoReceiverOptions,
-    type WaWebCallVideoReceiverStats,
+    type WaWebCallVideoReceiverStats
+} from './WaWebCallVideoReceiver.js'
+export {
+    type WaCallVideoSink,
     WaWebCallVideoSender,
     type WaWebCallVideoSenderOptions,
     type WaWebCallVideoSenderStats
-} from './WaWebCallVideo.js'
+} from './WaWebCallVideoSender.js'
 
 /**
  * Builds a relay leg's peer connection on the browser's own `RTCPeerConnection`; a

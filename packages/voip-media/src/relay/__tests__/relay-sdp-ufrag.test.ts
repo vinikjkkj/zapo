@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { peerConnectionNotDialled } from '../../__tests__/_helpers.js'
-import { nodeCrypto } from '../../node/crypto.js'
-import { type RelayInfo, WaSctpRelay } from '../WaSctpRelay.js'
+import type { RelayInfo } from '../relay-info.js'
+import { modifySdpForRelay } from '../sdp.js'
 
 function relayInfoWithCredentials(
     token: string,
@@ -42,19 +41,12 @@ function baseOfferSdp(): string {
 }
 
 function callModifySdpForRelay(sdp: string, relayInfo: RelayInfo): string {
-    const relay = new WaSctpRelay({
-        crypto: nodeCrypto,
-        createPeerConnection: peerConnectionNotDialled
-    })
-    const internals = relay as unknown as {
-        modifySdpForRelay: (sdp: string, relayInfo: RelayInfo) => string
-    }
-    return internals.modifySdpForRelay(sdp, relayInfo)
+    return modifySdpForRelay(sdp, relayInfo)
 }
 
 /**
  * This is the behavior a live measurement locked in (see the JSDoc on
- * `WaSctpRelay.modifySdpForRelay`): the relay authenticates ICE against the
+ * `modifySdpForRelay`): the relay authenticates ICE against the
  * ufrag it handed out as the relay `<token>`/`<authToken>`. A prior change
  * replaced this with a random, connection-local value on a
  * reverse-engineering theory that the relay only wants the token inside the

@@ -1,7 +1,7 @@
 import type { BinaryNode } from 'zapo-js/transport'
 import { tryAsNumber } from 'zapo-js/util'
 
-import { callStanza } from './signaling.js'
+import { callStanza } from './call-stanza.js'
 
 /**
  * `screenshare_state`. `NotSupported` and `Failed` both close a request without

@@ -261,6 +261,14 @@ export function readGroupCallRoster(inner: BinaryNode): GroupCallRoster {
     return { kind: 'roster', info, participants }
 }
 
+/** The `transaction-id` of a `group_update`: its `<group_info>`'s, else the wrapper's. */
+export function readGroupUpdateTransactionId(inner: BinaryNode): number | null {
+    return (
+        tryAsNumber(findNodeChild(inner, 'group_info')?.attrs?.['transaction-id']) ??
+        tryAsNumber(inner.attrs?.['transaction-id'])
+    )
+}
+
 /**
  * The devices a participant addresses, each with its `:device`, primary first. A count
  * outside one to five collapses onto the primary device of the user jid.

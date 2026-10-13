@@ -3,7 +3,8 @@ import { test, type TestContext } from 'node:test'
 
 import { peerConnectionNotDialled } from '../../__tests__/_helpers.js'
 import { nodeCrypto } from '../../node/crypto.js'
-import { type RawUdpLegOptions, WaSctpRelay } from '../WaSctpRelay.js'
+import type { RawUdpLegOptions } from '../leg.js'
+import { WaSctpRelay } from '../WaSctpRelay.js'
 
 type Side = 'caller' | 'callee'
 

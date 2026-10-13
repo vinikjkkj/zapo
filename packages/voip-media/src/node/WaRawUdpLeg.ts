@@ -5,8 +5,8 @@ import { performance } from 'node:perf_hooks'
 import { toBytesView } from '../bytes.js'
 import { toError } from '../errors.js'
 import type { Logger } from '../logger.js'
+import type { RawUdpLeg, RawUdpLegOptions } from '../relay/leg.js'
 import { isStunPacket } from '../relay/stun.js'
-import type { RawUdpLeg, RawUdpLegOptions } from '../relay/WaSctpRelay.js'
 
 /**
  * How long a leg may send media before the peer's stream has to arrive, in ms. Sending can pull

@@ -4,14 +4,15 @@ import { test } from 'node:test'
 import { hexToBytes, peerConnectionNotDialled } from '../../__tests__/_helpers.js'
 import { bytesToHex, TEXT_ENCODER } from '../../bytes.js'
 import { nodeCrypto } from '../../node/crypto.js'
+import type { Connection } from '../leg.js'
+import { buildSSRCSubscriptionList } from '../stun-subscriptions.js'
 import {
     buildAllocateForRelay,
-    buildSSRCSubscriptionList,
     createStunTransactionId,
     parseStunResponse,
     type StunResponseInfo
 } from '../stun.js'
-import { type Connection, WaSctpRelay } from '../WaSctpRelay.js'
+import { WaSctpRelay } from '../WaSctpRelay.js'
 
 const ATTR_USERNAME = 0x0006
 const ATTR_XOR_RELAYED_ADDRESS = 0x0016
@@ -62,7 +63,7 @@ function relayInfoFor(index: number) {
  * A `channel` stand-in that records every frame `sendToChannel` writes to it
  * without any real transport underneath. This covers the data channel legs
  * only: the connections built here carry no `rawLeg`, and a raw UDP leg takes
- * the other branch of `isConnOpen`/`sendToChannel` and registers with a bare
+ * the other branch of `isLegOpen`/`sendToChannel` and registers with a bare
  * allocate instead of this binding ladder. That its allocate and its ping
  * share one transaction id is asserted in `raw-udp-relay.test.ts`.
  */
@@ -151,7 +152,7 @@ test('a relay connection stamps one transaction id on every STUN message it emit
     relay.setSubscriptionSsrc(0x55667788)
 
     /**
-     * `sendStunAllocateOnOpen`/`startKeepalive` are exercised directly
+     * `registration.sendStunAllocateOnOpen`/`keepalive.start` are exercised directly
      * against a fake channel instead of going through `startConnection`: the
      * real path needs a live WebRTC/ICE negotiation to open `conn.channel`,
      * which this unit test has no interest in driving. Typed against the
@@ -159,8 +160,8 @@ test('a relay connection stamps one transaction id on every STUN message it emit
      * time instead of silently matching a stale structural type.
      */
     const internals = relay as unknown as {
-        sendStunAllocateOnOpen: (conn: Connection, relayInfo: unknown) => void
-        startKeepalive: (conn: Connection) => void
+        registration: { sendStunAllocateOnOpen: (conn: Connection, relayInfo: unknown) => void }
+        keepalive: { start: (conn: Connection) => void }
     }
 
     const perConnectionSent: Uint8Array[][] = []
@@ -172,8 +173,8 @@ test('a relay connection stamps one transaction id on every STUN message it emit
             perConnectionSent.push(sent)
 
             const conn = makeOpenConnection(relayInfo, sent)
-            internals.sendStunAllocateOnOpen(conn, relayInfo)
-            internals.startKeepalive(conn)
+            internals.registration.sendStunAllocateOnOpen(conn, relayInfo)
+            internals.keepalive.start(conn)
         }
 
         await waitUntil(
