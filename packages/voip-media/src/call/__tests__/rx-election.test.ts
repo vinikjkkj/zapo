@@ -7,12 +7,7 @@ import { createNoopLogger } from '../../logger.js'
 import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { nodeCrypto } from '../../node/crypto.js'
 import type { RawUdpLegOptions } from '../../relay/WaSctpRelay.js'
-import {
-    PayloadType,
-    SRTP_RECV_AUTH_TAG_LEN,
-    SRTP_SEND_AUTH_TAG_LEN,
-    type SrtpKeyingMaterial
-} from '../../types.js'
+import { PayloadType, type SrtpKeyingMaterial } from '../../types.js'
 import type { WaCallMediaRelay, WaCallMediaSsrcs } from '../plan.js'
 import { WaCallMediaPlane } from '../WaCallMediaPlane.js'
 
@@ -161,13 +156,7 @@ async function startCall(t?: TestContext): Promise<Call> {
     })
     assert.equal(plane.isFlowing, true)
 
-    const peer = new SrtpSession(
-        nodeCrypto,
-        PEER_KEY,
-        SELF_KEY,
-        SRTP_SEND_AUTH_TAG_LEN,
-        SRTP_RECV_AUTH_TAG_LEN
-    )
+    const peer = new SrtpSession(nodeCrypto, PEER_KEY, SELF_KEY)
     let sequence = 0
     let frames = 0
     const [a, b] = legs

@@ -1,5 +1,5 @@
 import { toError } from '../errors.js'
-import { createNoopLogger, type Logger } from '../logger.js'
+import { createNoopLogger, isLogLevelEnabled, type Logger } from '../logger.js'
 
 const MLOW_SAMPLE_RATE = 16_000 as const
 const MLOW_CHANNELS = 1 as const
@@ -11,12 +11,6 @@ export const MLOW_MAX_PACKET_BYTES = 4_000
 
 const APPLICATION_VOIP = 2048
 const SIGNAL_VOICE = 3001
-
-/**
- * Encodes through the library's float path instead of staging the frame as int16. It changes the
- * bytes on the wire, so it stays off until a live A/B settles it.
- */
-const ENCODE_FLOAT_INPUT = false
 
 /**
  * Smallest concealment unit the codec library accepts (2.5 ms). PLC and FEC
@@ -126,9 +120,7 @@ interface MlowDecodeOptions {
 }
 
 interface MlowEncoder {
-    encode(pcm: Int16Array, options?: { readonly frameSize?: number }): Uint8Array
     encodeInto(pcm: Int16Array, target: Uint8Array): number
-    encodeFloatInto(pcm: Float32Array, target: Uint8Array): number
     encodeSecondary(): Uint8Array
     setSecondaryBitrate(bitrate: number): void
     setSecondaryComplexity(complexity: number): void
@@ -183,7 +175,7 @@ function loadMlowModule(): Promise<MlowModule> {
  * Splits a multiframe packet into `bounds` as `[offset, length]` pairs and returns the sub-frame
  * count, or 0 for a single frame or a header that does not add up.
  */
-export function readMlowSubframes(packet: Uint8Array, bounds: Int32Array): number {
+function readMlowSubframes(packet: Uint8Array, bounds: Int32Array): number {
     const marker = packet[0]
     if (packet.length < 3 || (marker & MULTIFRAME_MARKER) !== MULTIFRAME_MARKER) return 0
     if (marker >= CELT_TOC) return 0
@@ -216,7 +208,7 @@ export function readMlowSubframes(packet: Uint8Array, bounds: Int32Array): numbe
 }
 
 /** Samples a frame spans on the 16 kHz RTP clock, read from its TOC; 0 for a CELT TOC. */
-export function mlowFrameSamples(toc: number): number {
+function mlowFrameSamples(toc: number): number {
     return toc >= CELT_TOC ? 0 : SMPL_FRAME_SAMPLES[(toc >> 3) & 3]
 }
 
@@ -226,7 +218,12 @@ export function mlowFrameSamples(toc: number): number {
  */
 export function mlowPacketSamples(packet: Uint8Array, bounds: Int32Array): number {
     if (packet.length === 0) return 0
-    const count = readMlowSubframes(packet, bounds)
+    return samplesOfSubframes(packet, readMlowSubframes(packet, bounds), bounds)
+}
+
+/** {@link mlowPacketSamples} of a packet whose {@link readMlowSubframes} count is in `bounds`. */
+function samplesOfSubframes(packet: Uint8Array, count: number, bounds: Int32Array): number {
+    if (packet.length === 0) return 0
     if (count === 0) {
         const marker = packet[0]
         if ((marker & MULTIFRAME_MARKER) === MULTIFRAME_MARKER && marker < CELT_TOC) return 0
@@ -320,47 +317,43 @@ export function readMlowRed(packet: Uint8Array, bounds: Int32Array): number {
     return count
 }
 
+/** One read of a PT 121 packet, kept so {@link MLowCodec.decodeSequenced} does not read it again. */
+export class MlowPacketRead {
+    readonly subframeBounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
+    readonly redBounds = new Int32Array((MLOW_MAX_RED_BLOCKS + 1) * 3)
+    packet: Uint8Array | null = null
+    subframes = 0
+    copies = -1
+
+    /** Reads `packet`; whether it parses as MLow, as frames with a span or as in-band RED. */
+    read(packet: Uint8Array): boolean {
+        const subframes = readMlowSubframes(packet, this.subframeBounds)
+        this.packet = packet
+        this.subframes = subframes
+        this.copies = subframes === 0 ? readMlowRed(packet, this.redBounds) : -1
+        if (samplesOfSubframes(packet, subframes, this.subframeBounds) > 0) return true
+        return subframes === 0 ? this.copies >= 0 : readMlowRed(packet, this.redBounds) >= 0
+    }
+}
+
 export interface MLowCodecOptions {
-    /**
-     * Target encoder bitrate in bits per second (default 15000, what WhatsApp
-     * uses). The server can hand down a different rung in `<voip_settings>`.
-     */
+    /** Encoder bitrate in bps, default 15000; `<voip_settings>` may hand down another rung. */
     readonly bitrate?: number
-    /** Encoder complexity (0 to 10). Defaults to 5, which is what WhatsApp uses. */
+    /** Encoder complexity, 0 to 10, default 5. */
     readonly complexity?: number
-    /**
-     * Enable in-band FEC on the encoder (default `true`). A redundant copy of
-     * the previous frame only goes on the wire while
-     * {@link MLowCodecOptions.packetLossPercent} is above zero.
-     */
+    /** In-band FEC, default `true`; it only emits while {@link packetLossPercent} is above 0. */
     readonly fec?: boolean
-    /**
-     * Loss the encoder should protect against, 0 to 100 (default `0`). Drive it
-     * from measured inbound loss with
-     * {@link MLowCodec.setExpectedPacketLossPercent}.
-     */
+    /** Loss the encoder protects against, 0 to 100, default 0. */
     readonly packetLossPercent?: number
-    /**
-     * Hard cap on the concealment frames generated for a single gap (default 5).
-     * A longer outage goes silent instead of synthesising audio indefinitely.
-     */
+    /** Most concealment frames for one gap, default 5; a longer outage goes silent. */
     readonly maxConcealFrames?: number
     /** MLow-specific encoder control requests. Unset requests are not written. */
     readonly tunables?: MLowEncoderTunables
-    /**
-     * Attaches the MLow Companion, WhatsApp's neural post-filter, to the decoder. Weights that
-     * fail to load leave the decoder as it was, with a warning. See {@link MLowCompanionModelSource}.
-     */
+    /** The MLow Companion's weights; ones that fail to load are skipped with a warning. */
     readonly companionModel?: MLowCompanionModelSource
-    /**
-     * Runs the RED secondary encoder next to the primary, exposing each frame's redundant copy as
-     * {@link MLowCodec.lastSecondary}. Turns DTX off on this encoder, as RED requires.
-     */
+    /** Runs the RED secondary encoder, its copy in {@link MLowCodec.lastSecondary}; DTX goes off. */
     readonly red?: boolean | MLowRedOptions
-    /**
-     * Builds the decoder alone, for one inbound stream of a group call: no encoder and no
-     * repacketizer, so encoding and packing throw and the loss percent is only recorded.
-     */
+    /** Builds the decoder alone, for one inbound stream of a group call: encode and pack throw. */
     readonly decodeOnly?: boolean
     readonly logger?: Logger
 }
@@ -408,8 +401,8 @@ export class MLowCodec {
     private encoder: MlowEncoder | null = null
     private decoder: MlowDecoder | null = null
     private repacketizer: MlowRepacketizer | null = null
-    private readonly frameSize = FRAME_SIZE
     private logger: Logger = createNoopLogger()
+    private traceEnabled = false
 
     private decodeErrors = 0
     private decodeSuccess = 0
@@ -420,7 +413,6 @@ export class MLowCodec {
     private redundantSubframes = 0
     private redRecoveredFrames = 0
 
-    private opts: MLowCodecOptions = {}
     private packetLossPercent = 0
     private maxConcealFrames = DEFAULT_MAX_CONCEAL_FRAMES
     private red = false
@@ -460,8 +452,8 @@ export class MLowCodec {
     }
 
     private async init(opts: MLowCodecOptions): Promise<void> {
-        this.opts = opts
         this.logger = opts.logger ?? createNoopLogger()
+        this.traceEnabled = isLogLevelEnabled(this.logger, 'trace')
         this.packetLossPercent = clampPercent(opts.packetLossPercent ?? 0)
         const requestedConcealFrames = opts.maxConcealFrames
         this.maxConcealFrames = Math.max(
@@ -533,23 +525,18 @@ export class MLowCodec {
         if (!encoder) {
             throw new Error('[MLowCodec] encoder not initialized')
         }
-        if (float32Audio.length !== this.frameSize) {
+        if (float32Audio.length !== FRAME_SIZE) {
             throw new Error(
-                `[MLowCodec] encode expects ${this.frameSize} samples, got ${float32Audio.length}`
+                `[MLowCodec] encode expects ${FRAME_SIZE} samples, got ${float32Audio.length}`
             )
         }
         this.secondary = null
-        let length: number
-        if (ENCODE_FLOAT_INPUT) {
-            length = encoder.encodeFloatInto(float32Audio, target)
-        } else {
-            const pcm = this.pcmScratch
-            for (let i = 0; i < pcm.length; i++) {
-                const sample = Math.max(-1, Math.min(1, float32Audio[i]))
-                pcm[i] = Math.round(sample * 32_767)
-            }
-            length = encoder.encodeInto(pcm, target)
+        const pcm = this.pcmScratch
+        for (let i = 0; i < pcm.length; i++) {
+            const sample = Math.max(-1, Math.min(1, float32Audio[i]))
+            pcm[i] = Math.round(sample * 32_767)
         }
+        const length = encoder.encodeInto(pcm, target)
         if (this.red) {
             this.encodeSecondary(encoder)
         }
@@ -564,11 +551,6 @@ export class MLowCodec {
     /** RED copy of the frame the last encode took, a fresh array, or `null` with RED off. */
     get lastSecondary(): Uint8Array | null {
         return this.secondary
-    }
-
-    /** Whether the Companion is attached to the decoder. */
-    get companionActive(): boolean {
-        return this.decoder?.hasCompanion ?? false
     }
 
     /** Packs encoded frames into one multiframe packet, a fresh array. */
@@ -593,48 +575,26 @@ export class MLowCodec {
             return this.conceal(this.concealFrameSize()).slice()
         }
 
-        const decoded = this.tryDecode(mlowFrame)
-        return decoded ? decoded.slice() : this.silence(this.concealFrameSize())
+        return (this.tryDecode(mlowFrame) ?? this.silence(this.concealFrameSize())).slice()
     }
 
     /**
-     * Decode one inbound packet identified by its RTP sequence number and hand
-     * every resulting PCM frame to `onFrame`, oldest first. Every frame is a view
-     * of one buffer the next decode overwrites: it is valid only during the
-     * callback, so a consumer that keeps it copies it.
-     *
-     * Gaps since the previous sequence number are filled first: the frame right
-     * before the arriving packet from its in-band FEC, anything older by
-     * concealment, and nothing past `maxConcealFrames`. A duplicate or late packet
-     * is dropped rather than emitted out of order.
-     *
-     * With `timestamp`, each sub-frame sits on the RTP timeline at the packet's
-     * timestamp plus the TOC durations of the sub-frames before it, which is how the
-     * official client's packets add up. A sub-frame whose stretch already played is a
-     * redundant copy and is dropped; one that lands where a lost packet left a hole is
-     * played in its place, and only the hole it leaves is concealed. Without
-     * `timestamp` every packet decodes whole. On `stream` 1 (PT 121) an in-band RED packet
-     * ({@link readMlowRed}) plays its primary; a copy plays only in the slot of a lost packet.
-     *
-     * `stream` 1 numbers a second RTP stream apart, as PT 121 beside PT 120: each stream's
-     * own gaps tell its losses, and both play on the one timeline, so each slot plays once.
-     *
-     * A packet the decoder rejects is treated the same as one that never
-     * arrived, but only for its own slot: its stream's position still advances to just
-     * behind it, so only the rejected packet itself - not the packets
-     * already covered by this call's own gap concealment - is left for the
-     * next packet's FEC copy to recover. Leaving the position further back would
-     * hand that already-covered ground to the next gap too, emitting the same
-     * frames twice.
-     *
-     * Returns what became of the packet itself; see {@link MLowDecodeOutcome}.
+     * Decodes one inbound packet by its RTP sequence number and hands every PCM frame to
+     * `onFrame`, oldest first, as a view valid only during the callback. Gaps are filled first:
+     * the frame right before from the packet's FEC, older ones by PLC, up to `maxConcealFrames`.
+     * With `timestamp`, sub-frames are placed on the RTP timeline: one whose stretch already
+     * played is dropped, one landing in a lost packet's hole plays in its place. `stream` 1
+     * (PT 121) numbers its own gaps and may carry in-band RED ({@link readMlowRed}). A rejected
+     * packet advances its stream to just behind it, leaving only its own slot to the next FEC.
+     * `read`, when it holds this packet, stands in for reading the PT 121 layout again.
      */
     decodeSequenced(
         seq: number,
         packet: Uint8Array,
         onFrame: (pcm: Float32Array) => void,
         timestamp?: number,
-        stream: 0 | 1 = 0
+        stream: 0 | 1 = 0,
+        read?: MlowPacketRead
     ): MLowDecodeOutcome {
         if (!this.decoder) {
             throw new Error('[MLowCodec] decoder not initialized')
@@ -650,30 +610,50 @@ export class MLowCodec {
             const delta = (current - lastSeq + SEQ_SPACE) % SEQ_SPACE
             if (delta === 0 || delta >= SEQ_HALF) {
                 this.lateFrames++
-                this.logger.trace('mlow packet arrived out of order', {
-                    seq: current,
-                    lastSeq,
-                    stream
-                })
+                if (this.traceEnabled)
+                    this.logger.trace('mlow packet arrived out of order', {
+                        seq: current,
+                        lastSeq,
+                        stream
+                    })
                 return 'late'
             }
             missing = delta - 1
         }
 
         const onTimeline = timestamp !== undefined && this.playedUntil >= 0
-        const copies =
-            stream === 1 && readMlowSubframes(packet, this.subframeBounds) === 0
-                ? readMlowRed(packet, this.redBounds)
-                : -1
+        const reuse = stream === 1 && read !== undefined && read.packet === packet
+        const subframeBounds = reuse ? read.subframeBounds : this.subframeBounds
+        const redBounds = reuse ? read.redBounds : this.redBounds
+        const subframes = reuse
+            ? read.subframes
+            : stream === 1
+              ? readMlowSubframes(packet, subframeBounds)
+              : -1
+        const copies = reuse ? read.copies : subframes === 0 ? readMlowRed(packet, redBounds) : -1
         let played: boolean
         if (copies >= 0) {
             played = onTimeline
-                ? this.playRedOnTimeline(packet, copies, timestamp >>> 0, missing, onFrame)
-                : this.playRedPrimary(packet, copies, timestamp, missing, onFrame)
+                ? this.playRedOnTimeline(
+                      packet,
+                      copies,
+                      timestamp >>> 0,
+                      missing,
+                      onFrame,
+                      redBounds
+                  )
+                : this.playRedPrimary(packet, copies, timestamp, missing, onFrame, redBounds)
         } else {
             played = onTimeline
-                ? this.playOnTimeline(packet, timestamp >>> 0, missing, onFrame)
-                : this.playWhole(packet, timestamp, missing, onFrame)
+                ? this.playOnTimeline(
+                      packet,
+                      timestamp >>> 0,
+                      missing,
+                      onFrame,
+                      subframes,
+                      subframeBounds
+                  )
+                : this.playWhole(packet, timestamp, missing, onFrame, subframes, subframeBounds)
         }
         this.lastSeqs[stream] = played ? current : (current - 1 + SEQ_SPACE) % SEQ_SPACE
         return played ? 'decoded' : 'rejected'
@@ -716,19 +696,11 @@ export class MLowCodec {
         }
     }
 
-    getExpectedPacketLossPercent(): number {
-        return this.packetLossPercent
-    }
-
-    /**
-     * Write the requests in {@link MLOW_ENCODER_CTL}; absent fields are left
-     * untouched. The values survive {@link MLowCodec.reset}.
-     */
-    applyEncoderTunables(tunables: MLowEncoderTunables): void {
+    /** Writes the requests in {@link MLOW_ENCODER_CTL}; absent fields are left untouched. */
+    private applyEncoderTunables(tunables: MLowEncoderTunables): void {
         if (!this.encoder) {
             throw new Error('[MLowCodec] encoder not initialized')
         }
-        this.opts = { ...this.opts, tunables }
         this.writeCtl(MLOW_ENCODER_CTL.SUBFRAME_IMPORTANCE, tunables.subframeImportance)
         this.writeCtl(
             MLOW_ENCODER_CTL.USE_SPEECH_ACTIVITY_FLATNESS,
@@ -752,33 +724,7 @@ export class MLowCodec {
     }
 
     getFrameSize(): number {
-        return this.frameSize
-    }
-
-    getFrameDurationMs(): number {
-        return (this.frameSize / MLOW_SAMPLE_RATE) * 1000
-    }
-
-    getSampleRate(): number {
-        return MLOW_SAMPLE_RATE
-    }
-
-    getMaxConcealFrames(): number {
-        return this.maxConcealFrames
-    }
-
-    async reset(): Promise<void> {
-        this.destroy()
-        await this.init(this.opts)
-        this.decodeErrors = 0
-        this.decodeSuccess = 0
-        this.plcFrames = 0
-        this.fecFrames = 0
-        this.lateFrames = 0
-        this.concealCapped = 0
-        this.redundantSubframes = 0
-        this.redRecoveredFrames = 0
-        this.resetSequence()
+        return FRAME_SIZE
     }
 
     destroy(): void {
@@ -838,7 +784,9 @@ export class MLowCodec {
         packet: Uint8Array,
         timestamp: number | undefined,
         missing: number,
-        onFrame: (pcm: Float32Array) => void
+        onFrame: (pcm: Float32Array) => void,
+        subframes = -1,
+        bounds: Int32Array = this.subframeBounds
     ): boolean {
         if (missing > 0) {
             this.concealGap(missing, packet, onFrame)
@@ -850,7 +798,7 @@ export class MLowCodec {
         if (timestamp === undefined) {
             this.playedUntil = -1
         } else {
-            const count = this.splitOnTimeline(packet)
+            const count = this.splitOnTimeline(packet, subframes, bounds)
             let span = count === 0 ? decoded.length : 0
             for (let index = 0; index < count; index++) span += this.subframeSpans[index]
             this.playedUntil = (timestamp + span) >>> 0
@@ -867,10 +815,12 @@ export class MLowCodec {
         packet: Uint8Array,
         timestamp: number,
         missing: number,
-        onFrame: (pcm: Float32Array) => void
+        onFrame: (pcm: Float32Array) => void,
+        subframes = -1,
+        bounds: Int32Array = this.subframeBounds
     ): boolean {
         const decoder = this.decoder
-        const count = this.splitOnTimeline(packet)
+        const count = this.splitOnTimeline(packet, subframes, bounds)
         if (!decoder || count === 0) {
             return this.playWhole(packet, timestamp, missing, onFrame)
         }
@@ -902,16 +852,17 @@ export class MLowCodec {
                 samples = decoder.decodeFloatInto(this.decodeScratch, packet)
             } else {
                 for (let index = first; index < count; index++) {
-                    const offset = this.subframeBounds[index * 2]
+                    const offset = bounds[index * 2]
                     samples += decoder.decodeFloatInto(
                         this.decodeScratch.subarray(samples),
-                        packet.subarray(offset, offset + this.subframeBounds[index * 2 + 1])
+                        packet.subarray(offset, offset + bounds[index * 2 + 1])
                     )
                 }
             }
         } catch (err) {
             this.decodeErrors++
-            this.logger.trace('mlow decode failed', { message: toError(err).message })
+            if (this.traceEnabled)
+                this.logger.trace('mlow decode failed', { message: toError(err).message })
             return false
         }
 
@@ -939,15 +890,11 @@ export class MLowCodec {
         copies: number,
         timestamp: number | undefined,
         missing: number,
-        onFrame: (pcm: Float32Array) => void
+        onFrame: (pcm: Float32Array) => void,
+        bounds: Int32Array = this.redBounds
     ): boolean {
         this.redundantSubframes += copies
-        return this.playWhole(
-            packet.subarray(this.redBounds[copies * 3]),
-            timestamp,
-            missing,
-            onFrame
-        )
+        return this.playWhole(packet.subarray(bounds[copies * 3]), timestamp, missing, onFrame)
     }
 
     /**
@@ -959,14 +906,14 @@ export class MLowCodec {
         copies: number,
         timestamp: number,
         missing: number,
-        onFrame: (pcm: Float32Array) => void
+        onFrame: (pcm: Float32Array) => void,
+        bounds: Int32Array
     ): boolean {
         const decoder = this.decoder
-        const bounds = this.redBounds
         const primary = packet.subarray(bounds[copies * 3])
         const primarySpan = mlowPacketSamples(primary, this.subframeBounds)
         if (!decoder || primarySpan === 0) {
-            return this.playRedPrimary(packet, copies, timestamp, missing, onFrame)
+            return this.playRedPrimary(packet, copies, timestamp, missing, onFrame, bounds)
         }
 
         let cursor = this.playedUntil
@@ -1013,7 +960,8 @@ export class MLowCodec {
             samples = decoder.decodeFloatInto(this.decodeScratch, primary)
         } catch (err) {
             this.decodeErrors++
-            this.logger.trace('mlow decode failed', { message: toError(err).message })
+            if (this.traceEnabled)
+                this.logger.trace('mlow decode failed', { message: toError(err).message })
             return false
         }
 
@@ -1032,10 +980,14 @@ export class MLowCodec {
     /**
      * Splits `packet` into {@link subframeBounds} with each sub-frame's span in
      * {@link subframeSpans}; 0 for a malformed multiframe or a CELT frame, which have no span.
+     * `subframes` is a {@link readMlowSubframes} count already in the bounds, or -1 to read it.
      */
-    private splitOnTimeline(packet: Uint8Array): number {
-        const bounds = this.subframeBounds
-        let count = readMlowSubframes(packet, bounds)
+    private splitOnTimeline(
+        packet: Uint8Array,
+        subframes = -1,
+        bounds: Int32Array = this.subframeBounds
+    ): number {
+        let count = subframes >= 0 ? subframes : readMlowSubframes(packet, bounds)
         if (count === 0) {
             const marker = packet[0]
             if ((marker & MULTIFRAME_MARKER) === MULTIFRAME_MARKER && marker < CELT_TOC) return 0
@@ -1109,7 +1061,8 @@ export class MLowCodec {
         for (let frames = 0; left > 0; frames++) {
             if (frames === this.maxConcealFrames) {
                 this.concealCapped++
-                this.logger.trace('mlow concealment capped', { samples, frames })
+                if (this.traceEnabled)
+                    this.logger.trace('mlow concealment capped', { samples, frames })
                 break
             }
             const size = left < step ? left : step
@@ -1135,7 +1088,7 @@ export class MLowCodec {
         const frames = missing > limit ? limit : missing
         if (frames < missing) {
             this.concealCapped++
-            this.logger.trace('mlow concealment capped', { missing, frames })
+            if (this.traceEnabled) this.logger.trace('mlow concealment capped', { missing, frames })
         }
         if (frames <= 0) {
             return 0
@@ -1169,7 +1122,8 @@ export class MLowCodec {
             return this.decodeScratch.subarray(0, samples)
         } catch (err) {
             this.decodeErrors++
-            this.logger.trace('mlow decode failed', { message: toError(err).message })
+            if (this.traceEnabled)
+                this.logger.trace('mlow decode failed', { message: toError(err).message })
             return null
         }
     }
@@ -1186,9 +1140,10 @@ export class MLowCodec {
             this.fecFrames++
             return this.decodeScratch.subarray(0, samples)
         } catch (err) {
-            this.logger.trace('mlow fec decode failed, concealing instead', {
-                message: toError(err).message
-            })
+            if (this.traceEnabled)
+                this.logger.trace('mlow fec decode failed, concealing instead', {
+                    message: toError(err).message
+                })
             return this.conceal(frameSize)
         }
     }
@@ -1202,7 +1157,8 @@ export class MLowCodec {
             this.plcFrames++
             return this.decodeScratch.subarray(0, samples)
         } catch (err) {
-            this.logger.trace('mlow concealment failed', { message: toError(err).message })
+            if (this.traceEnabled)
+                this.logger.trace('mlow concealment failed', { message: toError(err).message })
             return this.silence(frameSize)
         }
     }
@@ -1214,7 +1170,7 @@ export class MLowCodec {
     private concealFrameSize(): number {
         const last = this.lastDecodedSamples
         if (last <= 0) {
-            return this.frameSize
+            return FRAME_SIZE
         }
         const quantized = Math.round(last / CONCEAL_QUANTUM) * CONCEAL_QUANTUM
         if (quantized < CONCEAL_QUANTUM) {

@@ -10,7 +10,7 @@ export const WA_CALL_AUDIO_PROCESSOR = 'wa-call-audio'
 export const WA_CALL_AUDIO_SAMPLE_RATE = 16_000
 
 /** Samples in one capture block: 20 ms at 16 kHz. */
-export const WA_CALL_AUDIO_BLOCK_SAMPLES = 320
+const WA_CALL_AUDIO_BLOCK_SAMPLES = 320
 
 /** Message the main thread posts to end the processor. */
 export const WA_CALL_AUDIO_STOP_MESSAGE = 'stop'
@@ -87,10 +87,6 @@ function besselI0(x) {
     return sum
 }
 
-/**
- * Kaiser-windowed sinc low-pass kernels for a signal at \`rate\`, one row of \`taps\` per phase:
- * tap k of phase p weighs the sample at \`k + offset - p / FILTER_PHASES\`. Each row sums to one.
- */
 function buildKernels(rate, taps, offset, halfWidth) {
     const cutoff = (2 * FILTER_CUTOFF_HZ) / rate
     const windowScale = 1 / besselI0(FILTER_KAISER_BETA)
@@ -128,7 +124,6 @@ class WaCallAudioProcessor extends AudioWorkletProcessor {
         this.captureCount = 0
         this.capturePhase = 0
 
-        // Room behind the read position for the past samples the interpolation reads.
         this.ring = new Float32Array(MAX_BUFFERED_SAMPLES + PLAYOUT_HALF_TAPS - 1)
         this.ringRead = 0
         this.ringLength = 0
@@ -141,7 +136,6 @@ class WaCallAudioProcessor extends AudioWorkletProcessor {
             const delay = Math.ceil((FILTER_LENGTH_FACTOR * sampleRate) / FILTER_TRANSITION_HZ / 2)
             this.captureTaps = 2 * delay + 1
             this.captureKernels = buildKernels(sampleRate, this.captureTaps, -delay, delay + 1)
-            // Each sample is stored twice, so the last captureTaps are always one contiguous run.
             this.captureHistory = new Float32Array(2 * this.captureTaps)
             this.captureWrite = 0
             this.playoutKernels = buildKernels(
@@ -174,7 +168,6 @@ class WaCallAudioProcessor extends AudioWorkletProcessor {
         let start = 0
         let count = samples.length
         if (this.ringLength + count > MAX_BUFFERED_SAMPLES) {
-            // Past the ceiling: keep only the newest prebuffer's worth.
             if (count >= PREBUFFER_SAMPLES) {
                 start = count - PREBUFFER_SAMPLES
                 count = PREBUFFER_SAMPLES
@@ -204,8 +197,6 @@ class WaCallAudioProcessor extends AudioWorkletProcessor {
             this.captureCount++
             this.capturePhase += TARGET_RATE
             if (this.capturePhase < rate) continue
-            // The box closed: its average is one 16 kHz sample. Below 16 kHz
-            // one input sample closes several boxes and is held across them.
             const value = this.captureSum / this.captureCount
             do {
                 this.emit(value)
@@ -216,7 +207,6 @@ class WaCallAudioProcessor extends AudioWorkletProcessor {
         }
     }
 
-    /** Above 16 kHz: each output is the low-passed input at its own fractional instant. */
     captureFiltered(channel, frames) {
         const rate = this.rate
         const taps = this.captureTaps
@@ -230,7 +220,6 @@ class WaCallAudioProcessor extends AudioWorkletProcessor {
             this.capturePhase += TARGET_RATE
             if (this.capturePhase < rate) continue
             this.capturePhase -= rate
-            // The output instant fell capturePhase / TARGET_RATE of a sample before this one.
             const row = Math.round((this.capturePhase * FILTER_PHASES) / TARGET_RATE) * taps
             const newest = this.captureWrite + taps - 1
             let value = 0
@@ -264,7 +253,6 @@ class WaCallAudioProcessor extends AudioWorkletProcessor {
         const kernels = this.playoutKernels
         for (let i = 0; i < channel.length; i++) {
             if (this.ringLength === 0) {
-                // Underrun: silence, and wait for a full prebuffer again.
                 this.playing = false
                 this.playPhase = 0
                 channel.fill(0, i)
@@ -288,7 +276,6 @@ class WaCallAudioProcessor extends AudioWorkletProcessor {
         }
     }
 
-    /** The playout at the read position plus playPhase; past the ring's end it reads silence. */
     interpolate(kernels) {
         const ring = this.ring
         const capacity = ring.length
@@ -304,7 +291,6 @@ class WaCallAudioProcessor extends AudioWorkletProcessor {
         return value
     }
 
-    /** On a start, the samples behind the first are the silence that was playing. */
     clearPlayoutHistory() {
         const ring = this.ring
         let slot = this.ringRead
@@ -333,9 +319,5 @@ class WaCallAudioProcessor extends AudioWorkletProcessor {
 
 try {
     registerProcessor(${JSON.stringify(WA_CALL_AUDIO_PROCESSOR)}, WaCallAudioProcessor)
-} catch {
-    // Loading this module again into a context that already runs it, as a
-    // second call on a shared context does, throws on the duplicate name; the
-    // processor registered the first time is this same one.
-}
+} catch {}
 `

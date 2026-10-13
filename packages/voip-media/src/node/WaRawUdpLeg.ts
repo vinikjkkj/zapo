@@ -9,43 +9,14 @@ import { isStunPacket } from '../relay/stun.js'
 import type { RawUdpLeg, RawUdpLegOptions } from '../relay/WaSctpRelay.js'
 
 /**
- * How long a leg may send media before the peer's stream has to be arriving,
- * in milliseconds.
- *
- * The window is not a connection timeout: the leg is already up and the relay
- * is already answering when it opens. It bounds the damage of a relay that
- * takes the uplink and forwards nothing back, which is a real deployment and
- * not a hypothetical. A relay forwards the peer's stream to the address it
- * last saw the client send from, so the first media datagram out of this
- * socket can move the peer's stream onto it - and if this relay is one that
- * does not forward, the stream that was arriving elsewhere stops arriving at
- * all. Giving up quickly is what lets the previous path take the stream back.
- *
- * Five seconds is slack, not a race against a quiet peer: on a measured call
- * the first inbound RTCP came back 3 ms in, and it keeps coming whether or not
- * anyone is speaking. Once media has come back the window slides on instead of
- * closing for good, at {@link RAW_UDP_RETURN_PATH_STALL_MS}.
+ * How long a leg may send media before the peer's stream has to arrive, in ms. Sending can pull
+ * the peer's stream onto a relay that forwards nothing, so giving up fast lets the old path back.
  */
 export const RAW_UDP_RETURN_PATH_TIMEOUT_MS = 5_000
 
 /**
- * How long a confirmed leg may go without inbound media before it is rolled
- * back, in milliseconds.
- *
- * Every non-STUN datagram slides this window and STUN never does, which is the
- * whole point: the relay answers every ping whether or not it forwards
- * anything, so pongs are exactly what a dead relay and a live one have in
- * common.
- *
- * The number is loose on purpose. What holds it up is the peer's RTCP, which a
- * 134-second capture showed arriving every 1.0 to 1.1 s with no gap and without
- * stopping when the source went silent - tighter than the 1500 ms
- * `voip_settings` carries, which is a ceiling rather than the cadence. That
- * capture never saw the encoder stop sending RTP, so the guarantee rests on
- * RTCP and not on media. Ten seconds is several times the ceiling because
- * catching a relay that stopped forwarding before the call is mute for good is
- * all this has to do; a tighter window only buys a faster reaction at the price
- * of hanging up on a peer that is merely slow.
+ * How long a confirmed leg may go without inbound media before it is rolled back, in ms. Only
+ * non-STUN datagrams slide it: a relay that forwards nothing still answers every ping.
  */
 export const RAW_UDP_RETURN_PATH_STALL_MS = 10_000
 
@@ -60,28 +31,9 @@ export interface WaRawUdpLegOptions extends RawUdpLegOptions {
 }
 
 /**
- * A media leg that talks to the relay over raw UDP: no ICE, no DTLS, no SCTP,
- * no data channel. STUN, RTP and RTCP ride the datagram socket as they are.
- *
- * The socket is connected to the relay rather than left unbound, so the kernel
- * fixes the 5-tuple the relay pairs against and drops anything arriving from
- * elsewhere. That matters because the relay forwards the peer's stream to the
- * address it last saw this client send from: the 5-tuple is the identity of
- * the leg, and it has to stay the same for the life of the call.
- *
- * Sending is therefore not a neutral act - it is what elects this leg - so the
- * leg polices its own return path (see {@link RAW_UDP_RETURN_PATH_TIMEOUT_MS})
- * and kills itself when media goes out and nothing comes back, at the start of
- * the call or at any point after it. STUN does not count as coming back: a
- * relay that forwards no media at all still answers every ping, so pongs prove
- * the socket works and prove nothing about the media path.
- *
- * The leg carries no protocol of its own. Building the allocate, pacing the
- * keepalive and interpreting what comes back all stay with the owner, which is
- * the same code that does it for the WebRTC legs. Media crosses it exactly as
- * the WebRTC legs produce it, with no hop-by-hop layer added, and none is
- * owed: a call carried entirely by raw legs authenticated and decoded every
- * inbound RTP packet with the end-to-end keys, as `RelayData.hbhKey` records.
+ * A media leg to the relay over a connected UDP socket, with no ICE, DTLS or SCTP: the socket's
+ * 5-tuple is the leg's identity to the relay. Sending is what elects it, so it polices its own
+ * return path and fails when media goes out and none comes back. The owner builds every message.
  */
 export class WaRawUdpLeg implements RawUdpLeg {
     private readonly options: WaRawUdpLegOptions
@@ -93,11 +45,7 @@ export class WaRawUdpLeg implements RawUdpLeg {
     private closed = false
     private returnPathTimer: NodeJS.Timeout | null = null
     private returnPathSeen = false
-    /**
-     * Monotonic, not wall clock: this is only ever read as an elapsed time, and
-     * a clock the system can step would either roll a healthy leg back or hold
-     * a stalled one open by however far it moved.
-     */
+    /** Monotonic, since it is only read as an elapsed time. */
     private lastInboundAt = 0
 
     constructor(options: WaRawUdpLegOptions) {
@@ -117,11 +65,7 @@ export class WaRawUdpLeg implements RawUdpLeg {
         return this.returnPathSeen
     }
 
-    /**
-     * Binds the socket to the relay. `onOpen` fires on the next turn of the
-     * loop at the earliest, never synchronously, so the caller can finish
-     * registering the leg before anything is sent through it.
-     */
+    /** Binds the socket to the relay; `onOpen` never fires synchronously. */
     open(): void {
         if (this.socket || this.closed) return
 
@@ -151,11 +95,7 @@ export class WaRawUdpLeg implements RawUdpLeg {
                 this.fail('raw_udp_socket_error')
             })
 
-            /**
-             * `connect` reports failure to this callback and emits no `error`
-             * event of its own, so an ignored argument would open the leg on a
-             * socket that never connected.
-             */
+            // `connect` reports failure only to this callback, never as an `error` event.
             socket.connect(this.options.port, this.options.ip, (err?: Error) => {
                 if (this.closed) return
                 if (err) {
@@ -173,13 +113,8 @@ export class WaRawUdpLeg implements RawUdpLeg {
     }
 
     /**
-     * Writes one datagram to the relay. Returns whether it was handed to the
-     * socket.
-     *
-     * The first media datagram arms the return-path window; STUN does not,
-     * because an allocate and a ping ask the relay for nothing it has to
-     * forward. From then on the window is the inbound side's business: media
-     * slides it, silence closes it, and sending never arms it again.
+     * Writes one datagram to the relay; returns whether the socket took it. The first media
+     * datagram, never STUN, arms the return-path window.
      */
     send(data: Uint8Array): boolean {
         const socket = this.socket
@@ -217,11 +152,7 @@ export class WaRawUdpLeg implements RawUdpLeg {
         }
     }
 
-    /**
-     * Arms the window once and lets the deadline do the sliding: a confirmed
-     * leg whose deadline arrives early re-arms for the time it has left. Media
-     * therefore costs one timestamp per datagram instead of a timer swap.
-     */
+    /** Arms the window; a confirmed leg whose deadline comes early re-arms for the time left. */
     private armReturnPathTimer(timeoutMs: number): void {
         this.clearReturnPathTimer()
         this.returnPathTimer = setTimeout(() => {

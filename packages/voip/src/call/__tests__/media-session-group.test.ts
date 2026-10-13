@@ -17,12 +17,17 @@ import {
     type WaVoipDeps
 } from '../../types.js'
 import { CallInfo } from '../call-state.js'
-import { selfStreamLayers, senderStreamsOf } from '../group-media-plan.js'
+import {
+    buildGroupSection,
+    groupSenderId,
+    selfStreamLayers,
+    senderStreamsOf
+} from '../group-media-plan.js'
 import {
     createGroupComposition,
     WA_CALL_PARTICIPANT_STATE,
-    type WaGroupCompositionDiff,
-    type WaGroupParticipant
+    type WaCallGroupParticipant,
+    type WaGroupCompositionDiff
 } from '../group-participants.js'
 import { WaCallMediaSession } from '../WaCallMediaSession.js'
 
@@ -44,7 +49,7 @@ const CONNECTED = WA_CALL_PARTICIPANT_STATE.Connected
 const CALL_KEY = new Uint8Array(32).fill(0x5a)
 const OTHER_CALL_KEY = new Uint8Array(32).fill(0x33)
 
-const THREE_WAY: readonly WaGroupParticipant[] = [
+const THREE_WAY: readonly WaCallGroupParticipant[] = [
     { jid: SELF, devices: [SELF_DEVICE], state: CONNECTED },
     { jid: PEER, devices: [PEER_DEVICE, PEER_SECOND_DEVICE], state: CONNECTED },
     { jid: THIRD, devices: [THIRD_DEVICE], state: CONNECTED }
@@ -73,7 +78,7 @@ interface Harness {
 
 async function createSession(
     options: {
-        readonly composition?: readonly WaGroupParticipant[] | null
+        readonly composition?: readonly WaCallGroupParticipant[] | null
         readonly direction?: 'incoming' | 'outgoing'
         readonly mediaType?: CallMediaType
         readonly relayData?: RelayData
@@ -224,7 +229,7 @@ interface RosterEntry {
     readonly pids?: Readonly<Record<string, string>>
 }
 
-function toRoster(participants: readonly WaGroupParticipant[]): RosterEntry[] {
+function toRoster(participants: readonly WaCallGroupParticipant[]): RosterEntry[] {
     return participants.map((participant) => ({
         jid: participant.jid,
         devices: participant.devices,
@@ -321,11 +326,9 @@ function dualStack(relay: RelaySpec): Uint8Array {
 function relayDescriptor(spec: {
     readonly selfPid: string
     readonly relays: readonly RelaySpec[]
-    readonly hbhKey?: Uint8Array
     readonly dialable?: boolean
 }): BinaryNode {
     const content: BinaryNode[] = [{ tag: 'key', attrs: {}, content: 'REISSUEDRELAYKEY' }]
-    if (spec.hbhKey) content.push({ tag: 'hbh_key', attrs: {}, content: spec.hbhKey })
     spec.relays.forEach((relay, index) => {
         content.push({ tag: 'token', attrs: { id: String(index) }, content: relay.token })
     })
@@ -344,8 +347,6 @@ function relayDescriptor(spec: {
     return { tag: 'relay', attrs: { self_pid: spec.selfPid, peer_pid: '0' }, content }
 }
 
-const OFFER_HBH_KEY = Uint8Array.from({ length: 30 }, (_, i) => i + 1)
-
 function offerRelayData(): RelayData {
     return {
         endpoints: [
@@ -361,8 +362,7 @@ function offerRelayData(): RelayData {
         ],
         participantJids: [PEER_DEVICE],
         uuid: 'OFFERUUID',
-        selfPid: 0,
-        hbhKey: OFFER_HBH_KEY
+        selfPid: 0
     }
 }
 
@@ -647,8 +647,7 @@ test('a reissued relay moves the call to a new generation of raw udp legs, elect
     assert.deepEqual(relays.endpoints[0].rawToken, GRU.token)
     assert.deepEqual(relays.endpoints[2].rawToken, GIG.token)
     assert.equal(relays.endpoints[0].key, 'REISSUEDRELAYKEY')
-    // The hop key and the participant list are kept when the reissue omits them.
-    assert.deepEqual(harness.call.relayData?.hbhKey, OFFER_HBH_KEY)
+    // The participant list is kept when the reissue omits it.
     assert.deepEqual(harness.call.relayData?.participantJids, [PEER_DEVICE])
     // The relay is a separate matter from the roster.
     assert.equal(harness.diffs.length, 0)
@@ -991,7 +990,7 @@ test('a group call that loses its relay asks its owner to take it down', async (
 })
 
 /** What the roster of a call we placed says right after the offer: only we are connected. */
-const PLACED: readonly WaGroupParticipant[] = [
+const PLACED: readonly WaCallGroupParticipant[] = [
     { jid: SELF, devices: [SELF_DEVICE], state: CONNECTED },
     { jid: PEER, devices: [PEER_DEVICE, PEER_SECOND_DEVICE], state: 'outgoing' },
     { jid: THIRD, devices: [THIRD_DEVICE], state: 'receipt' }
@@ -1510,7 +1509,7 @@ test('a participant leaving takes its raised hand and its media state with it', 
 })
 
 test('every sender maps back to its device, and every app-data stream is known, past 32', async () => {
-    const crowd: WaGroupParticipant[] = [
+    const crowd: WaCallGroupParticipant[] = [
         { jid: SELF, devices: [SELF_DEVICE], state: CONNECTED },
         ...Array.from({ length: 40 }, (_, i) => ({
             jid: `${9000 + i}@lid`,
@@ -1673,6 +1672,75 @@ test('a member heard again can be reported again later', async () => {
     harness.clock.now += 2_000
     sweep()
     assert.equal(sentWithTag(harness, 'peer_state').length, 2)
+})
+
+test('a member reported invisible who left from a companion device is reported again on return', async () => {
+    const MEMBER = '555555555555@lid'
+    const MEMBER_DEVICE = '555555555555:3@lid'
+    const withMember: readonly WaCallGroupParticipant[] = [
+        ...THREE_WAY.slice(0, 2),
+        { jid: MEMBER, devices: [MEMBER_DEVICE], state: CONNECTED }
+    ]
+    const harness = await activeGroupSession({ composition: withMember })
+    await harness.session.applyCallKey(CALL_KEY, 1)
+    const senderOf = (device: string) =>
+        [...harness.call.groupSenders].find(([, jid]) => jid === device)?.[0] as string
+    const sweep = () =>
+        (harness.session as unknown as { sweepInvisibleSenders(): void }).sweepInvisibleSenders()
+    const reported = () =>
+        sentWithTag(harness, 'peer_state').map(
+            (node) => (innerOf(node).content as BinaryNode[])[0].attrs.jid
+        )
+    harness.session.handleSenderMedia(senderOf(PEER_DEVICE), true)
+
+    sweep()
+    harness.clock.now += 21_000
+    sweep()
+    assert.deepEqual(reported(), [MEMBER])
+
+    await harness.session.handleCallGroupUpdate(
+        groupUpdate({ transactionId: 5, roster: toRoster(withMember.slice(0, 2)) })
+    )
+    await harness.session.handleCallGroupUpdate(
+        groupUpdate({ transactionId: 6, roster: toRoster(withMember) })
+    )
+    sweep()
+    harness.clock.now += 21_000
+    sweep()
+    assert.deepEqual(reported(), [MEMBER, MEMBER])
+})
+
+test('every SSRC, sender id and key a sync publishes equals its direct derivation', async () => {
+    const harness = await activeGroupSession({ mediaType: CallMediaType.Video })
+    const devices = [PEER_DEVICE, PEER_SECOND_DEVICE, THIRD_DEVICE]
+    const pids = new Map<string, number>()
+    const expectPlan = (callKey: Uint8Array) => {
+        assert.deepEqual(
+            lastGroup(harness.link),
+            buildGroupSection(ID, callKey, devices, true, pids)
+        )
+        const ssrcs = harness.link.plan.ssrcs
+        assert.deepEqual(ssrcs?.selfLayers, selfStreamLayers(ID, SELF_DEVICE))
+        assert.deepEqual(ssrcs?.peerStreams, senderStreams(devices, true))
+        assert.deepEqual(
+            ssrcs?.peerAppData,
+            devices.map((jid) => generateSecureSsrc(ID, jid, WA_SSRC_SLOT.APP_DATA.MAIN))
+        )
+        assert.deepEqual(harness.link.plan.keys?.send, derivePerJidSrtpKey(callKey, SELF_DEVICE))
+        for (const device of devices) {
+            assert.equal(
+                harness.call.participantMedia.get(device.replace(':0@', '@'))?.senderId,
+                groupSenderId(ID, device)
+            )
+        }
+    }
+
+    await harness.session.applyCallKey(CALL_KEY, 1)
+    expectPlan(CALL_KEY)
+    await harness.session.applyCallKey(OTHER_CALL_KEY, 2)
+    expectPlan(OTHER_CALL_KEY)
+    await harness.session.applyCallKey(CALL_KEY, 3)
+    expectPlan(CALL_KEY)
 })
 
 test('a re-rung group offer with no relay takes the one the ack of our accept brings', async () => {

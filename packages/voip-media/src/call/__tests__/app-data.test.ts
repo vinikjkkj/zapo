@@ -8,11 +8,7 @@ import { SrtpSession } from '../../crypto/srtp.js'
 import { createNoopLogger } from '../../logger.js'
 import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { nodeCrypto } from '../../node/crypto.js'
-import {
-    SRTP_RECV_AUTH_TAG_LEN,
-    SRTP_SEND_AUTH_TAG_LEN,
-    type SrtpKeyingMaterial
-} from '../../types.js'
+import { type SrtpKeyingMaterial } from '../../types.js'
 import type { WaCallMediaRelay, WaCallMediaRelays, WaCallMediaSsrcs } from '../plan.js'
 import { WaCallMediaPlane } from '../WaCallMediaPlane.js'
 
@@ -137,13 +133,7 @@ async function startMedia(harness: Harness): Promise<void> {
 
 /** One app-data packet as the peer would put it on the wire. */
 function peerAppDataPacket(reaction: string, transactionId: bigint, sequence: number): Uint8Array {
-    const peerSrtp = new SrtpSession(
-        nodeCrypto,
-        PEER_KEY,
-        SELF_KEY,
-        SRTP_SEND_AUTH_TAG_LEN,
-        SRTP_RECV_AUTH_TAG_LEN
-    )
+    const peerSrtp = new SrtpSession(nodeCrypto, PEER_KEY, SELF_KEY)
     const header = new RtpHeader(PEER_PAYLOAD_TYPE, sequence, 0, PEER_APP_DATA_SSRC)
     return peerSrtp.protect(
         new RtpPacket(header, encodeReactionPayload({ transactionId, reaction }))

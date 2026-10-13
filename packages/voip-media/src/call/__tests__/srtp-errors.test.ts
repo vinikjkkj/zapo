@@ -7,12 +7,7 @@ import { SrtpSession } from '../../crypto/srtp.js'
 import { createNoopLogger } from '../../logger.js'
 import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { nodeCrypto } from '../../node/crypto.js'
-import {
-    PayloadType,
-    SRTP_RECV_AUTH_TAG_LEN,
-    SRTP_SEND_AUTH_TAG_LEN,
-    type SrtpKeyingMaterial
-} from '../../types.js'
+import { PayloadType, type SrtpKeyingMaterial } from '../../types.js'
 import type { WaCallMediaSsrcs } from '../plan.js'
 import { WaCallMediaPlane } from '../WaCallMediaPlane.js'
 
@@ -62,13 +57,7 @@ async function createHarness(): Promise<Harness> {
     return {
         plane,
         receive: (data) => internals.onRelayData(data),
-        peer: new SrtpSession(
-            nodeCrypto,
-            PEER_KEY,
-            SELF_KEY,
-            SRTP_SEND_AUTH_TAG_LEN,
-            SRTP_RECV_AUTH_TAG_LEN
-        )
+        peer: new SrtpSession(nodeCrypto, PEER_KEY, SELF_KEY)
     }
 }
 

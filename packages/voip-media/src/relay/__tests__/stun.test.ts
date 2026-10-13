@@ -48,10 +48,12 @@ test('isRtcpPacket distinguishes RTCP from RTP and malformed packets', () => {
     assert.equal(isRtcpPacket(wrongVersion), false)
 })
 
-test('buildSenderSubscriptions encodes protobuf wrapper for SSRC', () => {
-    const subs = buildSenderSubscriptions(0x12345678)
-    assert.ok(subs.length > 0)
-    assert.notEqual(subs[0], 0)
+test('buildSenderSubscriptions writes {1: {3: ssrc, 5: 0, 6: 0}} with the zero fields explicit', () => {
+    const hex = (ssrc: number): string => bytesToHex(buildSenderSubscriptions(ssrc))
+    assert.equal(hex(0x11223344), '0a0a18c4e688890128003000')
+    assert.equal(hex(0xdeadbeef), '0a0a18effdb6f50d28003000')
+    assert.equal(hex(1), '0a06180128003000')
+    assert.equal(hex(0), '0a06180028003000')
 })
 
 test('isRtpPacket and isStunPacket classify first-byte families', () => {

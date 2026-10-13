@@ -117,7 +117,9 @@ function assertWire(value: unknown, what: string): Record<string, unknown> {
     }
     const record = value as Record<string, unknown>
     if (record.v !== WA_CALL_MEDIA_WIRE_VERSION) {
-        throw new Error(`${what} has wire version ${String(record.v)}, expected 1`)
+        throw new Error(
+            `${what} has wire version ${String(record.v)}, expected ${WA_CALL_MEDIA_WIRE_VERSION}`
+        )
     }
     if (typeof record.callId !== 'string' || record.callId.length === 0) {
         throw new Error(`${what} has no call id`)

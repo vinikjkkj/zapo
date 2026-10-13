@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { test } from 'node:test'
 
 import { createNoopLogger, type WaClientPluginContext } from 'zapo-js'
@@ -13,7 +14,9 @@ import { WaVoipCoordinator, type WaVoipCoordinatorOptions } from '../WaVoipCoord
 function mockCtx(isMobilePrimary: () => boolean = () => false) {
     const handlers: Array<{ tag: string }> = []
     const emitted: Array<[string, unknown[]]> = []
+    const client = new EventEmitter()
     const ctx = {
+        client,
         logger: createNoopLogger(),
         deps: { isMobilePrimary } as never,
         stores: {} as never,
@@ -27,7 +30,7 @@ function mockCtx(isMobilePrimary: () => boolean = () => false) {
             emitted.push([event, args])
         }
     } as unknown as WaClientPluginContext
-    return { ctx, handlers, emitted }
+    return { ctx, handlers, emitted, client }
 }
 
 test('WaVoipCoordinator registers call, ack and receipt incoming handlers', () => {
@@ -127,6 +130,36 @@ test('participant events reach the client with the device that sent them', () =>
     }
 
     coordinator.dispose()
+})
+
+test('inbound audio is forwarded only while the client listens, including a late listener', () => {
+    const { ctx, emitted, client } = mockCtx()
+    const coordinator = new WaVoipCoordinator(ctx)
+    const manager = (coordinator as unknown as { manager: EventEmitter }).manager
+    const call = { callId: 'CID' }
+    const inboundAudio = () => emitted.filter(([event]) => event === 'voip_call_inbound_audio')
+
+    assert.equal(manager.listenerCount('call_inbound_audio'), 0)
+
+    const listener = () => undefined
+    client.on('voip_call_inbound_audio', listener)
+    client.once('voip_call_inbound_audio', listener)
+    assert.equal(manager.listenerCount('call_inbound_audio'), 1)
+    manager.emit('call_inbound_audio', call, new Float32Array(2))
+    assert.equal(inboundAudio().length, 1)
+
+    client.off('voip_call_inbound_audio', listener)
+    assert.equal(manager.listenerCount('call_inbound_audio'), 1)
+    client.removeAllListeners('voip_call_inbound_audio')
+    assert.equal(manager.listenerCount('call_inbound_audio'), 0)
+    manager.emit('call_inbound_audio', call, new Float32Array(2))
+    assert.equal(inboundAudio().length, 1)
+
+    client.on('voip_call_inbound_audio', listener)
+    coordinator.dispose()
+    assert.equal(manager.listenerCount('call_inbound_audio'), 0)
+    assert.equal(client.listenerCount('newListener'), 0)
+    assert.equal(client.listenerCount('removeListener'), 0)
 })
 
 test('a listener written before participantJid still fits', () => {

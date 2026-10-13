@@ -2,7 +2,8 @@ import { canonicalizeSignalServer, parseSignalAddressFromJid, WA_DEFAULTS } from
 import { type BinaryNode, findNodeChild, getNodeChildrenByTag } from 'zapo-js/transport'
 import { tryAsNumber } from 'zapo-js/util'
 
-import type { WaGroupParticipant } from '../call/group-participants.js'
+import type { WaCallGroupParticipant } from '../call/group-participants.js'
+import { addressDeviceJid } from '../jid.js'
 
 const PRIMARY_DEVICE_ID = 0
 
@@ -92,17 +93,6 @@ function isLidServer(server: string): boolean {
     return canonicalizeSignalServer(server) === WA_DEFAULTS.LID_SERVER
 }
 
-/** A device jid in its addressed form: a bare jid names the primary and gets its `:0` back. */
-function addressDeviceJid(jid: string): {
-    readonly jid: string
-    readonly deviceId: number
-    readonly server: string
-} {
-    const address = parseSignalAddressFromJid(jid)
-    const server = address.server ?? WA_DEFAULTS.HOST_DOMAIN
-    return { jid: `${address.user}:${address.device}@${server}`, deviceId: address.device, server }
-}
-
 function withPrimaryFirst<T>(items: readonly T[], deviceIdOf: (item: T) => number): readonly T[] {
     const index = items.findIndex((item) => deviceIdOf(item) === PRIMARY_DEVICE_ID)
     if (index <= 0) return items
@@ -147,7 +137,6 @@ function parseParticipantNode(node: BinaryNode, isUserNode: boolean): GroupInfoP
             `group_info participant ${jid} carries ${devices.length} devices, over the limit of ${WA_CALL_MAX_DEVICES_PER_USER}`
         )
     }
-    // A `<participant>` carries one active device or none, so only `<user>` is held to a count.
     if (isUserNode && nacked && devices.length > 0) {
         throw new Error(`group_info user ${jid} is nacked and still carries a device`)
     }
@@ -228,7 +217,7 @@ export function parseGroupInfoNode(node: BinaryNode): GroupInfo {
 }
 
 /** The participants of a parsed `<group_info>` in the shape the reconciler reads. */
-export function toGroupCallParticipants(info: GroupInfo): readonly WaGroupParticipant[] {
+export function toGroupCallParticipants(info: GroupInfo): readonly WaCallGroupParticipant[] {
     return info.participants.map((participant) => {
         const withPid = participant.devices.filter((device) => device.pid !== null)
         return {
@@ -250,7 +239,7 @@ export type GroupCallRoster =
     | {
           readonly kind: 'roster'
           readonly info: GroupInfo
-          readonly participants: readonly WaGroupParticipant[]
+          readonly participants: readonly WaCallGroupParticipant[]
       }
     | { readonly kind: 'absent' }
     | { readonly kind: 'empty' }
@@ -304,29 +293,4 @@ export function normalizeParticipantDeviceJids(
     })
 
     return withPrimaryFirst(resolved, (entry) => entry.deviceId).map((entry) => entry.jid)
-}
-
-/**
- * The LID device jid the SSRCs and SRTP keys of a device derive from, `:0` included.
- *
- * @throws for a jid that is not a LID.
- */
-export function toMediaIdentityJid(deviceJid: string): string {
-    const address = parseSignalAddressFromJid(deviceJid)
-    const server = canonicalizeSignalServer(address.server ?? WA_DEFAULTS.HOST_DOMAIN)
-    if (server !== WA_DEFAULTS.LID_SERVER) {
-        throw new Error(`call media identity needs a LID jid, got ${deviceJid}`)
-    }
-    return `${address.user}:${address.device}@${WA_DEFAULTS.LID_SERVER}`
-}
-
-/**
- * The media identities of a participant's devices, primary first; `user_pn` addresses no media.
- *
- * @throws through {@link toMediaIdentityJid}.
- */
-export function toParticipantMediaIdentityJids(
-    participant: GroupInfoParticipant
-): readonly string[] {
-    return participant.devices.map((device) => toMediaIdentityJid(device.jid))
 }

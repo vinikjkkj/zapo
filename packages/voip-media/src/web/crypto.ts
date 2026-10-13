@@ -60,7 +60,6 @@ function buildAesTables(): void {
 
 buildAesTables()
 
-const roundKeys = new Uint32Array(AES_128_SCHEDULE_WORDS)
 const counterBlock = new Uint32Array(4)
 const keystreamBlock = new Uint32Array(4)
 
@@ -84,10 +83,7 @@ function substituteWord(word: number): number {
     )
 }
 
-function expandAes128Key(key: Uint8Array): void {
-    if (key.length !== AES_BLOCK_LENGTH) {
-        throw new RangeError(`aes-128 key must be 16 bytes, got ${key.length}`)
-    }
+function expandAes128Key(key: Uint8Array, roundKeys: Uint32Array): void {
     for (let i = 0; i < AES_128_KEY_WORDS; i++) {
         roundKeys[i] = readWord(key, i * 4)
     }
@@ -103,7 +99,7 @@ function expandAes128Key(key: Uint8Array): void {
 }
 
 /** Encrypts `counterBlock` under `roundKeys` into `keystreamBlock`. */
-function encryptCounterBlock(): void {
+function encryptCounterBlock(roundKeys: Uint32Array): void {
     let s0 = counterBlock[0] ^ roundKeys[0]
     let s1 = counterBlock[1] ^ roundKeys[1]
     let s2 = counterBlock[2] ^ roundKeys[2]
@@ -176,21 +172,69 @@ function incrementCounterBlock(): void {
     }
 }
 
+interface KeyedState {
+    readonly key: Uint8Array
+    readonly state: Uint32Array
+}
+
+/** Derived state cached per key buffer, rebuilt if the buffer's bytes change under it. */
+function cachedState(
+    cache: WeakMap<Uint8Array, KeyedState>,
+    key: Uint8Array,
+    build: (key: Uint8Array, state: Uint32Array) => void,
+    words: number
+): Uint32Array {
+    const cached = cache.get(key)
+    if (cached && bytesEqual(cached.key, key)) {
+        return cached.state
+    }
+    const state = cached?.state ?? new Uint32Array(words)
+    build(key, state)
+    cache.set(key, { key: key.slice(), state })
+    return state
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+    if (left.length !== right.length) return false
+    for (let i = 0; i < left.length; i++) {
+        if (left[i] !== right[i]) return false
+    }
+    return true
+}
+
+const aesSchedules = new WeakMap<Uint8Array, KeyedState>()
+
 function aesCtr128(key: Uint8Array, iv: Uint8Array, data: Uint8Array): Uint8Array {
+    if (key.length !== AES_BLOCK_LENGTH) {
+        throw new RangeError(`aes-128 key must be 16 bytes, got ${key.length}`)
+    }
     if (iv.length !== AES_BLOCK_LENGTH) {
         throw new RangeError(`aes-128-ctr iv must be 16 bytes, got ${iv.length}`)
     }
-    expandAes128Key(key)
+    const roundKeys = cachedState(aesSchedules, key, expandAes128Key, AES_128_SCHEDULE_WORDS)
     for (let i = 0; i < 4; i++) {
         counterBlock[i] = readWord(iv, i * 4)
     }
 
     const output = new Uint8Array(data.length)
-    for (let offset = 0; offset < data.length; offset += AES_BLOCK_LENGTH) {
-        encryptCounterBlock()
+    const fullBlocksEnd = data.length - (data.length % AES_BLOCK_LENGTH)
+    let offset = 0
+    for (; offset < fullBlocksEnd; offset += AES_BLOCK_LENGTH) {
+        encryptCounterBlock(roundKeys)
         incrementCounterBlock()
-        const end = Math.min(offset + AES_BLOCK_LENGTH, data.length)
-        for (let i = offset; i < end; i++) {
+        for (let w = 0; w < 4; w++) {
+            const word = keystreamBlock[w]
+            const i = offset + w * 4
+            output[i] = data[i] ^ (word >>> 24)
+            output[i + 1] = data[i + 1] ^ ((word >>> 16) & 0xff)
+            output[i + 2] = data[i + 2] ^ ((word >>> 8) & 0xff)
+            output[i + 3] = data[i + 3] ^ (word & 0xff)
+        }
+    }
+    if (offset < data.length) {
+        encryptCounterBlock(roundKeys)
+        incrementCounterBlock()
+        for (let i = offset; i < data.length; i++) {
             const index = i - offset
             const word = keystreamBlock[index >>> 2]
             output[i] = data[i] ^ ((word >>> (24 - ((index & 3) << 3))) & 0xff)
@@ -217,6 +261,21 @@ class Sha1 {
         this.totalLength = 0
     }
 
+    /** Resumes from a chaining state saved at `from` right after one whole block. */
+    resumeAfterBlock(saved: Uint32Array, from: number): void {
+        for (let i = 0; i < 5; i++) {
+            this.state[i] = saved[from + i]
+        }
+        this.blockLength = 0
+        this.totalLength = SHA1_BLOCK_LENGTH
+    }
+
+    saveState(out: Uint32Array, offset: number): void {
+        for (let i = 0; i < 5; i++) {
+            out[offset + i] = this.state[i]
+        }
+    }
+
     update(data: Uint8Array): void {
         this.totalLength += data.length
         let offset = 0
@@ -232,7 +291,7 @@ class Sha1 {
         }
     }
 
-    digest(): Uint8Array {
+    digest(output: Uint8Array = new Uint8Array(SHA1_DIGEST_LENGTH)): Uint8Array {
         const bitLength = this.totalLength * 8
         this.block[this.blockLength++] = 0x80
         if (this.blockLength > SHA1_BLOCK_LENGTH - 8) {
@@ -249,7 +308,6 @@ class Sha1 {
         }
         this.compress()
 
-        const output = new Uint8Array(SHA1_DIGEST_LENGTH)
         for (let i = 0; i < 5; i++) {
             const word = this.state[i]
             output[i * 4] = word >>> 24
@@ -311,6 +369,9 @@ class Sha1 {
 const sha1 = new Sha1()
 const paddedKey = new Uint8Array(SHA1_BLOCK_LENGTH)
 const keyPad = new Uint8Array(SHA1_BLOCK_LENGTH)
+const innerDigest = new Uint8Array(SHA1_DIGEST_LENGTH)
+const SHA1_STATE_WORDS = 5
+const hmacPads = new WeakMap<Uint8Array, KeyedState>()
 
 function applyPad(pad: number): Uint8Array {
     for (let i = 0; i < SHA1_BLOCK_LENGTH; i++) {
@@ -319,26 +380,34 @@ function applyPad(pad: number): Uint8Array {
     return keyPad
 }
 
-function hmacSha1(key: Uint8Array, ...parts: readonly Uint8Array[]): Uint8Array {
+/** Hashes the inner and outer pads once: words 0-4 are the inner state, 5-9 the outer. */
+function buildHmacPads(key: Uint8Array, pads: Uint32Array): void {
     paddedKey.fill(0)
     if (key.length > SHA1_BLOCK_LENGTH) {
         sha1.reset()
         sha1.update(key)
-        paddedKey.set(sha1.digest())
+        sha1.digest(paddedKey)
     } else {
         paddedKey.set(key)
     }
-
     sha1.reset()
     sha1.update(applyPad(HMAC_INNER_PAD))
+    sha1.saveState(pads, 0)
+    sha1.reset()
+    sha1.update(applyPad(HMAC_OUTER_PAD))
+    sha1.saveState(pads, SHA1_STATE_WORDS)
+}
+
+function hmacSha1(key: Uint8Array, ...parts: readonly Uint8Array[]): Uint8Array {
+    const pads = cachedState(hmacPads, key, buildHmacPads, SHA1_STATE_WORDS * 2)
+    sha1.resumeAfterBlock(pads, 0)
     for (const part of parts) {
         sha1.update(part)
     }
-    const inner = sha1.digest()
+    sha1.digest(innerDigest)
 
-    sha1.reset()
-    sha1.update(applyPad(HMAC_OUTER_PAD))
-    sha1.update(inner)
+    sha1.resumeAfterBlock(pads, SHA1_STATE_WORDS)
+    sha1.update(innerDigest)
     return sha1.digest()
 }
 

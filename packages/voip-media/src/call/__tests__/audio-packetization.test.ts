@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { peerConnectionNotDialled } from '../../__tests__/_helpers.js'
 import { readUInt32BE } from '../../bytes.js'
 import { createNoopLogger } from '../../logger.js'
-import { MLOW_MAX_RED_BLOCKS, MLowCodec, readMlowRed } from '../../media/mlow-codec.js'
+import { MLowCodec } from '../../media/mlow-codec.js'
 import { RtpPacket } from '../../media/rtp.js'
 import { nodeCrypto } from '../../node/crypto.js'
 import type { WaCallMediaSsrcs } from '../plan.js'
@@ -134,13 +134,6 @@ function audioPackets(relay: RecordingRelay): RtpPacket[] {
 
 function voicedFrames(count: number, from = 0): Float32Array[] {
     return Array.from({ length: count }, (_, index) => voicedFrame(from + index))
-}
-
-/** Switches the plane to the experimental in-band RED, `level` copies per packet. */
-function useInBandRed(harness: Harness, level = 1): void {
-    const internals = harness.plane as unknown as { redLayout: string; redLevel: number }
-    internals.redLayout = 'official'
-    internals.redLevel = level
 }
 
 test('without voip settings every 60 ms frame goes out in a packet of its own', async (t) => {
@@ -324,133 +317,59 @@ test('with RED a capture pause sends the next frame alone, marked, without a sta
     assert.equal(packets[3].header.timestamp, packets[2].header.timestamp)
 })
 
-test('with in-band RED each packet carries the headers, the 0x00, the copy of the frame before, then the frame', async (t) => {
-    const harness = await createPlane({ mlowRed: true }, 2)
+test('with RED a lost packet plays back from the copy the next one carries', async (t) => {
+    const harness = await createPlane({ mlowRed: true })
     t.after(() => harness.plane.stop())
-    useInBandRed(harness)
     const twin = await MLowCodec.create({ red: true })
     t.after(() => twin.destroy())
+    const receiver = await MLowCodec.create()
+    t.after(() => receiver.destroy())
+    const reference = await MLowCodec.create()
+    t.after(() => reference.destroy())
 
-    const frames = voicedFrames(4)
+    const frames = voicedFrames(6)
     push(harness, frames)
 
+    const primaries: Uint8Array[] = []
+    const copies: (Uint8Array | null)[] = []
+    for (const frame of frames) {
+        primaries.push(twin.encode(frame))
+        copies.push(twin.lastSecondary)
+    }
+    const played: number[] = []
     const packets = audioPackets(harness.relay)
-    assert.equal(packets.length, 4, 'one primary per packet, whatever the plan bundles')
-    const base = packets[0].header.timestamp
-    let copy: Uint8Array | null = null
+    assert.equal(packets.length, 6)
     for (let index = 0; index < packets.length; index++) {
-        const primary = twin.encode(frames[index])
+        if (index === 3) continue
         const { header, payload } = packets[index]
-        assert.deepEqual(
+        receiver.decodeSequenced(
+            header.sequenceNumber,
             payload,
-            copy
-                ? Uint8Array.from([0x86, copy.length, 0x00, ...copy, ...primary])
-                : Uint8Array.from([0x00, ...primary]),
-            '0x80 | 60 ms / 10 and the copy length, the 0x00 primary header, the copy, the primary'
+            (pcm) => played.push(...pcm),
+            header.timestamp,
+            0
         )
-        assert.equal(header.payloadType, 121, 'on mlow-red-1, where the official clients take it')
-        assert.equal(header.timestamp - base, index * 960, 'stamped on the primary')
-        assert.equal(header.marker, index === 0)
-        copy = twin.lastSecondary
     }
-})
 
-for (const layout of ['timestamp', 'official'] as const) {
-    test(`with ${layout} RED a lost packet plays back from the copy the next one carries`, async (t) => {
-        const harness = await createPlane({ mlowRed: true })
-        t.after(() => harness.plane.stop())
-        if (layout === 'official') useInBandRed(harness)
-        const twin = await MLowCodec.create({ red: true })
-        t.after(() => twin.destroy())
-        const receiver = await MLowCodec.create()
-        t.after(() => receiver.destroy())
-        const reference = await MLowCodec.create()
-        t.after(() => reference.destroy())
-
-        const frames = voicedFrames(6)
-        push(harness, frames)
-
-        const primaries: Uint8Array[] = []
-        const copies: (Uint8Array | null)[] = []
-        for (const frame of frames) {
-            primaries.push(twin.encode(frame))
-            copies.push(twin.lastSecondary)
-        }
-        const played: number[] = []
-        const packets = audioPackets(harness.relay)
-        assert.equal(packets.length, 6)
-        for (let index = 0; index < packets.length; index++) {
-            if (index === 3) continue
-            const { header, payload } = packets[index]
-            receiver.decodeSequenced(
-                header.sequenceNumber,
-                payload,
-                (pcm) => played.push(...pcm),
-                header.timestamp,
-                header.payloadType === 121 ? 1 : 0
-            )
-        }
-
-        const expected: number[] = []
-        const lostCopy = copies[3]
-        assert.ok(lostCopy)
-        for (const frame of [
-            primaries[0],
-            primaries[1],
-            primaries[2],
-            lostCopy,
-            primaries[4],
-            primaries[5]
-        ]) {
-            expected.push(...reference.decode(frame))
-        }
-        assert.deepEqual(played, expected, 'the copy fills the lost slot and nothing plays twice')
-        const stats = receiver.getStats()
-        assert.equal(stats.redRecovered, 1)
-        assert.equal(stats.redundant, 3)
-        assert.equal(stats.plc, 0)
-        assert.equal(stats.fec, 0)
-    })
-}
-
-test('with in-band RED a capture pause sends the next frame alone, marked, without a stale copy', async (t) => {
-    const harness = await createPlane({ mlowRed: true })
-    t.after(() => harness.plane.stop())
-    useInBandRed(harness)
-
-    push(harness, voicedFrames(2))
-    push(harness, voicedFrames(2, 10), START_MS + 1_000)
-
-    const bounds = new Int32Array((MLOW_MAX_RED_BLOCKS + 1) * 3)
-    const packets = audioPackets(harness.relay)
-    assert.deepEqual(
-        packets.map((packet) => [readMlowRed(packet.payload, bounds), packet.header.marker]),
-        [
-            [0, true],
-            [1, false],
-            [0, true],
-            [1, false]
-        ]
-    )
-    assert.equal(packets[3].header.timestamp - packets[2].header.timestamp, 960)
-})
-
-test('with in-band RED at level 2 a 60 ms frame carries the two frames before, 120 and 60 ms back', async (t) => {
-    const harness = await createPlane({ mlowRed: true })
-    t.after(() => harness.plane.stop())
-    useInBandRed(harness, 2)
-
-    push(harness, voicedFrames(4))
-
-    const bounds = new Int32Array((MLOW_MAX_RED_BLOCKS + 1) * 3)
-    const packets = audioPackets(harness.relay)
-    assert.equal(packets.length, 4)
-    assert.equal(readMlowRed(packets[1].payload, bounds), 1, 'one frame before the second')
-    for (const { payload } of packets.slice(2)) {
-        assert.deepEqual([payload[0], payload[2], payload[4]], [0x8c, 0x86, 0x00])
-        assert.equal(readMlowRed(payload, bounds), 2)
-        assert.deepEqual([bounds[2], bounds[5]], [1920, 960])
+    const expected: number[] = []
+    const lostCopy = copies[3]
+    assert.ok(lostCopy)
+    for (const frame of [
+        primaries[0],
+        primaries[1],
+        primaries[2],
+        lostCopy,
+        primaries[4],
+        primaries[5]
+    ]) {
+        expected.push(...reference.decode(frame))
     }
+    assert.deepEqual(played, expected, 'the copy fills the lost slot and nothing plays twice')
+    const stats = receiver.getStats()
+    assert.equal(stats.redRecovered, 1)
+    assert.equal(stats.redundant, 3)
+    assert.equal(stats.plc, 0)
+    assert.equal(stats.fec, 0)
 })
 
 test('the Companion weights reach the codec of a plane and of a remote host', async () => {

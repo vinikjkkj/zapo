@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { H264Depacketizer, isH264KeyFrame, packetizeH264AnnexB } from '../h264.js'
+import { H264Depacketizer, isH264KeyFrame, packetizeH264Frame } from '../h264.js'
+
+import { referenceIsKeyFrame, referencePacketize } from './_h264-reference.js'
+
+const packetizeH264AnnexB = (data: Uint8Array, maxPayload: number): Uint8Array[] =>
+    packetizeH264Frame(data, maxPayload).payloads
 
 test('reassembles a single IDR NAL as Annex-B', () => {
     const d = new H264Depacketizer()
@@ -198,16 +203,8 @@ test('ignores FU-A fragments whose start fragment was lost', () => {
     assert.equal(frame?.keyFrame, false)
 })
 
+/** Slices share a type, so a continuation is told apart by its sequence number, not its type. */
 test('does not splice a fragment across a sequence gap even when its NAL type matches the run in flight', () => {
-    /**
-     * Consecutive NALs commonly share a type (slices are all type 1), so
-     * matching a continuation fragment by `fuNalType` alone cannot tell a real
-     * continuation apart from an unrelated fragment that only happens to carry
-     * the same type. Here the run in flight is left open (its own end fragment
-     * never arrives) and a later, unrelated end-marked fragment of the same
-     * type arrives after a large sequence gap: without the sequence check this
-     * used to splice the two together into one corrupt NAL.
-     */
     const d = new H264Depacketizer()
     assert.deepEqual(d.push(new Uint8Array([0x7c, 0x81, 0xaa]), 900, false, 0), [])
     const frames = d.push(new Uint8Array([0x7c, 0x41, 0xbb]), 900, true, 50)
@@ -397,5 +394,44 @@ test('both key frame shapes come back whole and flagged through our own depacket
         assert.equal(frames.length, 1)
         assert.deepEqual(frames[0].data, unit)
         assert.equal(frames[0].keyFrame, true)
+    }
+})
+
+function randomSource(seed: number): (bound: number) => number {
+    let state = seed | 1
+    return (bound) => {
+        state ^= state << 13
+        state ^= state >>> 17
+        state ^= state << 5
+        return (state >>> 0) % bound
+    }
+}
+
+/** An access unit of random NALs behind mixed start codes; `zeros` lets bodies hold start codes. */
+function randomAccessUnit(next: (bound: number) => number, zeros: boolean): Uint8Array {
+    const bytes: number[] = []
+    const types = [1, 5, 6, 7, 8, 9, 5, 7]
+    const count = 1 + next(6)
+    for (let n = 0; n < count; n++) {
+        if (n > 0 || next(8) > 0) bytes.push(...(next(2) ? [0, 0, 0, 1] : [0, 0, 1]))
+        bytes.push((next(2) << 7) | (next(4) << 5) | types[next(types.length)])
+        const length = next(4) === 0 ? 1200 + next(2000) : next(40)
+        for (let i = 0; i < length; i++) {
+            bytes.push(zeros && next(3) === 0 ? 0 : zeros && next(9) === 0 ? 1 : 2 + next(254))
+        }
+    }
+    return new Uint8Array(bytes)
+}
+
+test('the single-scan packetizer sends the same bytes and key-frame flag as before', () => {
+    const next = randomSource(0x264)
+    for (let round = 0; round < 3000; round++) {
+        const zeros = round % 2 === 1
+        const unit = randomAccessUnit(next, zeros)
+        const maxPayload = [3, 5, 8, 64, 800, 1100, 0x20000][round % 7]
+        const { payloads, keyFrame } = packetizeH264Frame(unit, maxPayload)
+        assert.deepEqual(payloads, referencePacketize(unit, maxPayload), `round ${round}`)
+        assert.equal(keyFrame, isH264KeyFrame(unit), `round ${round}`)
+        if (!zeros) assert.equal(keyFrame, referenceIsKeyFrame(unit), `round ${round}`)
     }
 })

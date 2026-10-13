@@ -160,15 +160,13 @@ function leg(id: string, state: string): Connection {
         channel: null,
         rawLeg: null,
         incomingChannels: [],
-        buffer: [],
-        bufferedBytes: 0,
         id,
         relayInfo: { id, ip: '127.0.0.1', port: 3480, token: 't', key: 'k', relayId: 1 },
         connectionTimeout: null,
+        iceDisconnectTimers: new Set(),
         abortDial: null,
         hasReceivedFirstPacket: false,
         localUfrag: 'local-ufrag',
-        stableRoutingConnId: 0n,
         stunTransactionId: new Uint8Array(12),
         stats: { sentPackets: 0, receivedPackets: 0, sentBytes: 0, receivedBytes: 0 }
     } as unknown as Connection

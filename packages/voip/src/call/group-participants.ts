@@ -1,5 +1,6 @@
 import type { Logger } from 'zapo-js'
-import { canonicalizeSignalServer, parseSignalAddressFromJid, WA_DEFAULTS } from 'zapo-js/protocol'
+
+import { groupParticipantAccountKey } from '../jid.js'
 
 /**
  * `state` of a `<user>` or `<participant>` as the wire spells it: text from a table of its own,
@@ -78,7 +79,7 @@ function isRecognizedState(state: string): boolean {
 }
 
 /** One participant of a group call. */
-export interface WaGroupParticipant {
+export interface WaCallGroupParticipant {
     /** The account jid; matched through {@link groupParticipantAccountKey}, never as text. */
     readonly jid: string
     /** Device jids, primary first, at most five. Empty for a nacked participant. */
@@ -96,7 +97,7 @@ export interface WaGroupParticipant {
 
 /** The composition this client holds for one group call. */
 export interface WaGroupComposition {
-    readonly participants: readonly WaGroupParticipant[]
+    readonly participants: readonly WaCallGroupParticipant[]
     /** `transaction-id` of the last roster folded in, `null` before the first. */
     readonly lastTransactionId: number | null
 }
@@ -108,7 +109,7 @@ export interface WaGroupUpdate {
      * The whole roster of the update's `<group_info>`: whoever it leaves out is off the call.
      * `undefined` when the update carried none, which leaves the composition alone.
      */
-    readonly participants?: readonly WaGroupParticipant[]
+    readonly participants?: readonly WaCallGroupParticipant[]
     readonly rekey?: boolean
 }
 
@@ -118,7 +119,7 @@ export interface WaGroupUpdate {
  */
 export interface WaGroupDeviceSwitch {
     readonly jid: string
-    readonly participant: WaGroupParticipant
+    readonly participant: WaCallGroupParticipant
     readonly previousDeviceJid: string
     readonly deviceJid: string
 }
@@ -126,20 +127,20 @@ export interface WaGroupDeviceSwitch {
 /** A device gained or lost by a participant who stays on the call. */
 export interface WaGroupDeviceChange {
     readonly jid: string
-    readonly participant: WaGroupParticipant
+    readonly participant: WaCallGroupParticipant
     readonly deviceJid: string
 }
 
 /** A participant taken off the call, as the call held it. */
 export interface WaGroupRemoval {
     readonly jid: string
-    readonly participant: WaGroupParticipant
+    readonly participant: WaCallGroupParticipant
     readonly cause: WaGroupRemovalCause
 }
 
 /** What one update did to the composition. The lists do not overlap. */
 export interface WaGroupCompositionDiff {
-    readonly added: readonly WaGroupParticipant[]
+    readonly added: readonly WaCallGroupParticipant[]
     readonly switched: readonly WaGroupDeviceSwitch[]
     readonly removed: readonly WaGroupRemoval[]
     readonly devicesAdded: readonly WaGroupDeviceChange[]
@@ -167,33 +168,24 @@ export type WaGroupUpdateOutcome =
           readonly transactionId: number
       }
 
-/**
- * The key an account is matched by: user and canonical domain, device dropped. One account
- * travels bare, as `:0` and as `:76` within a single call.
- */
-export function groupParticipantAccountKey(jid: string): string {
-    const address = parseSignalAddressFromJid(jid)
-    return `${address.user}@${canonicalizeSignalServer(address.server ?? WA_DEFAULTS.HOST_DOMAIN)}`
-}
-
 /** Whether a `state` names a participant on the call or arriving; false is not a departure. */
 export function isGroupParticipantPresent(state: string): boolean {
     return PRESENT_STATES.has(state)
 }
 
 /** Whether an update reports this participant off the call, by nack or by state. */
-export function isGroupParticipantLeaving(participant: WaGroupParticipant): boolean {
+export function isGroupParticipantLeaving(participant: WaCallGroupParticipant): boolean {
     return removalCauseOf(participant) !== null
 }
 
-function removalCauseOf(participant: WaGroupParticipant): WaGroupRemovalCause | null {
+function removalCauseOf(participant: WaCallGroupParticipant): WaGroupRemovalCause | null {
     if (participant.nacked === true) return WA_GROUP_REMOVAL_CAUSE.Nacked
     if (participant.state === undefined) return null
     return departureCauseOfState(participant.state)
 }
 
 export function createGroupComposition(
-    participants: readonly WaGroupParticipant[],
+    participants: readonly WaCallGroupParticipant[],
     transactionId: number | null = null
 ): WaGroupComposition {
     return { participants, lastTransactionId: transactionId }
@@ -205,17 +197,17 @@ export function createGroupComposition(
  * present cannot be undone, keeping someone a moment too long can.
  */
 export function diffGroupParticipants(
-    current: readonly WaGroupParticipant[],
-    incoming: readonly WaGroupParticipant[],
+    current: readonly WaCallGroupParticipant[],
+    incoming: readonly WaCallGroupParticipant[],
     logger: Logger
 ): WaGroupCompositionDiff {
-    const added: WaGroupParticipant[] = []
+    const added: WaCallGroupParticipant[] = []
     const switched: WaGroupDeviceSwitch[] = []
     const removed: WaGroupRemoval[] = []
     const devicesAdded: WaGroupDeviceChange[] = []
     const devicesRemoved: WaGroupDeviceChange[] = []
 
-    const before = new Map<string, WaGroupParticipant>()
+    const before = new Map<string, WaCallGroupParticipant>()
     for (const participant of current) {
         before.set(groupParticipantAccountKey(participant.jid), participant)
     }

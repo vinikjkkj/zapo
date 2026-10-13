@@ -9,7 +9,7 @@ import type {
 
 import type { CallInfo } from './call/call-state.js'
 import { WaCallManager } from './call/WaCallManager.js'
-import { routeCallAck, routeCallReceipt, routeCallStanza } from './signaling/bridge.js'
+import { routeCallReceipt, routeCallStanza } from './signaling/bridge.js'
 import type { WaVideoUpgradeResult } from './signaling/signaling.js'
 import type {
     CallManagerEvents,
@@ -17,6 +17,8 @@ import type {
     CallVideoSubscription,
     EndCallReason
 } from './types.js'
+
+const INBOUND_AUDIO_EVENT = 'voip_call_inbound_audio'
 
 export interface WaVoipCoordinatorOptions {
     /**
@@ -31,43 +33,22 @@ export interface WaVoipCoordinatorOptions {
      */
     readonly logLevel?: LogLevel
     /**
-     * Dial each relay on the port its `<te2>` endpoint advertises instead of on
-     * `TRUE_WEB_CLIENT_RELAY_PORT` (3480). Defaults by session, read per call: `true`
-     * on a companion, `false` on a mobile primary.
-     *
-     * The wire does not say which port a relay answers on: measured, a companion's legs
-     * open only on the advertised port and a primary's only on 3480. A leg the relay never
-     * answers is redialled once on the other port, when there is one: an endpoint that
-     * already advertises 3480 has none.
+     * Dial each relay on the port its `<te2>` endpoint advertises instead of on 3480. Defaults
+     * per call to `true` on a companion and `false` on a mobile primary; a leg that never answers
+     * is redialled once on the other port.
      */
     readonly useOriginalRelayPort?: boolean
     /**
-     * Carry media over a raw UDP socket to each relay instead of over the
-     * WebRTC data channel, and dial every relay on the port its `<te2>`
-     * endpoint advertises. Defaults to `false`.
-     *
-     * Off by default because it buys nothing where it works and is not proven
-     * where it would: a cold-started relay accepts the allocate, answers the
-     * keepalive and forwards the peer's stream to whatever address last sent
-     * to it, so the raw path carries a real call - but only on relays the
-     * WebRTC path already reaches. On one measured relay that WebRTC cannot
-     * reach at all, the same sequence took 1761 uplink packets and returned
-     * nothing, and sending into it appeared to pull the peer's stream off the
-     * leg that had been carrying it.
-     *
-     * Each leg polices itself against that: a leg that sends media and sees no
-     * media come back within a few seconds closes itself, so the previous path
-     * can take the stream back. Turning this on is still an experiment, not a
-     * tuning knob.
+     * Experimental: carry media over a raw UDP socket to each relay instead of the WebRTC data
+     * channel, on the port its `<te2>` endpoint advertises. A leg that sends and hears nothing
+     * back within a few seconds closes itself. Defaults to `false`.
      */
     readonly useRawUdpTransport?: boolean
     /**
-     * Weights of the MLow Companion, the neural post-filter WhatsApp runs in its decoder: the
-     * bytes of `mlow_companion_v1.pte` (a `DNNw` blob despite the name), or a path read once on
-     * the first call. Not shipped with this package. Measured on `libmlow-wasm-fork` 0.2.0 it
-     * reshapes the 60 ms frames of a 1:1 call too, at roughly 40 times the decode CPU. Weights
-     * that fail to load leave calls decoding without it, with a warning. With remote media,
-     * pass it to the host's `WaCallMediaReceiver` as `mlowCompanionModel` instead.
+     * Weights of the MLow Companion decoder post-filter: the bytes of `mlow_companion_v1.pte`, or a
+     * path read on the first call. Not shipped; costs about 40 times the decode CPU, and weights that
+     * fail to load leave calls decoding without it. With remote media, pass it to the host's
+     * `WaCallMediaReceiver` as `mlowCompanionModel` instead.
      */
     readonly mlowCompanionModel?: Uint8Array | ArrayBuffer | string
     /**
@@ -135,6 +116,7 @@ export class WaVoipCoordinator {
         })
         this.registerIncomingHandlers(ctx)
         this.wireClientEvents(ctx)
+        this.wireInboundAudio(ctx)
     }
 
     /**
@@ -433,7 +415,7 @@ export class WaVoipCoordinator {
                     if (node.attrs.class !== 'call') {
                         return false
                     }
-                    await routeCallAck(this.manager, node)
+                    await this.manager.handleCallAck(node)
                     return true
                 }
             }),
@@ -443,6 +425,37 @@ export class WaVoipCoordinator {
                 handler: async (node) => routeCallReceipt(this.deps, node)
             })
         )
+    }
+
+    /** Forwards inbound audio only while the client listens, so no listener costs no copy. */
+    private wireInboundAudio(ctx: WaClientPluginContext): void {
+        const { client } = ctx
+        const forward = (call: CallInfo, pcm: Float32Array): void => {
+            ctx.emit(INBOUND_AUDIO_EVENT, { call, pcm })
+        }
+        let forwarding = false
+        const setForwarding = (wanted: boolean): void => {
+            if (wanted === forwarding) return
+            forwarding = wanted
+            if (wanted) this.manager.on('call_inbound_audio', forward)
+            else this.manager.off('call_inbound_audio', forward)
+        }
+        const onAdded = (event: string | symbol): void => {
+            if (event === INBOUND_AUDIO_EVENT) setForwarding(true)
+        }
+        const onRemoved = (event: string | symbol): void => {
+            if (event === INBOUND_AUDIO_EVENT) {
+                setForwarding(client.listenerCount(INBOUND_AUDIO_EVENT) > 0)
+            }
+        }
+        client.addListener('newListener', onAdded)
+        client.addListener('removeListener', onRemoved)
+        setForwarding(client.listenerCount(INBOUND_AUDIO_EVENT) > 0)
+        this.unregisterHandlers.push(() => {
+            client.removeListener('newListener', onAdded)
+            client.removeListener('removeListener', onRemoved)
+            setForwarding(false)
+        })
     }
 
     private wireClientEvents(ctx: WaClientPluginContext): void {
@@ -460,9 +473,6 @@ export class WaVoipCoordinator {
         })
         this.manager.on('call_mute_requested', (call, participantJid, requestState) => {
             ctx.emit('voip_call_mute_requested', { call, participantJid, requestState })
-        })
-        this.manager.on('call_inbound_audio', (call, pcm) => {
-            ctx.emit('voip_call_inbound_audio', { call, pcm })
         })
         this.manager.on('call_participant_audio', (call, participantJid, pcm) => {
             ctx.emit('voip_call_participant_audio', { call, participantJid, pcm })

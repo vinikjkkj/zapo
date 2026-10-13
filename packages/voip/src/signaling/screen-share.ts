@@ -1,7 +1,7 @@
 import type { BinaryNode } from 'zapo-js/transport'
 import { tryAsNumber } from 'zapo-js/util'
 
-import { generateCallStanzaId } from './signaling.js'
+import { callStanza } from './signaling.js'
 
 /**
  * `screenshare_state`. `NotSupported` and `Failed` both close a request without
@@ -30,14 +30,8 @@ export const WA_SCREEN_SHARE_VERSION = Object.freeze({
 } as const)
 
 /**
- * The version this package announces when it starts a share of its own.
- *
- * `V2` is a claim about the layout actually produced: one video sender, the screen riding
- * the camera's own SSRC. Raising it without also moving to the `_ss` SSRCs and emitting
- * the screen-share descriptor puts the stream on an SSRC the peer does not expect for
- * that version, and it is dropped with nothing visible on either side.
- *
- * **Not confirmed on the wire**, read off the client's code.
+ * The version announced for a share of ours: `V2`, the screen riding the camera's SSRC. A higher
+ * version needs its own SSRCs and descriptor, or the peer silently drops the stream.
  */
 export const WA_SCREEN_SHARE_SEND_VERSION = WA_SCREEN_SHARE_VERSION.V2
 
@@ -85,14 +79,8 @@ export function parseScreenShareNode(node: BinaryNode): PeerScreenShare | null {
 }
 
 /**
- * Builds the `<call><screen_share>` that asks the peer to start or stop rendering a share
- * of ours. A request: the peer's handler refuses one in a group call, or before the call
- * is up.
- *
- * No codec and no geometry, measured on the wire. The version is not a parameter but a
- * claim about the layout this package produces, see {@link WA_SCREEN_SHARE_SEND_VERSION}.
- * `screenShareId` is the sender's count of the starts and stops it sent on the call, from 1.
- * Nothing here waits for a reply.
+ * Builds the `<call><screen_share>` asking the peer to start or stop rendering a share of ours,
+ * with no codec or geometry. `screenShareId` counts the starts and stops sent on the call, from 1.
  */
 export function buildScreenShareStanza(
     peerDeviceJid: string,
@@ -102,16 +90,10 @@ export function buildScreenShareStanza(
     screenShareId?: number
 ): BinaryNode {
     const attrs: Record<string, string> = {
-        'call-id': callId,
-        'call-creator': callCreator,
         screenshare_state: String(screenShareState),
         version: String(WA_SCREEN_SHARE_SEND_VERSION)
     }
     if (screenShareId !== undefined) attrs.screen_share_id = String(screenShareId)
 
-    return {
-        tag: 'call',
-        attrs: { to: peerDeviceJid, id: generateCallStanzaId() },
-        content: [{ tag: 'screen_share', attrs }]
-    }
+    return callStanza(peerDeviceJid, 'screen_share', callId, callCreator, attrs)
 }

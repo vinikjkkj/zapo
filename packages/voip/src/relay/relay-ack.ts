@@ -4,10 +4,9 @@ import {
     getNodeChildrenByTag,
     getNodeTextContent
 } from 'zapo-js/transport'
-import { base64ToBytes, bytesToBase64 } from 'zapo-js/util'
+import { bytesToBase64 } from 'zapo-js/util'
 
-import { TEXT_DECODER } from '../bytes.js'
-import type { RelayEndpoint } from '../types.js'
+import type { RelayData, RelayEndpoint } from '../types.js'
 
 /** A relay advertises its transport endpoints under `te` or `te2`, never both. */
 const RELAY_ENDPOINT_TAGS = ['te2', 'te'] as const
@@ -62,24 +61,18 @@ function formatIpv6(bytes: Uint8Array): string {
  * expands into two entries, IPv4 first, that share every non-address field.
  * The attributes of the `<relay>` node are copied onto every endpoint.
  */
-export function parseRelayFromAck(ackNode: BinaryNode): {
-    relays: RelayEndpoint[]
-    participantJids: string[]
-    uuid: string
-    selfPid?: number
-    peerPid?: number
-    hbhKey?: Uint8Array
-} {
+export function parseRelayFromAck(
+    ackNode: BinaryNode
+): RelayData & { participantJids: string[]; uuid: string } {
     const relays: RelayEndpoint[] = []
     const participantJids: string[] = []
     const participantSeen = new Set<string>()
     let uuid = ''
     let selfPid: number | undefined
     let peerPid: number | undefined
-    let hbhKey: Uint8Array | undefined
 
     if (!ackNode.content || !Array.isArray(ackNode.content)) {
-        return { relays, participantJids, uuid }
+        return { endpoints: relays, participantJids, uuid }
     }
 
     for (const child of ackNode.content) {
@@ -138,25 +131,6 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
 
             if (rcNode.tag === 'key' && rcNode.content) {
                 relayKey = getNodeTextContent(rcNode) ?? ''
-            }
-
-            if (rcNode.tag === 'hbh_key' && rcNode.content) {
-                let rawKey: Uint8Array | undefined
-                if (rcNode.content instanceof Uint8Array) {
-                    rawKey = rcNode.content
-                } else if (typeof rcNode.content === 'string') {
-                    rawKey = base64ToBytes(rcNode.content)
-                }
-
-                if (rawKey) {
-                    if (rawKey.length === 30) {
-                        hbhKey = rawKey
-                    } else if (rawKey.length > 30) {
-                        const asB64 = TEXT_DECODER.decode(rawKey).trim()
-                        const decoded = base64ToBytes(asB64)
-                        if (decoded.length === 30) hbhKey = decoded
-                    }
-                }
             }
 
             if (rcNode.tag === 'token' && rcNode.content) {
@@ -245,5 +219,5 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
     }
 
     relays.sort((a, b) => (a.c2rRtt ?? Infinity) - (b.c2rRtt ?? Infinity))
-    return { relays, participantJids, uuid, selfPid, peerPid, hbhKey }
+    return { endpoints: relays, participantJids, uuid, selfPid, peerPid }
 }

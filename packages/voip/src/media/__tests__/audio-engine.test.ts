@@ -51,9 +51,18 @@ function recordCapture(engine: WaAudioEngine): CapturedChunk[] {
     return chunks
 }
 
-/** Sample `index` of `generateTestTone(frequency, _, amplitude)`. */
+/** Sample `index` of a tone {@link loadTone} loads. */
 function toneSample(index: number, frequency = 440, amplitude = 0.3): number {
     return Math.fround(Math.sin(2 * Math.PI * frequency * (index / SAMPLE_RATE)) * amplitude)
+}
+
+/** Loads a sine tone as if it were a decoded file, without ffmpeg. */
+function loadTone(engine: WaAudioEngine, frequency: number, durationSec: number): void {
+    const samples = new Float32Array(Math.round(SAMPLE_RATE * durationSec))
+    for (let i = 0; i < samples.length; i++) {
+        samples[i] = Math.sin(2 * Math.PI * frequency * (i / SAMPLE_RATE)) * 0.3
+    }
+    ;(engine as unknown as { audioBuffer: Float32Array }).audioBuffer = samples
 }
 
 function assertContiguous(chunks: readonly CapturedChunk[], from = 0): void {
@@ -86,7 +95,7 @@ test('fires onAudioFinished when preloaded buffer is exhausted', (t) => {
         finished = true
     })
 
-    engine.generateTestTone(440, 0.06)
+    loadTone(engine, 440, 0.06)
     engine.setAudioSender({ sendCapturedAudio: () => undefined })
     engine.startCapture()
 
@@ -213,7 +222,7 @@ test('a capture clock under load keeps real time within one chunk', (t) => {
 test('a capture stall past the catch-up cap is forgiven and shows in the stamps', (t) => {
     const clock = createClock(t)
     const engine = new WaAudioEngine({ now: clock.now })
-    engine.generateTestTone(440, 10)
+    loadTone(engine, 440, 10)
     const chunks = recordCapture(engine)
     engine.startCapture()
 
@@ -255,7 +264,7 @@ test('a capture stall past the catch-up cap is forgiven and shows in the stamps'
 test('warmup silence and the real source share one capture clock', (t) => {
     const clock = createClock(t)
     const engine = new WaAudioEngine({ now: clock.now })
-    engine.generateTestTone(440, 10)
+    loadTone(engine, 440, 10)
     const chunks = recordCapture(engine)
     const startedAt = clock.now()
     engine.startSilenceCapture()
@@ -289,7 +298,7 @@ test('warmup silence and the real source share one capture clock', (t) => {
 test('starting capture again leaves a running file where it is', (t) => {
     const clock = createClock(t)
     const engine = new WaAudioEngine({ now: clock.now })
-    engine.generateTestTone(440, 10)
+    loadTone(engine, 440, 10)
     const chunks = recordCapture(engine)
     engine.startCapture()
 
@@ -504,4 +513,42 @@ test('a playback stall past the catch-up cap is forgiven, not replayed', (t) => 
     engine.stopPlayback()
 
     assert.equal(pulls, 5 + CATCH_UP_CAP + 1, 'the next punctual tick is back to one pull')
+})
+
+test('stop releases the loaded audio', (t) => {
+    const clock = createClock(t)
+    const engine = new WaAudioEngine({ now: clock.now })
+    loadTone(engine, 440, 10)
+    engine.stop()
+
+    const chunks = recordCapture(engine)
+    engine.startCapture()
+    clock.tick(TICK_MS)
+    engine.stop()
+
+    assert.equal(chunks.length, 1)
+    assert.ok(
+        chunks[0].samples.every((s) => s === 0),
+        'nothing of the file is left to send'
+    )
+})
+
+test('leaving external mode does not replay the live ring as a file', (t) => {
+    const clock = createClock(t)
+    const engine = new WaAudioEngine({ now: clock.now })
+    let finished = false
+    engine.setOnAudioFinished(() => {
+        finished = true
+    })
+    engine.setExternalMode(true)
+    engine.feedExternalAudio(new Float32Array(CHUNK * 4).fill(0.5))
+    engine.setExternalMode(false)
+
+    const chunks = recordCapture(engine)
+    engine.startCapture()
+    for (let i = 0; i < 3; i++) clock.tick(TICK_MS)
+    engine.stop()
+
+    assert.ok(chunks.every((chunk) => chunk.samples.every((s) => s === 0)))
+    assert.equal(finished, false)
 })

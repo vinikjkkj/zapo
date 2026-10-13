@@ -3,11 +3,7 @@ import { test } from 'node:test'
 
 import { peerConnectionNotDialled } from '../../__tests__/_helpers.js'
 import { createNoopLogger } from '../../logger.js'
-import {
-    WA_FAST_REMB_BITRATE_ENCODING,
-    WA_FAST_REMB_ELEMENT_LENGTH,
-    WA_FAST_REMB_EXTENSION_ID
-} from '../../media/fast-remb.js'
+import { WA_FAST_REMB_ELEMENT_LENGTH, WA_FAST_REMB_EXTENSION_ID } from '../../media/fast-remb.js'
 import { SenderReportSchedule } from '../../media/rtcp.js'
 import { RtpHeader, RtpPacket, RtpSession, WA_RTP_EXTENSION_PROFILE } from '../../media/rtp.js'
 import { nodeCrypto } from '../../node/crypto.js'
@@ -209,18 +205,9 @@ function lastEstimate(sent: readonly Uint8Array[]): ExtensionElement | null {
     return last
 }
 
-/**
- * The bandwidth the element announces, read as a plain three-byte big-endian
- * integer, behind the bitmap that opens the content. The width is checked
- * first, so that changing the encoding fails here with a message instead of
- * decoding bytes of another format as if they were these.
- */
+/** The bandwidth the element announces: a big-endian uint24 behind the bitmap that opens it. */
 function announcedBitrate(element: ExtensionElement): number {
-    assert.equal(
-        WA_FAST_REMB_BITRATE_ENCODING.byteLength,
-        3,
-        'this reader decodes a plain three-byte big endian integer'
-    )
+    assert.equal(element.data.length, 4, 'the bitmap byte, then a three-byte big-endian estimate')
     return (element.data[1] << 16) | (element.data[2] << 8) | element.data[3]
 }
 

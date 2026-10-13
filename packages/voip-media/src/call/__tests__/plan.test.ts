@@ -6,7 +6,6 @@ import { SrtpSession } from '../../crypto/srtp.js'
 import { createNoopLogger } from '../../logger.js'
 import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { nodeCrypto } from '../../node/crypto.js'
-import { SRTP_RECV_AUTH_TAG_LEN, SRTP_SEND_AUTH_TAG_LEN } from '../../types.js'
 import type { WaCallMediaKeys, WaCallMediaRelays, WaCallMediaSsrcs } from '../plan.js'
 import { WaCallMediaPlane, type WaCallMediaPlaneEvents } from '../WaCallMediaPlane.js'
 
@@ -167,13 +166,7 @@ function inboundRtp(
 /** A peer packet under the keys of `keys(1)`, so it authenticates. */
 function protectedRtp(ssrc: number, payloadType?: number, payload?: Uint8Array): Uint8Array {
     const { send } = keys(1)
-    const peer = new SrtpSession(
-        nodeCrypto,
-        send,
-        send,
-        SRTP_SEND_AUTH_TAG_LEN,
-        SRTP_RECV_AUTH_TAG_LEN
-    )
+    const peer = new SrtpSession(nodeCrypto, send, send)
     return peer.protect(inboundRtp(ssrc, payloadType, payload))
 }
 

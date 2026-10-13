@@ -129,16 +129,6 @@ test('a received relaylatency is only consumed: nothing goes back, however many 
     }
 
     assert.equal(sent.length, 0)
-    const { peerRelayLatencies } = session as unknown as {
-        peerRelayLatencies: Map<string, number>
-    }
-    assert.deepEqual(
-        [...peerRelayLatencies],
-        [
-            ['frvd4c01', LATENCY_BASE + 6],
-            ['gru1c01', LATENCY_BASE + 25]
-        ]
-    )
 })
 
 test('our own relaylatency goes out once per relay, however often setup asks for it', async () => {

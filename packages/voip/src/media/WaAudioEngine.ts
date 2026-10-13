@@ -129,7 +129,9 @@ export class WaAudioEngine {
         this.onAudioFinished = callback
     }
 
+    /** Leaving external mode drops the live ring, so its stale samples never replay as a file. */
     setExternalMode(enabled: boolean): void {
+        const wasExternal = this.externalMode
         this.externalMode = enabled
         this.extStarted = false
         this.extSkipCount = 0
@@ -139,6 +141,8 @@ export class WaAudioEngine {
             this.audioPosition = 0
             this.liveWritePos = 0
             this.audioFinished = false
+        } else if (wasExternal) {
+            this.audioBuffer = null
         }
         this.logger.debug('external audio mode changed', {
             enabled,
@@ -146,15 +150,9 @@ export class WaAudioEngine {
         })
     }
 
-    isExternalMode(): boolean {
-        return this.externalMode
-    }
-
     /**
-     * Append live PCM to the external-mode buffer and return the buffered
-     * level in milliseconds. Bounded: an oversized chunk keeps only its tail,
-     * and overflow drops the oldest samples, so the buffer never grows past
-     * its cap.
+     * Appends live PCM and returns the buffered level in ms. Bounded: an oversized chunk keeps
+     * its tail and overflow drops the oldest samples.
      */
     feedExternalAudio(data: Float32Array): number {
         if (!this.externalMode || !this.audioBuffer) return 0
@@ -200,20 +198,12 @@ export class WaAudioEngine {
         return ((this.liveWritePos - this.audioPosition) / this.sampleRate) * 1000
     }
 
-    /**
-     * Backpressure watermarks for the live feed, in milliseconds: pause a
-     * producer once the buffered level reaches `pauseMs`, resume once it drains
-     * to `resumeMs`. Derived from the engine config, independent of any call.
-     */
+    /** Live-feed backpressure in ms: pause a producer at `pauseMs`, resume at `resumeMs`. */
     static feedWatermarksMs(): { pauseMs: number; resumeMs: number } {
         return {
             pauseMs: Math.round(EXT_FEED_PAUSE_FRACTION * 1000),
             resumeMs: Math.round(EXT_FEED_RESUME_FRACTION * 1000)
         }
-    }
-
-    isAudioFinished(): boolean {
-        return this.audioFinished
     }
 
     async loadAudioFile(audioPath: string): Promise<void> {
@@ -310,24 +300,7 @@ export class WaAudioEngine {
         })
     }
 
-    generateTestTone(frequency = 440, duration = 3, amplitude = 0.3): void {
-        const samples = this.sampleRate * duration
-        this.audioBuffer = new Float32Array(samples)
-        this.audioPosition = 0
-        this.audioFinished = false
-
-        for (let i = 0; i < samples; i++) {
-            const t = i / this.sampleRate
-            this.audioBuffer[i] = Math.sin(2 * Math.PI * frequency * t) * amplitude
-        }
-
-        this.logger.debug('test tone generated', { samples, durationSec: duration })
-    }
-
-    /**
-     * Where the playback clock pulls decoded audio from: it fills the buffer
-     * it is handed and returns how many samples were real audio.
-     */
+    /** Where playback pulls decoded audio from: fills the buffer, returns the real samples. */
     setPlayoutSource(source: ((out: Float32Array) => number) | null): void {
         this.playoutSource = source
     }
@@ -389,12 +362,7 @@ export class WaAudioEngine {
         }
     }
 
-    /**
-     * Receive the paced playback audio. The callback is handed the engine's own
-     * output buffer, which the next pull overwrites - within the same tick when
-     * the clock catches up - so a consumer that keeps the samples has to copy
-     * them.
-     */
+    /** Receives paced playback in the engine's own buffer, overwritten by the next pull. */
     setPlaybackSink(sink: ((pcm: Float32Array) => void) | null): void {
         this.playbackSink = sink
     }
@@ -461,7 +429,6 @@ export class WaAudioEngine {
         if (owed > MAX_CATCH_UP_CHUNKS) {
             const forgiven = owed - MAX_CATCH_UP_CHUNKS
             owed = MAX_CATCH_UP_CHUNKS
-            // Skip the time, not the source: the stamp jump tells the plane of the pause.
             this.captureSamples += forgiven * this.captureChunkSize
             this.captureStalls++
             if (this.captureStalls <= 5 || this.captureStalls % 100 === 0) {
@@ -472,7 +439,6 @@ export class WaAudioEngine {
             }
         }
 
-        // Live audio sits in the feed buffer about its target before it is read.
         const queuedMs = this.externalMode && !this.silenceMode ? this.extTargetMs : 0
         for (; owed > 0; owed--) {
             const capturedAtMs =
@@ -507,29 +473,24 @@ export class WaAudioEngine {
         }
     }
 
-    /**
-     * Whole chunks of `chunkSize` a clock started at `startMs` owes: the time
-     * elapsed since then, in samples, that `doneSamples` does not cover yet.
-     */
+    /** Whole chunks a clock started at `startMs` owes beyond the `doneSamples` it covered. */
     private chunksOwed(startMs: number, doneSamples: number, chunkSize: number): number {
         const elapsedSamples = ((this.now() - startMs) * this.sampleRate) / 1000
         return Math.floor((elapsedSamples - doneSamples) / chunkSize)
     }
 
-    stopCapture(): void {
+    private stopCapture(): void {
         if (this.captureInterval) {
             clearInterval(this.captureInterval)
             this.captureInterval = null
         }
     }
 
+    /** Stops both clocks and releases the loaded audio, which can run to hundreds of MB. */
     stop(): void {
         this.stopPlayback()
         this.stopCapture()
-    }
-
-    hasAudio(): boolean {
-        return this.audioBuffer !== null && this.audioBuffer.length > 0
+        this.audioBuffer = null
     }
 
     private getNextChunk(): Float32Array {
@@ -576,21 +537,19 @@ export class WaAudioEngine {
             }
         }
 
-        this.captureChunkBuffer.fill(0)
-        for (let i = 0; i < this.captureChunkSize; i++) {
-            if (this.audioPosition >= endPos) {
-                if (!this.externalMode && !this.audioFinished) {
-                    this.audioFinished = true
-                    this.logger.debug('audio playback finished, sending silence')
-                    if (this.onAudioFinished) {
-                        const cb = this.onAudioFinished
-                        setTimeout(() => cb(), 0)
-                    }
-                }
-                break
+        const count = Math.max(0, Math.min(this.captureChunkSize, endPos - this.audioPosition))
+        this.captureChunkBuffer.set(
+            this.audioBuffer.subarray(this.audioPosition, this.audioPosition + count)
+        )
+        this.captureChunkBuffer.fill(0, count)
+        this.audioPosition += count
+        if (count < this.captureChunkSize && !this.externalMode && !this.audioFinished) {
+            this.audioFinished = true
+            this.logger.debug('audio playback finished, sending silence')
+            if (this.onAudioFinished) {
+                const cb = this.onAudioFinished
+                setTimeout(() => cb(), 0)
             }
-            this.captureChunkBuffer[i] = this.audioBuffer[this.audioPosition]!
-            this.audioPosition++
         }
 
         return this.captureChunkBuffer

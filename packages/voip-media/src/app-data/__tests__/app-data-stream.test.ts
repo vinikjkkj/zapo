@@ -50,9 +50,6 @@ function wait(ms: number): Promise<void> {
 test('a reaction goes out before the peer has sent one of its own', () => {
     const { stream, sent } = createStream()
 
-    // Nothing negotiates the payload type: each side registers its own and the
-    // offer carries none, so a sender never has to wait to learn one.
-    assert.equal(stream.peerPayloadType, null)
     assert.equal(stream.payloadType, WA_APP_DATA_PAYLOAD_TYPE)
 
     assert.equal(stream.sendReaction(THUMBS_UP), true)
@@ -63,27 +60,8 @@ test('a reaction goes out before the peer has sent one of its own', () => {
     stream.close()
 })
 
-test("the peer's payload type is recorded without changing what this side sends", () => {
-    const { stream, sent } = createStream()
-
-    stream.observeInboundPayloadType(PEER_PAYLOAD_TYPE)
-    assert.equal(stream.peerPayloadType, PEER_PAYLOAD_TYPE)
-    assert.equal(
-        stream.payloadType,
-        WA_APP_DATA_PAYLOAD_TYPE,
-        'what the peer stamps on its own stream does not choose ours'
-    )
-
-    assert.equal(stream.sendReaction(THUMBS_UP), true)
-    assert.equal(sent[0].header.payloadType, WA_APP_DATA_PAYLOAD_TYPE)
-
-    stream.close()
-})
-
 test('a configured payload type wins over the default', () => {
     const { stream } = createStream({ payloadType: PEER_PAYLOAD_TYPE })
-
-    stream.observeInboundPayloadType(PEER_PAYLOAD_TYPE + 1)
 
     assert.equal(stream.payloadType, PEER_PAYLOAD_TYPE)
     stream.close()
@@ -210,54 +188,6 @@ test('an unreadable payload yields no reaction and does not throw', () => {
 
     assert.deepEqual(stream.receive(new Uint8Array([0xff, 0xff]), PEER_SSRC), [])
     assert.deepEqual(stream.receive(new Uint8Array(0), PEER_SSRC), [])
-    stream.close()
-})
-
-/**
- * The announcement is not an instruction. A reaction from the reference client
- * on a call whose settings announce SFrame arrives readable with the end-to-end
- * keys alone, so withholding on the flag alone would silence every reaction
- * this side sends on most calls, for a layer the peer is not applying either.
- */
-test('the sframe announcement alone does not withhold a reaction', () => {
-    const { stream, sent } = createStream({ payloadType: PEER_PAYLOAD_TYPE })
-
-    stream.setSframe(true, null)
-
-    assert.equal(stream.sendReaction(THUMBS_UP), true)
-    assert.equal(sent.length, 1)
-    const decoded = decodeAppDataPayload(sent[0].payload)
-    assert.equal(
-        decoded?.items[0]?.reaction?.reaction,
-        THUMBS_UP,
-        'the payload goes out as the plain envelope, with nothing wrapped around it'
-    )
-    stream.close()
-})
-
-test('the sframe transform wraps the payload when one is supplied', () => {
-    const { stream, sent } = createStream({ payloadType: PEER_PAYLOAD_TYPE })
-    const trailer = new Uint8Array([0xaa, 0xbb])
-
-    stream.setSframe(true, (payload) => {
-        const wrapped = new Uint8Array(payload.length + trailer.length)
-        wrapped.set(payload)
-        wrapped.set(trailer, payload.length)
-        return wrapped
-    })
-
-    assert.equal(stream.sendReaction(THUMBS_UP), true)
-    assert.equal(bytesToHex(sent[0].payload.subarray(-2)), 'aabb')
-    stream.close()
-})
-
-test('sframe off leaves the serialized message in the clear', () => {
-    const { stream, sent } = createStream({ payloadType: PEER_PAYLOAD_TYPE })
-
-    stream.setSframe(false, null)
-    stream.sendReaction(THUMBS_UP)
-
-    assert.equal(decodeAppDataPayload(sent[0].payload)?.items[0]?.reaction?.reaction, THUMBS_UP)
     stream.close()
 })
 

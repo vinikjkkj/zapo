@@ -68,16 +68,15 @@ export function dialableRelayEndpoints<
     T extends Pick<WaCallMediaRelay, 'ip' | 'port' | 'protocol' | 'key' | 'rawToken'>
 >(endpoints: readonly T[]): T[] {
     const seen = new Set<string>()
-    const unique: T[] = []
+    const dialable: T[] = []
     for (const ep of endpoints) {
         if ((ep.protocol ?? 0) !== 0) continue
         const key = `${ep.ip}:${ep.port}`
-        if (!seen.has(key)) {
-            seen.add(key)
-            unique.push(ep)
-        }
+        if (seen.has(key)) continue
+        seen.add(key)
+        if (ep.key && ep.rawToken) dialable.push(ep)
     }
-    return unique.filter((ep) => ep.key && ep.rawToken)
+    return dialable
 }
 
 /** The call's SSRCs, derived by signaling from the call id, a device jid and a slot. */

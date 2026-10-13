@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 
-import { createNoopLogger } from '../../logger.js'
+import { createNoopLogger, type Logger } from '../../logger.js'
 import { nodeCrypto } from '../../node/crypto.js'
 import { type RawUdpLegOptions, WaSctpRelay, type WaSctpRelayOptions } from '../WaSctpRelay.js'
 
@@ -523,11 +523,14 @@ test('a warp-framed datagram reaches the owner untouched and is traced as a fram
     const received: Array<[Uint8Array, string]> = []
     const traces: string[] = []
     const answered: string[] = []
-    const logger = createNoopLogger()
-    logger.trace = (message) => {
-        traces.push(message)
+    const logger: Logger = {
+        ...createNoopLogger(),
+        level: 'trace',
+        trace: (message) => {
+            traces.push(message)
+        },
+        child: () => logger
     }
-    logger.child = () => logger
     const legs: FakeLeg[] = []
     const relay = new WaSctpRelay({
         crypto: nodeCrypto,

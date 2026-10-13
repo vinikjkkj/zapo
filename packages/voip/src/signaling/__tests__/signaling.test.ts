@@ -24,7 +24,6 @@ import {
     generateCallId,
     generateCallStanzaId,
     needsDecryption,
-    parseGroupAvUpgrade,
     parseGroupJidAttr,
     parseJoinableAttr,
     parseMuteV2,
@@ -34,8 +33,7 @@ import {
     toCallServerJid,
     WA_MUTE_REQUEST_STATE,
     WA_PEER_STATE,
-    WA_VIDEO_STATE,
-    withMlowRedCapability
+    WA_VIDEO_STATE
 } from '../signaling.js'
 
 test('generateCallId / generateCallStanzaId produce 32-char uppercase hex', () => {
@@ -325,17 +323,6 @@ test('the preaccept does not announce MLow RED either', () => {
     assert.equal(hasCapability(blob, 24), true)
 })
 
-test('the in-band RED trial switch sets bit 36 alone, on a copy of the blob', () => {
-    const blob = Uint8Array.of(0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x07)
-
-    const announced = withMlowRedCapability(blob, true)
-
-    assert.deepEqual(announced, Uint8Array.of(0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x17))
-    assert.equal(hasCapability(announced, 36), true)
-    assert.equal(blob[6], 0x07, 'the shared blob is left alone')
-    assert.equal(withMlowRedCapability(blob, false), blob, 'off by default')
-})
-
 test('needsDecryption only flags encrypted payload tags', () => {
     assert.equal(needsDecryption('accept'), true)
     assert.equal(needsDecryption('preaccept'), true)
@@ -487,7 +474,6 @@ test('extractNodeInfo reads the inner call tag and ids', () => {
     assert.equal(info.tag, 'offer')
     assert.equal(info.callId, 'CID')
     assert.equal(info.peerJid, 'peer:0@lid')
-    assert.equal(info.peerPlatform, 'web')
 })
 
 test('extractNodeInfo returns null when there is no inner node', () => {
@@ -918,28 +904,6 @@ test('an enc_rekey goes to the device it keys, echoing the transaction that aske
     )
     assert.deepEqual(children[0].attrs, { keygen: '2' })
     assert.deepEqual(children[1].attrs, { v: '2', type: 'pkmsg', count: '0' })
-})
-
-test('an av_upgrade is an upgrade only when it names the upgrader', () => {
-    const update = (attrs: Record<string, string>): BinaryNode => ({
-        tag: 'group_update',
-        attrs: { 'call-id': 'CID', 'call-creator': 'c:87@lid' },
-        content: [{ tag: 'av_upgrade', attrs }]
-    })
-
-    assert.deepEqual(parseGroupAvUpgrade(update({ 'av-upgrader': '184478207058035:9@lid' })), {
-        upgraderJid: '184478207058035:9@lid',
-        upgradable: false
-    })
-    assert.deepEqual(parseGroupAvUpgrade(update({ 'av-upgrader': '184478207058035:0@lid' })), {
-        upgraderJid: '184478207058035@lid',
-        upgradable: false
-    })
-    assert.deepEqual(parseGroupAvUpgrade(update({ 'av-upgradable': '1' })), {
-        upgraderJid: null,
-        upgradable: true
-    })
-    assert.equal(parseGroupAvUpgrade({ tag: 'group_update', attrs: {}, content: [] }), null)
 })
 
 test('callIdOfCallServerJid reads the call a call address names, and nothing else', () => {

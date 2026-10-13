@@ -2,11 +2,14 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
+import { createNoopLogger } from 'zapo-js'
+
 import type { WaCallMediaMessage, WaCallReaction } from '@zapo-js/voip-media'
 
 import {
     toCompanionModelSource,
     type WaCallMediaLinkEvents,
+    WaLocalCallMedia,
     WaRemoteCallMedia
 } from '../media-link.js'
 
@@ -194,4 +197,35 @@ test('link events with the reaction listener of old still type-check', () => {
     })
 
     assert.deepEqual(reactions, ['👍'])
+})
+
+test('local media copies inbound audio only while something takes it', () => {
+    const received: Float32Array[] = []
+    let wanted = false
+    const record = recordLinkEvents()
+    const link = new WaLocalCallMedia({
+        logger: createNoopLogger(),
+        events: {
+            ...record.events,
+            onInboundAudio: (pcm) => {
+                received.push(pcm)
+            },
+            wantsInboundAudio: () => wanted
+        },
+        useOriginalRelayPort: false,
+        useRawUdpTransport: false
+    })
+    const sink = (link as unknown as { audio: { playbackSink: (pcm: Float32Array) => void } }).audio
+        .playbackSink
+    const pcm = new Float32Array([0.25, 0.5])
+
+    sink(pcm)
+    assert.equal(received.length, 0)
+
+    wanted = true
+    sink(pcm)
+    link.stop()
+    assert.equal(received.length, 1)
+    assert.notEqual(received[0], pcm, 'the engine buffer is never handed out')
+    assert.deepEqual([...received[0]], [0.25, 0.5])
 })

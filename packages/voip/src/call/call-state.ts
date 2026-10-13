@@ -80,10 +80,8 @@ export class CallInfo {
      */
     readonly raisedHands = new Set<string>()
     /**
-     * Configuration the server sent alongside the offer of this call, in the
-     * `<voip_settings>` node, parsed once on arrival. Absent when the node did
-     * not come or could not be read, and in that case every consumer stays on
-     * the compiled defaults.
+     * The last `<voip_settings>` applied, the offer's or a later upgrade's; absent when none
+     * was readable.
      */
     voipSettings?: WaVoipSettings
     /**
@@ -106,33 +104,25 @@ export class CallInfo {
     /** Media sender id to the device jid it stands for (device 0 bare), on a group call. */
     readonly groupSenders = new Map<string, string>()
 
-    private constructor(
-        init: Partial<CallInfo> & {
-            callId: string
-            peerJid: string
-            callCreator: string
-            direction: CallDirection
-            mediaType: CallMediaType
-            stateData: CallStateData
-        }
-    ) {
+    private constructor(init: {
+        callId: string
+        peerJid: string
+        callCreator: string
+        direction: CallDirection
+        mediaType: CallMediaType
+        stateData: CallStateData
+        callerPn?: string
+    }) {
         this.callId = init.callId
         this.peerJid = init.peerJid
         this.callCreator = init.callCreator
         this.direction = init.direction
         this.mediaType = init.mediaType
         this.stateData = init.stateData
-        this.createdAt = init.createdAt ?? new Date()
-        this.groupJid = init.groupJid
-        this.joinable = init.joinable ?? false
-        this.groupComposition = init.groupComposition
-        this.isOffline = init.isOffline ?? false
+        this.createdAt = new Date()
+        this.joinable = false
+        this.isOffline = false
         this.callerPn = init.callerPn
-        this.encryptionKey = init.encryptionKey
-        this.relayData = init.relayData
-        this.electedRelayIdx = init.electedRelayIdx
-        this.voipSettings = init.voipSettings
-        this.peerScreenShare = init.peerScreenShare
     }
 
     static newOutgoing(
@@ -325,17 +315,16 @@ export class CallInfo {
                     throw new InvalidTransition(s.state, transition.type)
                 }
 
-                if (s.state === CallState.Active && s.connectedAt) {
-                    s.durationSecs = Math.floor((Date.now() - s.connectedAt.getTime()) / 1000)
-                } else if (s.state === CallState.OnHold && s.connectedAt) {
+                if (
+                    (s.state === CallState.Active || s.state === CallState.OnHold) &&
+                    s.connectedAt
+                ) {
                     s.durationSecs = Math.floor((Date.now() - s.connectedAt.getTime()) / 1000)
                 }
 
                 s.state = CallState.Ended
                 s.endedAt = new Date()
                 s.endReason = transition.reason
-                // In-call affordances do not outlive the call: a hand still up or a share
-                // still on would be read as live on a call that has none.
                 s.handRaised = false
                 s.screenSharing = false
                 this.raisedHands.clear()
@@ -382,7 +371,6 @@ export class CallInfo {
                 s.handRaised = transition.raised
                 break
 
-            // The video stream is the session's condition to check, not this machine's.
             case 'screen_share_changed':
                 if (s.state !== CallState.Active) {
                     throw new InvalidTransition(s.state, transition.type)
@@ -436,23 +424,18 @@ export const WA_TERMINATE_DECISION = Object.freeze({
 export type WaTerminateDecision = (typeof WA_TERMINATE_DECISION)[keyof typeof WA_TERMINATE_DECISION]
 
 /**
- * Whether a `<terminate>` ends the call. A call nobody may join always ends. On a joinable one
- * an accept in flight is kept even against `accepted_elsewhere`, `rejected_elsewhere` and
- * `device_switch` (the exception is joinable-only), those reasons end it elsewhere, an
- * established group call loses only the sender unless the reason is
- * {@link WA_GROUP_CALL_ENDED_REASON}, and a call not yet established is kept.
+ * What a `<terminate>` does to a joinable group call: an accept in flight is kept whatever the
+ * reason, a handover reason ends it, an active call loses only the sender, the rest is kept.
  */
 export function decideJoinableTerminate(
     call: CallInfo,
     reason: string | undefined
 ): WaTerminateDecision {
-    // 1:1 offers are joinable too; a 1:1 call keeps ending on any terminate.
     if (!call.joinable || !call.isGroupCall || call.isEnded) return WA_TERMINATE_DECISION.End
 
     const state = call.stateData.state
     const terminateReason = reason ? reason : null
 
-    // Only the server sends it, once the last member left: the call is over in any state.
     if (terminateReason === WA_GROUP_CALL_ENDED_REASON) return WA_TERMINATE_DECISION.End
 
     if (state === CallState.Connecting && call.direction === CallDirection.Incoming) {
@@ -462,14 +445,10 @@ export function decideJoinableTerminate(
         return WA_TERMINATE_DECISION.End
     }
 
-    // Hold has a media path, so it counts as established.
-    const established = state === CallState.Active || state === CallState.OnHold
-    if (call.isGroupCall && established && terminateReason !== WA_GROUP_CALL_ENDED_REASON) {
+    if (state === CallState.Active || state === CallState.OnHold) {
         return WA_TERMINATE_DECISION.RemoveParticipant
     }
-    if (established) return WA_TERMINATE_DECISION.End
-
-    if (terminateReason === null && call.isGroupCall && state === CallState.IncomingRinging) {
+    if (terminateReason === null && state === CallState.IncomingRinging) {
         return WA_TERMINATE_DECISION.IgnoreSilently
     }
     return WA_TERMINATE_DECISION.Ignore

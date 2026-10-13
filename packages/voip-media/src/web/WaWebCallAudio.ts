@@ -10,6 +10,7 @@ export interface WaCallAudioSink {
     /**
      * Takes microphone samples, 16 kHz mono, at any length. `capturedAtMs` is the
      * `performance.now()` instant of `samples[0]`; absent, the block is taken as just captured.
+     * `samples` is only valid during the call: its buffer is reused for the playout.
      */
     pushCapture(samples: Float32Array, capturedAtMs?: number): void
     /** Fills `out` with speaker samples, 16 kHz mono, and returns how many were real audio. */
@@ -240,16 +241,18 @@ export class WaWebCallAudio {
         if (this.ownsContext) await closeContext(this.context)
     }
 
-    /** Answers a capture block with as many playout samples, pulling even if the push throws. */
+    /**
+     * Answers a capture block with as many playout samples, written over the block itself and
+     * transferred back, pulling even if the push throws.
+     */
     private readonly onCaptureBlock = (event: MessageEvent): void => {
         const block: unknown = event.data
         if (this.stopping !== null || !(block instanceof Float32Array)) return
         try {
             this.sink.pushCapture(block)
         } finally {
-            const out = new Float32Array(block.length)
-            this.sink.pullPlayout(out)
-            this.node.port.postMessage(out, [out.buffer])
+            this.sink.pullPlayout(block)
+            this.node.port.postMessage(block, [block.buffer])
         }
     }
 }

@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { hkdf } from 'zapo-js/crypto'
 
-import { readUInt32LE, TEXT_ENCODER, writeUInt32BE } from '../../bytes.js'
+import { readUInt32LE, TEXT_ENCODER } from '../../bytes.js'
 import {
     generateSecureSsrc,
     WA_AUDIO_CALL_SSRC_SLOTS,
@@ -68,7 +68,7 @@ test('generateSecureSsrc accepts a call-id that is not hex', () => {
 test('generateSecureSsrc writes the slot salt little-endian', () => {
     const vector = CAPTURED_VECTORS[3]
     const bigEndianSalt = new Uint8Array(4)
-    writeUInt32BE(bigEndianSalt, vector.slot, 0)
+    new DataView(bigEndianSalt.buffer).setUint32(0, vector.slot)
     const bigEndian = readUInt32LE(
         hkdf(TEXT_ENCODER.encode(vector.callId), bigEndianSalt, TEXT_ENCODER.encode(DEVICE_JID), 4),
         0

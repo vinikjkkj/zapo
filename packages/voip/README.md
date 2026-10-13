@@ -143,7 +143,7 @@ const callId = await client.voip.startCall({
 
 The offer goes to the call itself (`<call-id>@call`) and names every participant and its devices; `peerJid` is not read. The call connects once the server's roster lists somebody else connected. A participant given no `devices` has them resolved, falling back to its primary device. An incoming group call arrives on `voip_call_incoming` like any other, with `call.isGroupCall` set, and is answered with `acceptCall`. `call.groupJid` is set when the call belongs to a group: a 1:1 call that grows into a group call by inviting this side names none, and is still a group call. `call.joinable` says nothing about it: WhatsApp Web marks its 1:1 calls joinable too. A group callee preaccepts, accepts and declines to the call itself, so a declined call lists this side as invited rather than still ringing.
 
-Who is on the call lives on `call.groupComposition` and every change arrives on `voip_call_participants_changed`, from the server's roster updates or from one participant hanging up:
+Who is on the call lives on `call.groupComposition`, one `WaCallGroupParticipant` (`jid`, `devices`, `state`) per account, and every change arrives on `voip_call_participants_changed`, from the server's roster updates or from one participant hanging up:
 
 ```ts
 client.on('voip_call_participants_changed', ({ call, diff }) => {

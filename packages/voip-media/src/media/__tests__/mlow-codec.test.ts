@@ -7,10 +7,9 @@ import {
     MLOW_MAX_RED_BLOCKS,
     MLOW_MAX_SUBFRAMES,
     MLowCodec,
-    mlowFrameSamples,
+    MlowPacketRead,
     mlowPacketSamples,
     readMlowRed,
-    readMlowSubframes,
     writeMlowRed
 } from '../mlow-codec.js'
 
@@ -22,6 +21,13 @@ function voicedFrame(offset = 0): Float32Array {
         frame[i] = Math.sin((2 * Math.PI * 440 * (i + offset)) / 16_000) * 0.25
     }
     return frame
+}
+
+/** Samples of sub-frame `index` of a multiframe whose `bounds` were just filled. */
+function subframeSamples(packet: Uint8Array, bounds: Int32Array, index: number): number {
+    const offset = bounds[index * 2]
+    const subframe = packet.subarray(offset, offset + bounds[index * 2 + 1])
+    return mlowPacketSamples(subframe, new Int32Array(MLOW_MAX_SUBFRAMES * 2))
 }
 
 function captureWarnings(): { logger: Logger; warnings: string[] } {
@@ -40,8 +46,6 @@ test('MLowCodec initializes at 16 kHz with a 960-sample frame size', async () =>
     const codec = await MLowCodec.create()
     try {
         assert.equal(codec.getFrameSize(), 960)
-        assert.equal(codec.getSampleRate(), 16_000)
-        assert.equal(codec.getFrameDurationMs(), 60)
     } finally {
         codec.destroy()
     }
@@ -70,6 +74,24 @@ test('MLowCodec PLC returns a full frame on null input', async () => {
         const plc = codec.decode(null)
         assert.equal(plc.length, codec.getFrameSize())
         assert.equal(codec.getStats().plc, 1)
+    } finally {
+        codec.destroy()
+    }
+})
+
+test('a rejected packet decodes to silence the caller owns', async () => {
+    const codec = await MLowCodec.create()
+    try {
+        const rejected = Uint8Array.of(0x92, 0x02, 0xff, 0x50)
+        const first = codec.decode(rejected)
+        assert.equal(codec.getStats().errors, 1)
+        assert.ok(first.every((sample) => sample === 0))
+        first.fill(0.5)
+        const second = codec.decode(rejected)
+        assert.ok(
+            second.every((sample) => sample === 0),
+            'writing into one left the next silent'
+        )
     } finally {
         codec.destroy()
     }
@@ -146,7 +168,6 @@ test('MLowCodec caps concealment on a long outage instead of synthesising foreve
         codec.decodeSequenced(1, first, collect)
         codec.decodeSequenced(400, second, collect)
 
-        assert.equal(codec.getMaxConcealFrames(), 3)
         assert.equal(frames, 5)
         const stats = codec.getStats()
         assert.equal(stats.plc, 2)
@@ -269,8 +290,7 @@ test('a decode-only codec decodes and conceals but refuses to encode or pack', a
         assert.equal(receiver.redActive, false)
         assert.throws(() => receiver.encode(voicedFrame()), /encoder not initialized/)
         assert.throws(() => receiver.packFrames([first, third]), /repacketizer not initialized/)
-        receiver.setExpectedPacketLossPercent(30)
-        assert.equal(receiver.getExpectedPacketLossPercent(), 30)
+        assert.doesNotThrow(() => receiver.setExpectedPacketLossPercent(30))
     } finally {
         sender.destroy()
         receiver.destroy()
@@ -323,21 +343,13 @@ test('MLowCodec resets the sequence position without losing the decoder', async 
 })
 
 test('MLowCodec clamps the expected packet loss percentage', async () => {
-    const codec = await MLowCodec.create()
+    const { logger, warnings } = captureWarnings()
+    const codec = await MLowCodec.create({ logger })
     try {
-        assert.equal(codec.getExpectedPacketLossPercent(), 0)
-
-        codec.setExpectedPacketLossPercent(140)
-        assert.equal(codec.getExpectedPacketLossPercent(), 100)
-
-        codec.setExpectedPacketLossPercent(-5)
-        assert.equal(codec.getExpectedPacketLossPercent(), 0)
-
-        codec.setExpectedPacketLossPercent(Number.NaN)
-        assert.equal(codec.getExpectedPacketLossPercent(), 0)
-
-        codec.setExpectedPacketLossPercent(12.4)
-        assert.equal(codec.getExpectedPacketLossPercent(), 12)
+        for (const percent of [140, -5, Number.NaN, 12.4, 100]) {
+            codec.setExpectedPacketLossPercent(percent)
+        }
+        assert.deepEqual(warnings, [], 'the encoder only sees 0 to 100')
 
         assert.ok(codec.encode(voicedFrame()).length > 0)
     } finally {
@@ -371,9 +383,11 @@ test('MLowCodec writes the MLow encoder tunables it is given', async () => {
 
 test('MLowCodec reports a rejected encoder tunable instead of throwing', async () => {
     const { logger, warnings } = captureWarnings()
-    const codec = await MLowCodec.create({ logger })
+    const codec = await MLowCodec.create({
+        logger,
+        tunables: { subframeImportance: Number.MAX_SAFE_INTEGER }
+    })
     try {
-        codec.applyEncoderTunables({ subframeImportance: Number.MAX_SAFE_INTEGER })
         assert.deepEqual(warnings, ['mlow encoder ctl rejected'])
         assert.ok(codec.encode(voicedFrame()).length > 0)
     } finally {
@@ -383,9 +397,8 @@ test('MLowCodec reports a rejected encoder tunable instead of throwing', async (
 
 test('MLowCodec leaves tunables unset when none are given', async () => {
     const { logger, warnings } = captureWarnings()
-    const codec = await MLowCodec.create({ logger })
+    const codec = await MLowCodec.create({ logger, tunables: {} })
     try {
-        codec.applyEncoderTunables({})
         assert.deepEqual(warnings, [])
     } finally {
         codec.destroy()
@@ -552,7 +565,7 @@ test('the official packets split into two 60 ms sub-frames that fill the timesta
     const bounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
     for (let index = 0; index < OFFICIAL_MLOW_PACKETS.length; index++) {
         const { payload, timestamp, sequenceNumber } = OFFICIAL_MLOW_PACKETS[index]
-        assert.equal(readMlowSubframes(payload, bounds), 2)
+        assert.equal(mlowPacketSamples(payload, bounds), 1920)
         assert.equal(payload[0], 0x92)
         assert.equal(payload[1], 0x02)
         assert.deepEqual([bounds[0], bounds[1]], [3, payload[2]])
@@ -561,7 +574,7 @@ test('the official packets split into two 60 ms sub-frames that fill the timesta
         assert.equal(payload[bounds[0]], 0x50)
         assert.equal(payload[bounds[2]], 0x50)
 
-        const span = mlowFrameSamples(payload[bounds[0]]) + mlowFrameSamples(payload[bounds[2]])
+        const span = subframeSamples(payload, bounds, 0) + subframeSamples(payload, bounds, 1)
         assert.equal(span, 1920)
         const next = OFFICIAL_MLOW_PACKETS[index + 1]
         if (next) {
@@ -658,15 +671,15 @@ test('RED packets keep the official framing, the copy first on the slot of the f
     const bounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
     for (const { payload, primary, copy } of packets.slice(1)) {
         assert.ok(copy)
-        assert.equal(readMlowSubframes(payload, bounds), 2)
+        assert.equal(mlowPacketSamples(payload, bounds), 1920)
         assert.equal(payload[0], official[0])
         assert.equal(payload[1], official[1])
         assert.equal(payload[2], copy.length)
         assert.deepEqual(payload.subarray(bounds[0], bounds[0] + bounds[1]), copy)
         assert.deepEqual(payload.subarray(bounds[2]), primary)
         assert.equal(payload[bounds[0]] & 0x39, official[3] & 0x39, 'same rate, duration, channels')
-        assert.equal(mlowFrameSamples(payload[bounds[0]]), 960)
-        assert.equal(mlowFrameSamples(payload[bounds[2]]), 960)
+        assert.equal(subframeSamples(payload, bounds, 0), 960)
+        assert.equal(subframeSamples(payload, bounds, 1), 960)
     }
     assert.deepEqual(
         packets.map((packet) => packet.timestamp),
@@ -845,7 +858,6 @@ test('MLowCodec decodes without the Companion when its model does not load', asy
     const { logger, warnings } = captureWarnings()
     const codec = await MLowCodec.create({ logger, companionModel: new Uint8Array([1, 2, 3, 4]) })
     try {
-        assert.equal(codec.companionActive, false)
         assert.deepEqual(warnings, ['mlow companion unavailable, decoding without it'])
         assert.equal(codec.decode(codec.encode(voicedFrame())).length, 960)
     } finally {
@@ -860,7 +872,6 @@ test('MLowCodec degrades the same way when the Companion loader fails', async ()
         companionModel: () => Promise.reject(new Error('weights missing'))
     })
     try {
-        assert.equal(codec.companionActive, false)
         assert.deepEqual(warnings, ['mlow companion unavailable, decoding without it'])
     } finally {
         codec.destroy()
@@ -1414,5 +1425,100 @@ test('MLowCodec rejects a packet over 120 ms, so no lost packet holds more', asy
     } finally {
         sender.destroy()
         receiver.destroy()
+    }
+})
+
+/** The PT 121 check the receive path made before the shared read: two reads into one array. */
+function parsesAsMlow(payload: Uint8Array): boolean {
+    const bounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
+    return mlowPacketSamples(payload, bounds) > 0 || readMlowRed(payload, bounds) >= 0
+}
+
+/** Captured PT 121 audio, in-band RED of it, multiframes and malformed packets, in that order. */
+async function pt121Corpus(): Promise<Uint8Array[]> {
+    const captured = [...ANDROID_PT121_STREAM.packets, ...WEB_PT121_STREAM.packets].map(
+        ({ payload }) => payload
+    )
+    const red = captured.slice(1).map((primary, index) => {
+        const target = new Uint8Array(512)
+        return target.slice(0, writeMlowRed(target, primary, 1920, [captured[index]], [960]))
+    })
+    const sender = await MLowCodec.create()
+    const multiframes: Uint8Array[] = []
+    try {
+        for (let packet = 0; packet < 4; packet++) {
+            const a = sender.encode(voicedFrame(packet * 1920))
+            const b = sender.encode(voicedFrame(packet * 1920 + 960))
+            multiframes.push(sender.packFrames([a, b]))
+        }
+    } finally {
+        sender.destroy()
+    }
+    const malformed = [
+        new Uint8Array(0),
+        Uint8Array.of(0xfc, 0xff, 0xfe),
+        Uint8Array.of(0x92, 0x02, 0xff, 0x50),
+        Uint8Array.of(0x92, 0x02, 0x01, 0x50, 0xc0),
+        Uint8Array.of(0x92, 0x02, 0x01, 0xfc, 0x50, 0x50)
+    ]
+    let seed = 0x2545f491
+    const random: Uint8Array[] = []
+    for (let index = 0; index < 4000; index++) {
+        seed = (seed * 1103515245 + 12345) >>> 0
+        const packet = new Uint8Array(seed % 24)
+        for (let byte = 0; byte < packet.length; byte++) {
+            seed = (seed * 1103515245 + 12345) >>> 0
+            packet[byte] = byte < 3 && seed & 1 ? 0x80 | (seed >>> 8) : seed >>> 16
+        }
+        random.push(packet)
+    }
+    return [...captured, ...red, ...multiframes, ...malformed, ...random]
+}
+
+test('one MlowPacketRead accepts exactly the PT 121 packets the two-read check did', async () => {
+    const read = new MlowPacketRead()
+    for (const payload of await pt121Corpus()) {
+        assert.equal(
+            read.read(payload),
+            parsesAsMlow(payload),
+            Buffer.from(payload).toString('hex')
+        )
+    }
+})
+
+test('a PT 121 stream decodes the same through the shared read as through its own', async () => {
+    const corpus = (await pt121Corpus()).slice(0, 60)
+    const own = await MLowCodec.create()
+    const shared = await MLowCodec.create()
+    const read = new MlowPacketRead()
+    try {
+        const ownFrames: number[][] = []
+        const sharedFrames: number[][] = []
+        let timestamp = 1000
+        corpus.forEach((payload, index) => {
+            timestamp += 960
+            if (index % 7 === 3) return
+            const seq = 100 + index
+            if (parsesAsMlow(payload)) {
+                own.decodeSequenced(seq, payload, (pcm) => ownFrames.push([...pcm]), timestamp, 1)
+            }
+            if (read.read(payload)) {
+                shared.decodeSequenced(
+                    seq,
+                    payload,
+                    (pcm) => sharedFrames.push([...pcm]),
+                    timestamp,
+                    1,
+                    read
+                )
+            }
+        })
+
+        assert.ok(ownFrames.length > 20)
+        assert.deepEqual(sharedFrames, ownFrames)
+        assert.deepEqual(shared.getStats(), own.getStats())
+    } finally {
+        own.destroy()
+        shared.destroy()
     }
 })

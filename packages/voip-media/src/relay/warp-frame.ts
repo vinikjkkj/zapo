@@ -2,7 +2,7 @@
  * First byte of the frame a conference relay puts around some of the media it forwards. It
  * shares the two clear high bits of STUN, and carries no magic cookie.
  */
-export const WARP_FRAME_MARKER = 0x09
+const WARP_FRAME_MARKER = 0x09
 
 /** Marker, length byte and a 16-bit counter, before the attribute region. */
 const WARP_FRAME_BASE_HEADER_LEN = 4
@@ -15,7 +15,7 @@ const RTP_VERSION_MASK = 0xc0
 const RTP_VERSION_2 = 0x80
 
 /** What {@link readWarpFrame} made of a datagram. */
-export type WarpFrameRead =
+type WarpFrameRead =
     /** No frame: the datagram is what it already was. */
     | { readonly kind: 'not_framed' }
     /** A frame around media: `rtp` is the packet inside it, a view over the datagram. */

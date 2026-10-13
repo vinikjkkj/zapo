@@ -1,7 +1,7 @@
 import { toError } from '../errors.js'
 import { createNoopLogger, type Logger } from '../logger.js'
 
-import type { MLowCodecStats, MLowDecodeOutcome } from './mlow-codec.js'
+import type { MLowCodecStats, MLowDecodeOutcome, MlowPacketRead } from './mlow-codec.js'
 import { RtpStreamReception, type SenderReportReception, senderReportSourceSsrc } from './rtcp.js'
 import { WaJitterBuffer, type WaJitterBufferStats } from './WaJitterBuffer.js'
 
@@ -12,7 +12,8 @@ export interface AudioStreamDecoder {
         packet: Uint8Array,
         onFrame: (pcm: Float32Array) => void,
         timestamp?: number,
-        stream?: 0 | 1
+        stream?: 0 | 1,
+        read?: MlowPacketRead
     ): MLowDecodeOutcome
     getStats(): Pick<MLowCodecStats, 'success' | 'errors' | 'plc' | 'late'>
     resetSequence(): void
@@ -48,7 +49,7 @@ export interface AudioReceiveSenderStats {
     readonly pt122Rejected: number
 }
 
-export interface AudioReceiveSetOptions {
+interface AudioReceiveSetOptions {
     /** Clock of the inbound audio RTP timestamps. */
     readonly clockRate: number
     /** Clock of the inbound video RTP timestamps. */
@@ -292,7 +293,8 @@ export class AudioReceiveSet {
         timestamp: number,
         payload: Uint8Array,
         stream: 0 | 1,
-        arrivalMs: number
+        arrivalMs: number,
+        read?: MlowPacketRead
     ): MLowDecodeOutcome | null {
         const sender = this.bySsrc.get(ssrc)
         if (!sender) return null
@@ -306,7 +308,7 @@ export class AudioReceiveSet {
             sender.decoderPending++
             return null
         }
-        return decoder.decodeSequenced(seq, payload, sender.onDecoded, timestamp, stream)
+        return decoder.decodeSequenced(seq, payload, sender.onDecoded, timestamp, stream, read)
     }
 
     /** Counts a PT 122 packet against its sender, with what {@link receive} made of it. */
@@ -373,6 +375,7 @@ export class AudioReceiveSet {
         const scratch = this.mixScratch
         let real = 0
         for (const sender of this.senders.values()) {
+            if (sender.playout.buffered === 0) continue
             const drained = sender.playout.read(scratch)
             if (drained > real) real = drained
             for (let i = 0; i < drained; i++) out[i] += scratch[i]

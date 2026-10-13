@@ -3,12 +3,14 @@ import { test, type TestContext } from 'node:test'
 
 import type { WaCallMediaPlane } from '../../call/WaCallMediaPlane.js'
 import {
-    WA_CALL_AUDIO_BLOCK_SAMPLES,
     WA_CALL_AUDIO_PROCESSOR,
     WA_CALL_AUDIO_STOP_MESSAGE,
     WA_CALL_AUDIO_WORKLET_SOURCE
 } from '../call-audio-worklet.js'
 import { type WaCallAudioSink, WaWebCallAudio } from '../WaWebCallAudio.js'
+
+/** One capture block: 20 ms at 16 kHz. */
+const WA_CALL_AUDIO_BLOCK_SAMPLES = 320
 
 /** The plane is the sink the adapter is written for; this stops compiling if they part. */
 const planeIsASink: WaCallMediaPlane extends WaCallAudioSink ? true : never = true
@@ -347,16 +349,13 @@ test('a capture block is pushed, answered by a pull of the same length, and post
         ['push', 'pull']
     )
     assert.equal(sink.calls[0].samples, block, 'the block reaches the sink as it came')
+    assert.equal(sink.calls[1].samples, block, 'the capture block is reused for the playout')
     assert.equal(port.posted.length, 1)
     const answer = port.posted[0]
     assert.ok(answer instanceof Float32Array)
-    assert.equal(answer.length, block.length)
+    assert.equal(answer.length, WA_CALL_AUDIO_BLOCK_SAMPLES)
     assert.equal(answer[7], Math.fround(7 / 1_000), 'what went back is what the sink played')
-    assert.equal(
-        sink.calls[1].samples.byteLength,
-        0,
-        'the playout buffer was transferred, not copied'
-    )
+    assert.equal(block.byteLength, 0, 'the playout buffer was transferred, not copied')
 })
 
 test('a capture path that throws still answers the block', async (t) => {

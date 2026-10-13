@@ -11,12 +11,14 @@ import {
     electRelayEndpoints,
     groupDevicePids,
     groupSenderDeviceJids,
+    groupSenderId,
     relayEndpointKey,
     sameRelayCredentials,
     sameRelayEndpointSet,
     selectVideoSubscriptions,
     selfStreamLayers,
-    senderStreamsOf
+    senderStreamsOf,
+    WaCallDerivations
 } from '../group-media-plan.js'
 import { createGroupComposition, WA_CALL_PARTICIPANT_STATE } from '../group-participants.js'
 
@@ -262,4 +264,49 @@ test('each sender carries its roster pid, 0 included, and the section the video 
             generateSecureSsrc(CALL_ID, PEER_DEVICE, WA_SSRC_SLOT.APP_DATA.MAIN)
         )
     )
+})
+
+test('memoised derivations equal the direct ones, asked once or many times', () => {
+    const derivations = new WaCallDerivations(CALL_ID)
+    const devices = [SELF_DEVICE, PEER_DEVICE, PEER_SECOND_DEVICE, THIRD_DEVICE]
+    const keyA = new Uint8Array(32).fill(0x11)
+    const keyB = new Uint8Array(32).fill(0x22)
+    for (let round = 0; round < 2; round++) {
+        for (const device of devices) {
+            for (const slot of [0, 1, 2, 3, 4, 5, 6]) {
+                assert.equal(
+                    derivations.ssrc(device, slot),
+                    generateSecureSsrc(CALL_ID, device, slot)
+                )
+            }
+            assert.deepEqual(
+                derivations.senderStreams(device, false),
+                senderStreamsOf(CALL_ID, device, false)
+            )
+            assert.deepEqual(
+                derivations.senderStreams(device, true),
+                senderStreamsOf(CALL_ID, device, true)
+            )
+            assert.deepEqual(
+                derivations.selfStreamLayers(device),
+                selfStreamLayers(CALL_ID, device)
+            )
+            assert.equal(derivations.senderId(device), groupSenderId(CALL_ID, device))
+            for (const key of [keyA, keyB, keyA]) {
+                assert.deepEqual(derivations.srtpKey(key, device), derivePerJidSrtpKey(key, device))
+            }
+        }
+        const pids = new Map([[PEER_DEVICE, 0]])
+        const subscriptions = [{ senderId: 'abc', quality: 1 }]
+        assert.deepEqual(
+            derivations.groupSection(
+                keyB,
+                devices,
+                (device) => derivations.senderStreams(device, true),
+                pids,
+                subscriptions
+            ),
+            buildGroupSection(CALL_ID, keyB, devices, true, pids, subscriptions)
+        )
+    }
 })

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import {
-    WA_CALL_AUDIO_BLOCK_SAMPLES,
     WA_CALL_AUDIO_PROCESSOR,
     WA_CALL_AUDIO_STOP_MESSAGE,
     WA_CALL_AUDIO_WORKLET_SOURCE
@@ -10,7 +9,8 @@ import {
 
 /** Frames in one render quantum, what every browser hands `process()`. */
 const QUANTUM = 128
-const BLOCK = WA_CALL_AUDIO_BLOCK_SAMPLES
+/** One capture block: 20 ms at 16 kHz. */
+const BLOCK = 320
 
 interface WorkletProcessor {
     process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean

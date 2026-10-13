@@ -2,7 +2,7 @@ const START_CODE = new Uint8Array([0, 0, 0, 1])
 
 /** Coded slice of an IDR picture: the only NAL type that makes a key frame. */
 const NAL_TYPE_IDR = 5
-const NAL_TYPE_SPS = 7
+export const NAL_TYPE_SPS = 7
 const NAL_TYPE_STAP_A = 24
 /** Largest NAL unit a STAP-A can carry: its size field is 16 bits. */
 const STAP_A_MAX_NAL = 0xffff
@@ -13,34 +13,60 @@ export interface H264AccessUnit {
     readonly keyFrame: boolean
 }
 
+export interface H264PacketizedFrame {
+    readonly payloads: Uint8Array[]
+    /** Whether the access unit carries an IDR slice, as {@link isH264KeyFrame} reports. */
+    readonly keyFrame: boolean
+}
+
+/** Offset of the next Annex-B start code at or after `from`, or -1. One byte must follow it. */
+export function nextStartCode(data: Uint8Array, from: number): number {
+    for (let i = from; i + 3 < data.length; i++) {
+        if (data[i] !== 0 || data[i + 1] !== 0) continue
+        if (data[i + 2] === 1 || (data[i + 2] === 0 && data[i + 3] === 1)) return i
+    }
+    return -1
+}
+
+/** Offset of the NAL header behind the start code at `at`. */
+export function nalHeaderAfter(data: Uint8Array, at: number): number {
+    return at + (data[at + 2] === 1 ? 3 : 4)
+}
+
 /**
- * Packetizes an Annex-B access unit into RFC 6184 payloads. A key frame leaves as WhatsApp
- * sends it: the whole unit in one STAP-A when it fits, else from its SPS to the end as one
- * FU-A typed SPS, inner start codes kept. Single-NAL payloads are views into `data`, not
- * copies, so they stay valid only until the caller reuses that buffer.
+ * Packetizes an Annex-B access unit into RFC 6184 payloads and reports whether it is a key
+ * frame, in one scan. A key frame leaves as WhatsApp sends it: the whole unit in one STAP-A
+ * when it fits, else from its SPS to the end as one FU-A typed SPS, inner start codes kept.
+ * Single-NAL payloads are views into `data`, valid only until the caller reuses that buffer.
  */
-export function packetizeH264AnnexB(data: Uint8Array, maxPayload = 1100): Uint8Array[] {
+export function packetizeH264Frame(data: Uint8Array, maxPayload = 1100): H264PacketizedFrame {
     if (maxPayload < 3) throw new Error('H264 RTP payload size must be at least 3 bytes')
-    const starts: Array<{ start: number; size: number }> = []
-    for (let i = 0; i + 3 < data.length; ) {
-        const four = data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0 && data[i + 3] === 1
-        const three = data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 1
-        if (four || three) {
-            starts.push({ start: i, size: four ? 4 : 3 })
-            i += four ? 4 : 3
-        } else i++
-    }
     const nals: Uint8Array[] = []
-    if (!starts.length && data.length) nals.push(data)
-    for (let i = 0; i < starts.length; i++) {
-        const from = starts[i].start + starts[i].size
-        const to = i + 1 < starts.length ? starts[i + 1].start : data.length
-        if (to > from) nals.push(data.subarray(from, to))
+    let keyFrame = false
+    let firstSps = -1
+    let keyFrameSps = -1
+    const addNal = (nal: Uint8Array): void => {
+        const type = nal[0] & 0x1f
+        if (!keyFrame) {
+            if (type === NAL_TYPE_IDR) {
+                keyFrame = true
+                keyFrameSps = firstSps
+            } else if (type === NAL_TYPE_SPS && firstSps < 0) firstSps = nals.length
+        }
+        nals.push(nal)
     }
-    const keyFrameSps = keyFrameSpsIndex(nals)
+    let at = nextStartCode(data, 0)
+    if (at < 0 && data.length) addNal(data)
+    while (at >= 0) {
+        const from = nalHeaderAfter(data, at)
+        at = nextStartCode(data, from)
+        const to = at < 0 ? data.length : at
+        if (to > from) addNal(data.subarray(from, to))
+    }
+
     if (keyFrameSps >= 0) {
         const aggregated = stapA(nals, maxPayload)
-        if (aggregated) return [aggregated]
+        if (aggregated) return { payloads: [aggregated], keyFrame }
     }
     const payloads: Uint8Array[] = []
     const separate = keyFrameSps < 0 ? nals.length : keyFrameSps
@@ -53,18 +79,7 @@ export function packetizeH264AnnexB(data: Uint8Array, maxPayload = 1100): Uint8A
         const sps = nals[keyFrameSps]
         pushFuA(payloads, data.subarray(sps.byteOffset - data.byteOffset), maxPayload)
     }
-    return payloads
-}
-
-/** Index of the SPS an IDR follows in `nals`, or -1 when no IDR has one ahead of it. */
-function keyFrameSpsIndex(nals: readonly Uint8Array[]): number {
-    let sps = -1
-    for (let i = 0; i < nals.length; i++) {
-        const type = nals[i][0] & 0x1f
-        if (type === NAL_TYPE_IDR) return sps
-        if (type === NAL_TYPE_SPS && sps < 0) sps = i
-    }
-    return -1
+    return { payloads, keyFrame }
 }
 
 /**
@@ -109,47 +124,30 @@ function pushFuA(payloads: Uint8Array[], unit: Uint8Array, maxPayload: number): 
 }
 
 /**
- * Reports whether an Annex-B access unit carries an IDR slice. SPS and PPS do
- * not count: encoders repeat those parameter sets ahead of every frame, so
- * accepting them would flag every delta frame as a key frame.
+ * Reports whether an Annex-B access unit carries an IDR slice. SPS and PPS do not count:
+ * encoders repeat them ahead of every frame.
  */
 export function isH264KeyFrame(data: Uint8Array): boolean {
-    let startCodes = 0
-    for (let i = 0; i + 3 < data.length; ) {
-        if (data[i] === 0 && data[i + 1] === 0) {
-            if (data[i + 2] === 1) {
-                startCodes++
-                if ((data[i + 3] & 0x1f) === NAL_TYPE_IDR) return true
-                i += 4
-                continue
-            }
-            if (data[i + 2] === 0 && data[i + 3] === 1) {
-                startCodes++
-                if (i + 4 < data.length && (data[i + 4] & 0x1f) === NAL_TYPE_IDR) return true
-                i += 5
-                continue
-            }
-        }
-        i++
+    let at = nextStartCode(data, 0)
+    if (at < 0) return data.length > 0 && (data[0] & 0x1f) === NAL_TYPE_IDR
+    while (at >= 0) {
+        const header = nalHeaderAfter(data, at)
+        if (header < data.length && (data[header] & 0x1f) === NAL_TYPE_IDR) return true
+        at = nextStartCode(data, header)
     }
-    if (!startCodes && data.length) return (data[0] & 0x1f) === NAL_TYPE_IDR
     return false
 }
 
 /** RTP sequence numbers wrap at this modulus; used to test fragment contiguity. */
 const SEQUENCE_MODULUS = 0x10000
 
+const NO_ACCESS_UNITS: readonly H264AccessUnit[] = Object.freeze([])
+
 /**
- * RFC 6184 depacketizer for single NAL, STAP-A and FU-A payloads.
- *
- * The key-frame flag is derived at flush time from what actually made it into
- * the access unit, never from the fragments seen on the way in. A fragment run
- * that is abandoned, replaced or dropped therefore cannot mark or unmark the
- * frame it never joined, which keeps the flag correct no matter in what order
- * the packets arrive.
- *
- * WhatsApp sends a key frame too large for one STAP-A as one FU-A typed SPS that carries the
- * PPS and the IDR inside it after Annex-B start codes, so the bytes of an SPS are also scanned.
+ * RFC 6184 depacketizer for single NAL, STAP-A and FU-A payloads. The key-frame flag comes
+ * from what made it into the access unit at flush time, including an IDR carried inside an
+ * FU-A typed SPS. Payloads are held as views until their frame flushes, so a caller must not
+ * reuse a pushed buffer before then.
  */
 export class H264Depacketizer {
     private static readonly MAX_BUFFERED_BYTES = 8 * 1024 * 1024
@@ -163,85 +161,68 @@ export class H264Depacketizer {
     private bufferedBytes = 0
 
     /**
-     * @param sequenceNumber RTP sequence number of `payload`. Required to tell a
-     * genuine FU-A continuation apart from an orphaned fragment that happens to
-     * share the NAL type of whatever run is already open: {@link appendFuA}
-     * only accepts a continuation whose sequence number immediately follows the
-     * last fragment it appended.
+     * @param sequenceNumber RTP sequence number of `payload`: an FU-A continuation is only
+     * accepted right after the last fragment of its run.
      */
     push(
         payload: Uint8Array,
         timestamp: number,
         marker: boolean,
         sequenceNumber: number
-    ): H264AccessUnit[] {
-        if (!payload.length) return []
-        const completed: H264AccessUnit[] = []
+    ): readonly H264AccessUnit[] {
+        if (!payload.length) return NO_ACCESS_UNITS
         let previous: H264AccessUnit | null = null
         if (this.timestamp !== null && this.timestamp !== timestamp) {
-            /**
-             * Some senders omit the marker, so a timestamp change also ends a
-             * frame. A fragment run still mid-assembly belongs to the frame
-             * that is ending: drop the incomplete NAL but keep the NAL units
-             * that already completed, or one late fragment takes the whole
-             * access unit down with it.
-             */
             previous = this.flush()
             this.resetFrame(timestamp)
         }
-        if (previous) completed.push(previous)
         if (this.timestamp === null) this.timestamp = timestamp
 
-        if (
-            this.bufferedBytes + payload.length + START_CODE.length >
-            H264Depacketizer.MAX_BUFFERED_BYTES
-        ) {
+        if (this.exceedsCap(payload.length + START_CODE.length)) {
             this.resetFrame(timestamp)
-            return completed
+            return previous ? [previous] : NO_ACCESS_UNITS
         }
 
         const type = payload[0] & 0x1f
         if (type >= 1 && type <= 23) this.appendNal(payload)
-        else if (type === 24) this.appendStapA(payload)
+        else if (type === NAL_TYPE_STAP_A) this.appendStapA(payload)
         else if (type === 28) this.appendFuA(payload, sequenceNumber)
-        else return completed
+        else return previous ? [previous] : NO_ACCESS_UNITS
 
-        if (marker && !this.fuParts.length) {
-            const current = this.flush()
-            if (current) completed.push(current)
-        }
-        return completed
+        const current = marker && !this.fuParts.length ? this.flush() : null
+        if (previous && current) return [previous, current]
+        if (previous) return [previous]
+        return current ? [current] : NO_ACCESS_UNITS
     }
 
     reset(): void {
-        this.timestamp = null
-        this.parts = []
-        this.nalHeaders.length = 0
-        this.fuParts = []
-        this.fuNalType = H264Depacketizer.NO_FU_RUN
-        this.fuLastSequence = H264Depacketizer.NO_FU_RUN
-        this.bufferedBytes = 0
+        this.resetFrame(null)
     }
 
-    private resetFrame(timestamp: number): void {
+    private resetFrame(timestamp: number | null): void {
         this.parts = []
         this.nalHeaders.length = 0
-        this.fuParts = []
-        this.fuNalType = H264Depacketizer.NO_FU_RUN
-        this.fuLastSequence = H264Depacketizer.NO_FU_RUN
+        this.clearFuRun()
         this.timestamp = timestamp
         this.bufferedBytes = 0
     }
 
+    private clearFuRun(): void {
+        this.fuParts = []
+        this.fuNalType = H264Depacketizer.NO_FU_RUN
+        this.fuLastSequence = H264Depacketizer.NO_FU_RUN
+    }
+
+    private exceedsCap(bytes: number): boolean {
+        return this.bufferedBytes + bytes > H264Depacketizer.MAX_BUFFERED_BYTES
+    }
+
     private appendNal(nal: Uint8Array): void {
-        if (
-            this.bufferedBytes + START_CODE.length + nal.length >
-            H264Depacketizer.MAX_BUFFERED_BYTES
-        ) {
-            this.resetFrame(this.timestamp ?? 0)
+        if (this.exceedsCap(START_CODE.length + nal.length)) {
+            this.resetFrame(this.timestamp)
             return
         }
-        this.parts.push(START_CODE, nal.slice())
+        this.parts.push(START_CODE, nal)
         this.nalHeaders.push(nal[0])
         this.bufferedBytes += START_CODE.length + nal.length
     }
@@ -257,6 +238,7 @@ export class H264Depacketizer {
         }
     }
 
+    /** A continuation off sequence abandons its run; one of another type leaves the run alone. */
     private appendFuA(payload: Uint8Array, sequenceNumber: number): void {
         if (payload.length < 2) return
         const indicator = payload[0]
@@ -265,56 +247,38 @@ export class H264Depacketizer {
         const end = (header & 0x40) !== 0
         const nalType = header & 0x1f
         if (start) {
-            for (const part of this.fuParts) this.bufferedBytes -= part.length
-            this.fuParts = [new Uint8Array([(indicator & 0xe0) | nalType]), payload.slice(2)]
+            this.dropFuBytes()
+            this.fuParts = [new Uint8Array([(indicator & 0xe0) | nalType]), payload.subarray(2)]
             this.fuNalType = nalType
             this.fuLastSequence = sequenceNumber
             this.bufferedBytes += payload.length - 1
-        } else if (this.fuNalType === nalType) {
-            if (sequenceNumber === (this.fuLastSequence + 1) % SEQUENCE_MODULUS) {
-                this.fuParts.push(payload.slice(2))
-                this.fuLastSequence = sequenceNumber
-                this.bufferedBytes += payload.length - 2
-            } else {
-                /**
-                 * Same NAL type as the run in flight, but not the next sequence
-                 * number after the last fragment it appended: a fragment between
-                 * the two was lost or reordered away. Matching on type alone is
-                 * not enough here, because consecutive NALs commonly share a
-                 * type (slices are all type 1), so the very next run can look
-                 * like a continuation of this one. Abandon the run instead of
-                 * splicing this fragment onto it, or the decoder gets a corrupt
-                 * NAL under the wrong header.
-                 */
-                for (const part of this.fuParts) this.bufferedBytes -= part.length
-                this.fuParts = []
-                this.fuNalType = H264Depacketizer.NO_FU_RUN
-                this.fuLastSequence = H264Depacketizer.NO_FU_RUN
-                return
-            }
+        } else if (this.fuNalType !== nalType) {
+            return
+        } else if (sequenceNumber === (this.fuLastSequence + 1) % SEQUENCE_MODULUS) {
+            this.fuParts.push(payload.subarray(2))
+            this.fuLastSequence = sequenceNumber
+            this.bufferedBytes += payload.length - 2
         } else {
-            /**
-             * A continuation fragment whose type does not match the run in
-             * flight: its start fragment was lost or reordered away. Appending
-             * it to whatever run happens to be open would splice one NAL into
-             * another and hand the decoder a corrupt unit under the wrong
-             * header. The run already in flight is left untouched, since this
-             * fragment does not prove anything about it.
-             */
+            this.dropFuBytes()
+            this.clearFuRun()
             return
         }
         if (end) {
             this.parts.push(START_CODE, ...this.fuParts)
             this.nalHeaders.push(this.fuParts[0][0])
-            this.fuParts = []
-            this.fuNalType = H264Depacketizer.NO_FU_RUN
-            this.fuLastSequence = H264Depacketizer.NO_FU_RUN
+            this.bufferedBytes += START_CODE.length
+            this.clearFuRun()
         }
+    }
+
+    private dropFuBytes(): void {
+        for (const part of this.fuParts) this.bufferedBytes -= part.length
     }
 
     private flush(): H264AccessUnit | null {
         if (!this.parts.length || this.timestamp === null) return null
-        const size = this.parts.reduce((sum, part) => sum + part.length, 0)
+        let size = 0
+        for (const part of this.parts) size += part.length
         const data = new Uint8Array(size)
         let offset = 0
         for (const part of this.parts) {

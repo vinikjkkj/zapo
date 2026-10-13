@@ -1,8 +1,12 @@
+import { NAL_TYPE_SPS, nalHeaderAfter, nextStartCode } from '../media/h264.js'
 import type { InboundVideoFrame } from '../types.js'
 
 /** The plane method the sender drives; a `WaCallMediaPlane` satisfies it. */
 export interface WaCallVideoSink {
-    /** Sends one H.264 access unit, Annex-B, and returns the RTP packets it went out as. */
+    /**
+     * Sends one H.264 access unit, Annex-B, and returns the RTP packets it went out as.
+     * `data` is only valid during the call: the sender reuses its buffer.
+     */
     sendVideoFrame(data: Uint8Array, timestampUs: number): number
 }
 
@@ -97,8 +101,6 @@ const VIDEO_CLOCK_KHZ = 90
  */
 const MAX_TIMESTAMP_STEP_TICKS = 10_000 * VIDEO_CLOCK_KHZ
 
-const NAL_TYPE_SPS = 7
-
 interface VideoFrameSource {
     /** The next frame, or `null` once the track ended or the source was closed. */
     next(): Promise<VideoFrame | null>
@@ -134,6 +136,7 @@ export class WaWebCallVideoSender {
     private lastKeyFrameAtUs: number | null = null
     private keyFrameRequested = false
     private stopped = false
+    private chunkScratch = new Uint8Array(0)
     private framesCaptured = 0
     private framesEncoded = 0
     private framesSent = 0
@@ -324,7 +327,10 @@ export class WaWebCallVideoSender {
 
     private onChunk(chunk: EncodedVideoChunk): void {
         if (this.stopped) return
-        const data = new Uint8Array(chunk.byteLength)
+        if (this.chunkScratch.length < chunk.byteLength) {
+            this.chunkScratch = new Uint8Array(chunk.byteLength)
+        }
+        const data = this.chunkScratch.subarray(0, chunk.byteLength)
         chunk.copyTo(data)
         this.framesEncoded++
         if (chunk.type === 'key') this.keyFrames++
@@ -626,16 +632,12 @@ function advanceTimestamp(stream: DecodedStream, rtpTimestamp: number): number {
 
 /** The WebCodecs codec string read off an access unit's SPS, or `null` without one. */
 export function readH264Codec(data: Uint8Array): string | null {
-    for (let i = 0; i + 3 < data.length; i++) {
-        if (data[i] !== 0 || data[i + 1] !== 0) continue
-        let header = -1
-        if (data[i + 2] === 1) header = i + 3
-        else if (data[i + 2] === 0 && data[i + 3] === 1) header = i + 4
-        if (header < 0) continue
+    for (let at = nextStartCode(data, 0); at >= 0; ) {
+        const header = nalHeaderAfter(data, at)
         if (header + 3 < data.length && (data[header] & 0x1f) === NAL_TYPE_SPS) {
             return `avc1.${hexByte(data[header + 1])}${hexByte(data[header + 2])}${hexByte(data[header + 3])}`
         }
-        i = header - 1
+        at = nextStartCode(data, header)
     }
     return null
 }

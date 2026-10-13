@@ -5,24 +5,14 @@ import { PayloadType } from '../types.js'
 const RTP_VERSION = 2
 
 /**
- * Profile that opens the RTP header extension this session emits, on both the
- * audio and the video stream.
- *
- * It is the one-byte form of RFC 8285, whose profile the RFC writes as
- * `0xBE 0xDE` on the wire. What goes out from here is `0xDE 0xBE`, and that is
- * capture observation, not an oversight: the official client was read emitting
- * the two bytes in this order, and what stood here before this constant was the
- * same literal repeated on both send paths. The elements behind it follow the
- * RFC: `(id << 4) | (len - 1)` per element, zero padding up to the 32-bit word.
- *
- * Switching to the RFC order is a protocol change, not a style one: it is worth
- * trying if some extension turns out to be ignored by the peer, but only with a
- * capture from the other side to confirm it, because today the audio and the
- * video of this session are accepted with this order.
+ * Profile of the one-byte RFC 8285 extension as the official client emits it: `0xDEBE`,
+ * not the RFC's `0xBEDE`. Changing it is a protocol change.
  */
 export const WA_RTP_EXTENSION_PROFILE = 0xdebe
 
 const MIN_HEADER_SIZE = 12
+
+const EMPTY_CSRC: readonly number[] = Object.freeze([])
 
 export class RtpHeader {
     version: number = RTP_VERSION
@@ -33,7 +23,7 @@ export class RtpHeader {
     sequenceNumber: number
     timestamp: number
     ssrc: number
-    csrc: number[] = []
+    csrc: readonly number[] = EMPTY_CSRC
     extensionProfile = 0
     extensionData: Uint8Array = EMPTY_BYTES
 
@@ -91,6 +81,7 @@ export class RtpHeader {
         return this.size()
     }
 
+    /** `extensionData` is a view into `buf`, not a copy. */
     static decode(buf: Uint8Array): RtpHeader {
         if (buf.length < MIN_HEADER_SIZE) {
             throw new Error('buffer too small for RTP header')
@@ -115,11 +106,15 @@ export class RtpHeader {
             throw new Error('buffer too small for CSRC list')
         }
 
-        const csrc: number[] = []
+        let csrc = EMPTY_CSRC
         let offset = 12
-        for (let i = 0; i < csrcCount; i++) {
-            csrc.push(readUInt32BE(buf, offset))
-            offset += 4
+        if (csrcCount > 0) {
+            const list: number[] = []
+            for (let i = 0; i < csrcCount; i++) {
+                list.push(readUInt32BE(buf, offset))
+                offset += 4
+            }
+            csrc = list
         }
 
         const header = new RtpHeader(payloadType, sequenceNumber, timestamp, ssrc)
@@ -140,7 +135,7 @@ export class RtpHeader {
             if (buf.length < offset + extBytes) {
                 throw new Error('buffer too small for RTP extension data')
             }
-            header.extensionData = buf.slice(offset, offset + extBytes)
+            header.extensionData = buf.subarray(offset, offset + extBytes)
         }
 
         return header

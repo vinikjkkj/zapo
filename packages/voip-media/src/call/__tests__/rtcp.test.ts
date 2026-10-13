@@ -88,7 +88,6 @@ interface PlaneInternals {
     videoReception: RtpStreamReception
     videoReportSchedule: SenderReportSchedule
     receiverEstimateSchedule: SenderReportSchedule
-    wallSendTimeExtension: boolean
     onRelayData: (data: Uint8Array) => void
 }
 
@@ -664,43 +663,7 @@ function extensionElement(data: Uint8Array, id: number): Uint8Array | null {
     return null
 }
 
-/** WhatsApp Web's id 9: wall ms / 16, 12 bits. */
-function wallSendTime16(nowMs: number): number {
-    return Math.floor(nowMs / 16) & 0x0fff
-}
-
-test('with the send-time extension, audio and video carry id 9 as the wall clock on one clock', async (t) => {
-    t.mock.timers.enable({ apis: ['Date'], now: 1_790_888_642_787 })
-    const video = await createPlane('video')
-    const audio = await createPlane('audio')
-    video.internals.wallSendTimeExtension = true
-    audio.internals.wallSendTimeExtension = true
-
-    sendVideoFrame(video)
-    sendAudioFrame(audio)
-
-    const expected = wallSendTime16(Date.now())
-    const [videoPacket] = rtpPacketsFrom(video.sent, SELF_VIDEO_SSRC)
-    const [audioPacket] = rtpPacketsFrom(audio.sent, SELF_AUDIO_SSRC)
-    assert.deepEqual(
-        [...(extensionElement(videoPacket.header.extensionData, 9) ?? [])],
-        [expected >> 8, expected & 0xff]
-    )
-    assert.deepEqual(
-        [...audioPacket.header.extensionData],
-        [0x91, expected >> 8, expected & 0xff, 0]
-    )
-
-    t.mock.timers.tick(1_600)
-    sendVideoFrame(video)
-    const later = rtpPacketsFrom(video.sent, SELF_VIDEO_SSRC).at(-1)
-    const id9 = extensionElement(later!.header.extensionData, 9)!
-    assert.equal(((id9[0] << 8) | id9[1]) - expected, 100, '1.6 s is 100 units of 16 ms')
-    video.plane.stop()
-    audio.plane.stop()
-})
-
-test('without it, the video id 9 is the transport sequence and the audio carries no element', async () => {
+test('the video id 9 is the transport sequence and the audio carries no element', async () => {
     const video = await createPlane('video')
     const audio = await createPlane('audio')
 

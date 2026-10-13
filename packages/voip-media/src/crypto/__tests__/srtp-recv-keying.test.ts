@@ -55,7 +55,7 @@ test('a stream keyed with its own participant material authenticates', () => {
     assert.throws(() => session.unprotect(packet), isSrtpError('auth_failed'))
 
     assert.equal(session.setRecvKeying(0xa0000001, PEER_A), true)
-    assert.deepEqual(session.unprotect(packet).payload, PAYLOAD)
+    assert.deepEqual(session.unprotect(packet)?.payload, PAYLOAD)
 })
 
 test('re-keying with the same material keeps the replay window', () => {
@@ -67,8 +67,8 @@ test('re-keying with the same material keeps the replay window', () => {
 
     assert.equal(session.setRecvKeying(0xa0000001, sameKeyingCopy(0x0a)), false)
 
-    assert.throws(() => session.unprotect(first), isSrtpError('replay'))
-    assert.deepEqual(session.unprotect(rtp(sender, 0xa0000001, 11)).payload, PAYLOAD)
+    assert.equal(session.unprotect(first), null)
+    assert.deepEqual(session.unprotect(rtp(sender, 0xa0000001, 11))?.payload, PAYLOAD)
 })
 
 test('re-keying with the same material keeps the rollover counter', () => {
@@ -79,7 +79,7 @@ test('re-keying with the same material keeps the rollover counter', () => {
 
     session.setRecvKeying(0xa0000001, sameKeyingCopy(0x0a))
 
-    assert.deepEqual(session.unprotect(rtp(sender, 0xa0000001, 1)).payload, PAYLOAD)
+    assert.deepEqual(session.unprotect(rtp(sender, 0xa0000001, 1))?.payload, PAYLOAD)
 })
 
 test('re-keying with other material replaces the context', () => {
@@ -93,7 +93,7 @@ test('re-keying with other material replaces the context', () => {
         () => session.unprotect(rtp(peerSender(PEER_A), 0xa0000001, 11)),
         isSrtpError('auth_failed')
     )
-    assert.deepEqual(session.unprotect(rtp(peerSender(PEER_B), 0xa0000001, 5)).payload, PAYLOAD)
+    assert.deepEqual(session.unprotect(rtp(peerSender(PEER_B), 0xa0000001, 5))?.payload, PAYLOAD)
 })
 
 test('explicit keying repairs a context the lazy path built from the session key', () => {
@@ -103,7 +103,7 @@ test('explicit keying repairs a context the lazy path built from the session key
 
     assert.equal(session.setRecvKeying(0xa0000001, sameKeyingCopy(0x01)), false)
     assert.equal(session.setRecvKeying(0xa0000001, PEER_A), true)
-    assert.deepEqual(session.unprotect(rtp(peerSender(PEER_A), 0xa0000001, 2)).payload, PAYLOAD)
+    assert.deepEqual(session.unprotect(rtp(peerSender(PEER_A), 0xa0000001, 2))?.payload, PAYLOAD)
 })
 
 test('a deleted context frees its slot and the stream falls back to the session key', () => {
@@ -121,7 +121,7 @@ test('a deleted context frees its slot and the stream falls back to the session 
         isSrtpError('auth_failed')
     )
     assert.deepEqual(
-        session.unprotect(rtp(peerSender(SESSION_RECV), 0xa0000001, 4)).payload,
+        session.unprotect(rtp(peerSender(SESSION_RECV), 0xa0000001, 4))?.payload,
         PAYLOAD
     )
 })
@@ -208,7 +208,7 @@ test('srtcp re-keyed with the same material keeps its replay window', () => {
 
     assert.equal(session.setRecvKeying(stream.ssrc, sameKeyingCopy(0x0a)), false)
 
-    assert.throws(() => session.unprotect(first), isSrtpError('replay'))
+    assert.equal(session.unprotect(first), null)
     session.unprotect(pli(stream))
 })
 

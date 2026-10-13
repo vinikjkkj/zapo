@@ -84,18 +84,16 @@ function makeOpenConnection(
         peerConnection: null,
         channel: fakeChannel(sent),
         incomingChannels: [],
-        buffer: [],
-        bufferedBytes: 0,
         id: relayInfo.id,
         relayInfo,
         connectionTimeout: null,
+        iceDisconnectTimers: new Set(),
         hasReceivedFirstPacket: false,
         /**
          * The surviving (only) connection path always carries a local ufrag,
          * taken from the WebRTC SDP offer before the relay is dialled.
          */
         localUfrag: `local-ufrag-${relayInfo.relayId}`,
-        stableRoutingConnId: 0n,
         stunTransactionId: createStunTransactionId(),
         stats: { sentPackets: 0, receivedPackets: 0, sentBytes: 0, receivedBytes: 0 }
     } as unknown as Connection
@@ -162,7 +160,7 @@ test('a relay connection stamps one transaction id on every STUN message it emit
      */
     const internals = relay as unknown as {
         sendStunAllocateOnOpen: (conn: Connection, relayInfo: unknown) => void
-        startKeepalive: (connectionId: string, conn: Connection) => void
+        startKeepalive: (conn: Connection) => void
     }
 
     const perConnectionSent: Uint8Array[][] = []
@@ -175,7 +173,7 @@ test('a relay connection stamps one transaction id on every STUN message it emit
 
             const conn = makeOpenConnection(relayInfo, sent)
             internals.sendStunAllocateOnOpen(conn, relayInfo)
-            internals.startKeepalive(conn.id, conn)
+            internals.startKeepalive(conn)
         }
 
         await waitUntil(
@@ -295,5 +293,54 @@ test('the relay key of two real connections is the header transaction id word by
 
         assert.deepEqual([...key.subarray(0, 4)], [...MAGIC_COOKIE_BYTES])
         assert.equal(bytesToHex(key.subarray(4)), relayKey, headerId)
+    }
+})
+
+test('a resent allocate repeats the bytes a fresh build gives, and an ssrc change rebuilds it', () => {
+    const relay = new WaSctpRelay({
+        crypto: nodeCrypto,
+        createPeerConnection: peerConnectionNotDialled
+    })
+    relay.setSsrc(0x11223344)
+    relay.setSubscriptionSsrc(0x55667788)
+    const relayInfo = relayInfoFor(1)
+    const sent: Uint8Array[] = []
+    const conn = makeOpenConnection(relayInfo, sent)
+    const internals = relay as unknown as { connections: Map<string, Connection> }
+    internals.connections.set(conn.id, conn)
+
+    const lastAllocate = (): string => {
+        const allocates = sent.filter((packet) => parseStunResponse(packet)?.method === 'allocate')
+        assert.ok(allocates.length > 0)
+        return bytesToHex(allocates[allocates.length - 1])
+    }
+    const built = (self: number, peer: number, selfPid: number, peerPid: number): string =>
+        bytesToHex(
+            buildAllocateForRelay(
+                nodeCrypto,
+                relayInfo.rawToken,
+                buildSSRCSubscriptionList([self], [peer], selfPid, peerPid),
+                TEXT_ENCODER.encode(relayInfo.key),
+                relayInfo.ip,
+                relayInfo.port,
+                conn.stunTransactionId
+            )
+        )
+
+    try {
+        relay.resendSubscriptions()
+        const first = lastAllocate()
+        assert.equal(first, built(0x11223344, 0x55667788, 0, 0))
+        relay.resendSubscriptions()
+        assert.equal(lastAllocate(), first)
+
+        relay.setSsrc(0x01020304)
+        relay.resendSubscriptions()
+        assert.equal(lastAllocate(), built(0x01020304, 0x55667788, 0, 0))
+
+        relay.setParticipantIds(7, 9)
+        assert.equal(lastAllocate(), built(0x01020304, 0x55667788, 7, 9))
+    } finally {
+        relay.cleanup()
     }
 })

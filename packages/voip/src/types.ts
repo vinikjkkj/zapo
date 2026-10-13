@@ -1,11 +1,18 @@
 import type { WaClientPluginContext } from 'zapo-js'
 import type { BinaryNode } from 'zapo-js/transport'
 
-import type { WaCallMediaMessage, WaCallReaction } from '@zapo-js/voip-media'
+import type {
+    InboundVideoFrame,
+    InboundVideoRtpPacket,
+    WaCallMediaMessage,
+    WaCallReaction
+} from '@zapo-js/voip-media'
 
 import type { CallInfo } from './call/call-state.js'
 import type { WaGroupCompositionDiff } from './call/group-participants.js'
 import type { PeerScreenShare } from './signaling/screen-share.js'
+
+export type { InboundVideoFrame, InboundVideoRtpPacket }
 
 export type WaVoipDeps = WaClientPluginContext['deps']
 
@@ -71,49 +78,6 @@ export type CallTransition =
     | { type: 'hand_raise_changed'; raised: boolean }
     | { type: 'screen_share_changed'; sharing: boolean }
 
-export interface InboundVideoRtpPacket {
-    readonly payloadType: number
-    readonly sequenceNumber: number
-    readonly timestamp: number
-    readonly ssrc: number
-    readonly marker: boolean
-    /** Decrypted RTP payload of the inbound H.264 stream, payload type 97. */
-    readonly payload: Uint8Array
-}
-
-export interface InboundVideoFrame {
-    readonly codec: 'h264'
-    /**
-     * SSRC of the stream this frame was assembled from, so frames of two senders never
-     * mix. It does **not** separate a peer's camera from its screen: a share derives the
-     * same SSRCs its camera does, and {@link CallInfo.peerScreenShare} is what says the
-     * peer is sharing.
-     */
-    readonly ssrc: number
-    readonly timestamp: number
-    readonly keyFrame: boolean
-    /** Complete Annex-B access unit. */
-    readonly data: Uint8Array
-}
-
-export interface RtpConfig {
-    ssrc: number
-    payloadType: number
-    sampleRate: number
-    samplesPerPacket: number
-}
-
-export interface RelayInfo {
-    id: string
-    ip: string
-    port: number
-    token: string
-    authToken?: string
-    key: string
-    relayId: number
-    name?: string
-}
-
 export interface RelayEndpoint {
     ip: string
     port: number
@@ -130,12 +94,7 @@ export interface RelayEndpoint {
     relayName?: string
     addressBytes?: Uint8Array
     authTokenId?: string
-    /**
-     * `is_fna` of the endpoint. Informational: nothing in this package routes
-     * on it, and the server often omits it. One FNA relay was measured
-     * accepting an allocate and answering every keepalive while forwarding no
-     * media at all.
-     */
+    /** `is_fna` of the endpoint. Informational: nothing routes on it, and the server often omits it. */
     isFna?: boolean
     /** `domain_name` of the `<relay>` descriptor this endpoint came from. */
     domainName?: string
@@ -149,50 +108,6 @@ export interface RelayData {
     uuid?: string
     selfPid?: number
     peerPid?: number
-    /**
-     * `<hbh_key>` of the relay descriptor, 30 bytes. Parsed and kept, with no
-     * consumer: on the WebRTC path DTLS protects the hop, so no hop-by-hop
-     * SRTP is derived from this anywhere.
-     *
-     * The raw UDP transport has no DTLS under it and puts the end-to-end SRTP
-     * on the wire unchanged. That was measured to be enough: over a call
-     * carried entirely by raw legs, all 3185 inbound RTP packets authenticated
-     * and decoded to audio, both through the live session and through a twin
-     * built from the same keys, with no `auth_failed`. So the relay adds no
-     * hop-by-hop layer of its own, and none is owed here.
-     *
-     * Nor on a group call's uplink, measured A/B with two runs per arm: wrapped
-     * in the hop-by-hop layer, the other participants counted 0 of our packets
-     * and dropped us to `invited`; unwrapped, they counted 1916 and 3818 and kept
-     * us connected. SRTP leaves the RTP header in the clear, so the SFU routes
-     * without it. Do not apply it on send.
-     */
-    hbhKey?: Uint8Array
-}
-
-export interface CallStateData {
-    state: CallState
-    connectedAt?: Date
-    audioMuted: boolean
-    videoOff: boolean
-    silenced?: boolean
-    acceptBlocked?: boolean
-}
-
-export interface CallSession {
-    callId: string
-    peerJid: string
-    callCreator: string
-    direction: CallDirection
-    mediaType: CallMediaType
-    state: CallStateData
-    createdAt: Date
-    groupJid?: string
-    isOffline: boolean
-    callerPn?: string
-    encryptionKey?: Uint8Array
-    relayData?: RelayData
-    isInitiator: boolean
 }
 
 /**
@@ -226,10 +141,6 @@ export interface NodeInfo {
     tag: string
     peerJid: string
     callId: string
-    peerPlatform: string
-    peerAppVersion: string
-    epochId?: string
-    timestamp?: string
     innerNode: BinaryNode
 }
 
@@ -359,8 +270,3 @@ export const DEFAULT_AUDIO_CONFIG: WaAudioEngineConfig = {
     playbackOutputSize: 960,
     intervalMs: 60
 }
-
-export const WA_RELAY_PORT = 3480
-
-export const WA_DTLS_FINGERPRINT =
-    'sha-256 F9:CA:0C:98:A3:CC:71:D6:42:CE:5A:E2:53:D2:15:20:D3:1B:BA:D8:57:A4:F0:AF:BE:0B:FB:F3:6B:0C:A0:68'

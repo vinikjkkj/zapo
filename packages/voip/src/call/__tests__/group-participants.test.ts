@@ -3,29 +3,29 @@ import { test } from 'node:test'
 
 import { createNoopLogger, type Logger } from 'zapo-js'
 
+import { groupParticipantAccountKey } from '../../jid.js'
 import {
     applyGroupUpdate,
     createGroupComposition,
     diffGroupParticipants,
-    groupParticipantAccountKey,
     isGroupParticipantLeaving,
     isGroupParticipantPresent,
     isStaleGroupUpdate,
     WA_CALL_PARTICIPANT_STATE,
     WA_GROUP_REKEY_REASON,
     WA_GROUP_REMOVAL_CAUSE,
-    type WaGroupParticipant
+    type WaCallGroupParticipant
 } from '../group-participants.js'
 
-const ANA: WaGroupParticipant = { jid: '1001@lid', devices: ['1001:0@lid'] }
-const BRUNO_PHONE: WaGroupParticipant = { jid: '1002@lid', devices: ['1002:0@lid'] }
+const ANA: WaCallGroupParticipant = { jid: '1001@lid', devices: ['1001:0@lid'] }
+const BRUNO_PHONE: WaCallGroupParticipant = { jid: '1002@lid', devices: ['1002:0@lid'] }
 /** The same account as {@link BRUNO_PHONE}, answering on its companion instead. */
-const BRUNO_DESKTOP: WaGroupParticipant = { jid: '1002@lid', devices: ['1002:21@lid'] }
-const BRUNO_BOTH: WaGroupParticipant = {
+const BRUNO_DESKTOP: WaCallGroupParticipant = { jid: '1002@lid', devices: ['1002:21@lid'] }
+const BRUNO_BOTH: WaCallGroupParticipant = {
     jid: '1002@lid',
     devices: ['1002:0@lid', '1002:21@lid']
 }
-const CLARA: WaGroupParticipant = { jid: '1003@lid', devices: ['1003:0@lid'] }
+const CLARA: WaCallGroupParticipant = { jid: '1003@lid', devices: ['1003:0@lid'] }
 
 /** The `state` spellings, as text. */
 const PRESENT_STATES = [
@@ -66,15 +66,15 @@ function recordingLogger(): {
 
 test('the spellings one account arrives in are one participant, other users are not', () => {
     // The bare spelling and two device suffixes of one account.
-    const bare: WaGroupParticipant = {
+    const bare: WaCallGroupParticipant = {
         jid: '184478207058035@lid',
         devices: ['184478207058035:0@lid']
     }
-    const zero: WaGroupParticipant = {
+    const zero: WaCallGroupParticipant = {
         jid: '184478207058035:0@lid',
         devices: ['184478207058035:0@lid']
     }
-    const one: WaGroupParticipant = {
+    const one: WaCallGroupParticipant = {
         jid: '184478207058035:1@lid',
         devices: ['184478207058035:0@lid']
     }
@@ -92,7 +92,7 @@ test('the spellings one account arrives in are one participant, other users are 
 
     // The other side of the same assertion: a different user is not folded in with it, or
     // somebody leaving and somebody arriving would read as no change and skip the rekey.
-    const otherUser: WaGroupParticipant = {
+    const otherUser: WaCallGroupParticipant = {
         jid: '184478207058036@lid',
         devices: ['184478207058036:0@lid']
     }
@@ -114,8 +114,8 @@ test('a hosted lid spelling folds into the plain one, as the parse does today', 
 })
 
 test('the domain is part of the account key, so a non-lid spelling is not folded in', () => {
-    const lid: WaGroupParticipant = { jid: '1004@lid', devices: ['1004:0@lid'] }
-    const pn: WaGroupParticipant = {
+    const lid: WaCallGroupParticipant = { jid: '1004@lid', devices: ['1004:0@lid'] }
+    const pn: WaCallGroupParticipant = {
         jid: '1004@s.whatsapp.net',
         devices: ['1004:0@s.whatsapp.net']
     }
@@ -159,8 +159,8 @@ test('an account kept on another single device is a switch, not an add plus a re
 
 test('a switch is read even when the account itself is spelled with a device', () => {
     // The same account written bare on one stanza and with a device suffix on another.
-    const before: WaGroupParticipant = { jid: '1002@lid', devices: ['1002:0@lid'] }
-    const after: WaGroupParticipant = { jid: '1002:21@lid', devices: ['1002:21@lid'] }
+    const before: WaCallGroupParticipant = { jid: '1002@lid', devices: ['1002:0@lid'] }
+    const after: WaCallGroupParticipant = { jid: '1002:21@lid', devices: ['1002:21@lid'] }
 
     const diff = diffGroupParticipants([before], [after], createNoopLogger())
 
@@ -275,7 +275,7 @@ test('a state of the unexpected departure set takes it off the call, and says so
 })
 
 test('a state off the table keeps the participant, and says so in the log', () => {
-    const offTable: WaGroupParticipant = {
+    const offTable: WaCallGroupParticipant = {
         jid: '1002@lid',
         devices: ['1002:0@lid'],
         state: FABRICATED_OFF_TABLE_STATE
@@ -320,7 +320,7 @@ test('the lowercased enum name is not the wire spelling, and is not read as one'
 })
 
 test('a state off the table survives a whole update, composition and all', () => {
-    const offTable: WaGroupParticipant = {
+    const offTable: WaCallGroupParticipant = {
         jid: '1002@lid',
         devices: ['1002:0@lid'],
         state: FABRICATED_OFF_TABLE_STATE
@@ -381,7 +381,7 @@ test('a roster carrying no state at all reports no departure', () => {
 })
 
 test('the nack takes the participant down whatever its state said', () => {
-    const connectedAndNacked: WaGroupParticipant = {
+    const connectedAndNacked: WaCallGroupParticipant = {
         jid: '1002@lid',
         devices: ['1002:0@lid'],
         state: 'connected',
@@ -478,7 +478,7 @@ test('a further device of a participant who stays is a device add, and does not 
 })
 
 test('an account on two devices swapping one is not a switch', () => {
-    const swapped: WaGroupParticipant = {
+    const swapped: WaCallGroupParticipant = {
         jid: '1002@lid',
         devices: ['1002:0@lid', '1002:33@lid']
     }
@@ -695,7 +695,7 @@ test('an update without the rekey flag still re-keys on a participant leaving', 
 test('a nacked participant carries no device and owns no stream', () => {
     // Nacked here is the wire shape of an account that brought no device, not the in-band
     // flag that takes one off the call.
-    const deviceless: WaGroupParticipant = { jid: '1003@lid', devices: [] }
+    const deviceless: WaCallGroupParticipant = { jid: '1003@lid', devices: [] }
     const diff = diffGroupParticipants([ANA], [ANA, deviceless], createNoopLogger())
 
     assert.deepEqual(diff.added, [deviceless])

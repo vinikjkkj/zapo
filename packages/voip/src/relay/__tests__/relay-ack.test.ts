@@ -52,18 +52,17 @@ function buildRelayAck(): BinaryNode {
     }
 }
 
-test('parseRelayFromAck extracts relay metadata, participants and hbh key', () => {
+test('parseRelayFromAck extracts relay metadata and participants', () => {
     const result = parseRelayFromAck(buildRelayAck())
 
     assert.equal(result.uuid, 'UUID-1')
     assert.equal(result.selfPid, 5)
     assert.equal(result.peerPid, 7)
-    assert.deepEqual([...(result.hbhKey ?? [])], new Array(30).fill(7))
 
     assert.deepEqual(result.participantJids, ['111@lid', '222@lid', '333@lid'])
 
-    assert.equal(result.relays.length, 1)
-    const relay = result.relays[0]
+    assert.equal(result.endpoints.length, 1)
+    const relay = result.endpoints[0]
     assert.equal(relay.ip, '192.168.1.1')
     assert.equal(relay.port, 3478)
     assert.equal(relay.key, 'RELAYKEY')
@@ -92,15 +91,14 @@ test('parseRelayFromAck skips te2 entries with a short address', () => {
         ]
     }
 
-    assert.deepEqual(parseRelayFromAck(ack).relays, [])
+    assert.deepEqual(parseRelayFromAck(ack).endpoints, [])
 })
 
 test('parseRelayFromAck returns an empty result for a childless ack', () => {
     const result = parseRelayFromAck({ tag: 'ack', attrs: {}, content: undefined })
-    assert.deepEqual(result.relays, [])
+    assert.deepEqual(result.endpoints, [])
     assert.deepEqual(result.participantJids, [])
     assert.equal(result.uuid, '')
-    assert.equal(result.hbhKey, undefined)
 })
 
 test('parseRelayFromAck sorts an FNA relay by rtt exactly like any other', () => {
@@ -138,7 +136,7 @@ test('parseRelayFromAck sorts an FNA relay by rtt exactly like any other', () =>
         ]
     }
 
-    const { relays } = parseRelayFromAck(ack)
+    const { endpoints: relays } = parseRelayFromAck(ack)
     assert.equal(relays.length, 2)
     /**
      * The FNA relay has the lower rtt (18ms vs 40ms). A stale "FNA last"
@@ -176,7 +174,7 @@ test('parseRelayFromAck reads the relay descriptor attributes onto every endpoin
         ]
     }
 
-    const { relays } = parseRelayFromAck(ack)
+    const { endpoints: relays } = parseRelayFromAck(ack)
 
     assert.equal(relays.length, 1)
     const relay = relays[0]
@@ -185,7 +183,7 @@ test('parseRelayFromAck reads the relay descriptor attributes onto every endpoin
 })
 
 test('parseRelayFromAck leaves the descriptor fields unset when the attrs are absent', () => {
-    const { relays } = parseRelayFromAck(buildRelayAck())
+    const { endpoints: relays } = parseRelayFromAck(buildRelayAck())
 
     assert.equal(relays[0].domainName, undefined)
     assert.equal(relays[0].enableEdgerayDtlsActiveMode, undefined)
@@ -219,7 +217,7 @@ test('parseRelayFromAck accepts te endpoints as well as te2', () => {
         ]
     }
 
-    const { relays } = parseRelayFromAck(ack)
+    const { endpoints: relays } = parseRelayFromAck(ack)
     assert.equal(relays.length, 1)
     assert.equal(relays[0].ip, '203.0.113.5')
     assert.equal(relays[0].port, 3478)
@@ -252,7 +250,7 @@ test('parseRelayFromAck decodes an 18-byte IPv6 endpoint with a big-endian port'
         ]
     }
 
-    const { relays } = parseRelayFromAck(ack)
+    const { endpoints: relays } = parseRelayFromAck(ack)
     assert.equal(relays.length, 1)
     assert.equal(relays[0].ip, '2001:db8::1')
     assert.equal(relays[0].port, 3478)
@@ -276,7 +274,7 @@ test('parseRelayFromAck skips endpoints whose address is neither 6, 18 nor 24 by
         ]
     }
 
-    assert.deepEqual(parseRelayFromAck(ack).relays, [])
+    assert.deepEqual(parseRelayFromAck(ack).endpoints, [])
 })
 
 function buildDualStackAddress(): Uint8Array {
@@ -331,7 +329,7 @@ function buildDualStackAck(addr: Uint8Array): BinaryNode {
 }
 
 test('parseRelayFromAck expands a 24-byte dual-stack endpoint into an IPv4 and an IPv6 entry', () => {
-    const { relays } = parseRelayFromAck(buildDualStackAck(buildDualStackAddress()))
+    const { endpoints: relays } = parseRelayFromAck(buildDualStackAck(buildDualStackAddress()))
 
     assert.equal(relays.length, 2)
 
@@ -350,7 +348,7 @@ test('parseRelayFromAck expands a 24-byte dual-stack endpoint into an IPv4 and a
 })
 
 test('parseRelayFromAck gives both dual-stack entries the shared fields of their node', () => {
-    const { relays } = parseRelayFromAck(buildDualStackAck(buildDualStackAddress()))
+    const { endpoints: relays } = parseRelayFromAck(buildDualStackAck(buildDualStackAddress()))
 
     assert.equal(relays.length, 2)
     for (const relay of relays) {
@@ -370,7 +368,7 @@ test('parseRelayFromAck gives both dual-stack entries the shared fields of their
 
 test('parseRelayFromAck does not alias the source buffer of a dual-stack endpoint', () => {
     const addr = buildDualStackAddress()
-    const { relays } = parseRelayFromAck(buildDualStackAck(addr))
+    const { endpoints: relays } = parseRelayFromAck(buildDualStackAck(addr))
     addr.fill(0)
 
     assert.equal(relays[0].ip, '203.0.113.9')
@@ -409,7 +407,7 @@ test('parseRelayFromAck keeps a dual-stack pair adjacent when sorting by rtt', (
         ]
     }
 
-    const { relays } = parseRelayFromAck(ack)
+    const { endpoints: relays } = parseRelayFromAck(ack)
     assert.deepEqual(
         relays.map((relay) => relay.ip),
         ['10.0.0.1', '203.0.113.9', '2001:db8::2']

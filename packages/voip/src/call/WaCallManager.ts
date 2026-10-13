@@ -13,6 +13,7 @@ import type {
 } from '@zapo-js/voip-media'
 
 import { generateCallKey } from '../crypto/encryption.js'
+import { groupParticipantAccountKey, toDeviceJid } from '../jid.js'
 import { WaAudioEngine } from '../media/WaAudioEngine.js'
 import { parseRelayFromAck } from '../relay/relay-ack.js'
 import { readGroupCallRoster } from '../signaling/group-info.js'
@@ -50,14 +51,18 @@ import {
     WA_GROUP_CALL_ENDED_REASON,
     WA_TERMINATE_DECISION
 } from './call-state.js'
-import { groupParticipantAccountKey, type WaGroupParticipant } from './group-participants.js'
+import type { WaCallGroupParticipant } from './group-participants.js'
 import {
     toCompanionModelSource,
     type WaCallMediaLinkEvents,
     WaLocalCallMedia,
     WaRemoteCallMedia
 } from './media-link.js'
-import { WaCallMediaSession } from './WaCallMediaSession.js'
+import {
+    readGroupUpdateTransactionId,
+    selfJidOf,
+    WaCallMediaSession
+} from './WaCallMediaSession.js'
 
 const DEFAULT_MAX_CONCURRENT_CALLS = 1
 
@@ -87,11 +92,8 @@ const WA_USER_INVISIBLE_REASON = 'user_invisible'
 export type WaJoinableCallCause = 'declined' | 'rung_out' | 'left' | 'invisible'
 
 /**
- * A joinable group call that goes on without this side, kept for {@link WaCallManager.joinCall}
- * and followed through the `group_update`s that still arrive for it. Dropped on
- * `group_call_ended`.
- *
- * @internal
+ * A joinable group call going on without this side, kept for {@link WaCallManager.joinCall}
+ * and followed through its `group_update`s until `group_call_ended`. @internal
  */
 export interface WaJoinableCall {
     readonly callId: string
@@ -105,7 +107,7 @@ export interface WaJoinableCall {
     /** The `transaction-id` of the update that carried {@link relayData}, `null` when unknown. */
     relayTransactionId: number | null
     /** The newest roster seen for the call, with its `transaction-id`. */
-    participants?: readonly WaGroupParticipant[]
+    participants?: readonly WaCallGroupParticipant[]
     rosterTransactionId: number | null
 }
 
@@ -141,6 +143,7 @@ export class WaCallManager extends EventEmitter {
     private readonly mlowRed: boolean | MLowRedOptions | undefined
     private readonly mediaMode: WaCallMediaMode
     private readonly participantAudio: boolean
+    private readonly signalingLogger: Logger
 
     private readonly calls = new Map<string, WaCallMediaSession>()
     /** Set by `destroy`: an offer still resolving when it ran must not make a call. */
@@ -178,6 +181,7 @@ export class WaCallManager extends EventEmitter {
         this.mlowRed = config.mlowRed
         this.mediaMode = config.mediaMode ?? 'local'
         this.participantAudio = config.participantAudio ?? false
+        this.signalingLogger = this.logger.child({ component: 'signaling' })
     }
 
     /**
@@ -196,8 +200,7 @@ export class WaCallManager extends EventEmitter {
 
         const callId = generateCallId()
         const mediaType = options.isVideo ? CallMediaType.Video : CallMediaType.Audio
-        const creds = this.deps.authClient.getCurrentCredentials()
-        const callCreator = creds?.meLid || creds?.meJid || ''
+        const callCreator = selfJidOf(this.deps)
         const peerJid = await this.resolvePeerLid(options.peerJid)
         this.throwIfDestroyed()
 
@@ -209,10 +212,7 @@ export class WaCallManager extends EventEmitter {
         this.announcedCalls.add(info)
 
         try {
-            session.resetOutgoingFlags()
-
-            const selfLid = creds?.meLid || creds?.meJid || ''
-            await session.initMedia(selfLid, peerJid)
+            await session.initMedia(callCreator, peerJid)
             this.throwIfDestroyed()
 
             const offerStanza = await buildOfferStanza(
@@ -222,7 +222,7 @@ export class WaCallManager extends EventEmitter {
                 callKey,
                 peerJid,
                 options.isVideo ?? false,
-                this.logger.child({ component: 'signaling' })
+                this.signalingLogger
             )
             this.throwIfDestroyed()
 
@@ -261,8 +261,7 @@ export class WaCallManager extends EventEmitter {
 
         const callId = generateCallId()
         const mediaType = options.isVideo ? CallMediaType.Video : CallMediaType.Audio
-        const creds = this.deps.authClient.getCurrentCredentials()
-        const callCreator = creds?.meLid || creds?.meJid || ''
+        const callCreator = selfJidOf(this.deps)
 
         const offer = await buildGroupOfferStanza(
             this.deps,
@@ -270,7 +269,7 @@ export class WaCallManager extends EventEmitter {
             groupJid,
             participants,
             options.isVideo ?? false,
-            this.logger.child({ component: 'signaling' })
+            this.signalingLogger
         )
         this.throwIfDestroyed()
 
@@ -292,7 +291,6 @@ export class WaCallManager extends EventEmitter {
         this.announcedCalls.add(info)
 
         try {
-            session.resetOutgoingFlags()
             await session.initMedia(callCreator, firstPeer.devices[0] ?? firstPeer.jid)
             this.throwIfDestroyed()
 
@@ -397,12 +395,9 @@ export class WaCallManager extends EventEmitter {
     }
 
     /**
-     * Joins a group call that goes on without this side, one it declined, let ring out or left:
-     * a group accept to the call itself, as the official client joins. The relay and the rekey
-     * arrive in the `group_update` the server answers with. The call is forgotten as joinable.
-     *
-     * @throws when no such call is remembered, when this side is on it already, at the
-     * concurrent-call limit, or when the join fails, which leaves the call joinable.
+     * Joins a group call going on without this side: a group accept to the call itself.
+     * @throws when no such call is remembered, this side is on it, at the call limit, or when the
+     * join fails, which leaves the call joinable.
      */
     async joinCall(callId: string): Promise<void> {
         this.throwIfDestroyed()
@@ -435,8 +430,7 @@ export class WaCallManager extends EventEmitter {
         this.applyPendingCallKey(session)
 
         try {
-            const creds = this.deps.authClient.getCurrentCredentials()
-            await session.initMedia(creds?.meLid || creds?.meJid || '', joinable.callCreator)
+            await session.initMedia(selfJidOf(this.deps), joinable.callCreator)
             this.throwIfDestroyed()
             await session.acceptCall()
         } catch (err) {
@@ -553,13 +547,11 @@ export class WaCallManager extends EventEmitter {
         const callerPn = nodeInfo.innerNode.attrs?.['caller_pn']
         const isVideo = hasNodeChild(nodeInfo.innerNode, 'video')
 
-        const signalingLogger = this.logger.child({ component: 'signaling' })
-
         const callKey = await decryptCallKey(
             this.deps,
             nodeInfo.innerNode,
             peerJid,
-            signalingLogger
+            this.signalingLogger
         )
 
         if (this.destroyed) {
@@ -571,11 +563,8 @@ export class WaCallManager extends EventEmitter {
             return
         }
 
-        const voipSettings = parseVoipSettings(node, signalingLogger)
-
-        const { relays, participantJids, uuid, selfPid, peerPid, hbhKey } = parseRelayFromAck(
-            nodeInfo.innerNode
-        )
+        const voipSettings = parseVoipSettings(node, this.signalingLogger)
+        const relay = parseRelayFromAck(nodeInfo.innerNode)
 
         const mediaType = isVideo ? CallMediaType.Video : CallMediaType.Audio
         const info = CallInfo.newIncoming(callId, peerJid, callCreator, callerPn, mediaType)
@@ -586,16 +575,7 @@ export class WaCallManager extends EventEmitter {
             info.encryptionKey = callKey
         }
 
-        if (relays.length > 0) {
-            info.relayData = {
-                endpoints: relays,
-                participantJids,
-                uuid,
-                selfPid,
-                peerPid,
-                hbhKey
-            }
-        }
+        if (relay.endpoints.length > 0) info.relayData = relay
 
         const atCapacity = this.activeCallCount >= this.maxConcurrentCalls
         const session = this.createSession(info, { acceptBlocked: atCapacity })
@@ -606,23 +586,7 @@ export class WaCallManager extends EventEmitter {
 
         if (!atCapacity) {
             try {
-                const creds = this.deps.authClient.getCurrentCredentials()
-                const selfLid = creds?.meLid || creds?.meJid || ''
-                const peerDeviceJids = await this.resolvePeerDeviceJids(peerJid)
-                if (this.endedDuringSetup(session)) return
-                if (info.relayData) {
-                    info.relayData.participantJids = [
-                        ...peerDeviceJids,
-                        ...(info.relayData.participantJids || []).filter(
-                            (jid) => !peerDeviceJids.includes(jid)
-                        )
-                    ]
-                }
-                await session.initMedia(selfLid, peerJid)
-                if (this.endedDuringSetup(session)) return
-                await session.sendIncomingPreaccept(peerJid)
-                if (this.endedDuringSetup(session)) return
-                await session.sendRelayLatency()
+                if (!(await this.activateIncoming(session))) return
             } catch (err) {
                 if (this.endedDuringSetup(session)) return
                 this.logger.error('incoming call activation failed', {
@@ -662,7 +626,7 @@ export class WaCallManager extends EventEmitter {
             isVideo,
             isGroupCall: info.isGroupCall,
             reRing,
-            relayCount: relays.length,
+            relayCount: relay.endpoints.length,
             acceptBlocked: atCapacity
         })
     }
@@ -687,7 +651,7 @@ export class WaCallManager extends EventEmitter {
         await session.handleCallPreaccept(node, peerJid)
     }
 
-    async handleCallTransport(node: BinaryNode, peerJid: string): Promise<void> {
+    async handleCallTransport(node: BinaryNode): Promise<void> {
         const session = this.resolveSessionFromNode(node)
         if (!session) return
         await session.handleCallTransport(node)
@@ -780,12 +744,7 @@ export class WaCallManager extends EventEmitter {
         const callCreator = inner.attrs?.['call-creator'] || peerJid
         const transactionId = tryAsNumber(inner.attrs?.['transaction-id'])
 
-        const callKey = await decryptCallKey(
-            this.deps,
-            inner,
-            peerJid,
-            this.logger.child({ component: 'signaling' })
-        )
+        const callKey = await decryptCallKey(this.deps, inner, peerJid, this.signalingLogger)
         await this.sendEncRekeyReceipt(node, peerJid, callId, callCreator)
 
         if (!callKey) {
@@ -833,7 +792,7 @@ export class WaCallManager extends EventEmitter {
             this.logger.debug('terminate for a call already ended here, ignored', { callId })
             return
         }
-        if (!session && nodeInfo && parseJoinableAttr(nodeInfo.innerNode)) {
+        if (!session && parseJoinableAttr(nodeInfo.innerNode)) {
             this.logger.debug('joinable terminate for a call not yet created, ignored', { callId })
             return
         }
@@ -849,11 +808,7 @@ export class WaCallManager extends EventEmitter {
             })
             return
         }
-        const action = Array.isArray(node.content)
-            ? node.content.find(
-                  (child) => child && typeof child === 'object' && child.tag === 'terminate'
-              )
-            : undefined
+        const action = findNodeChild(node, 'terminate')
         if (action && this.isRingOut(session.info, node, action)) {
             await this.endHere(session, EndCallReason.Timeout, 'rung_out')
             return
@@ -984,24 +939,15 @@ export class WaCallManager extends EventEmitter {
         const call = this.joinableCalls.get(callId)
         if (!call) return false
 
-        const transactionId =
-            tryAsNumber(findNodeChild(inner, 'group_info')?.attrs?.['transaction-id']) ??
-            tryAsNumber(inner.attrs?.['transaction-id'])
+        const transactionId = readGroupUpdateTransactionId(inner)
         const relay = parseRelayFromAck(inner)
         const staleRelay =
             transactionId !== null &&
             call.relayTransactionId !== null &&
             transactionId < call.relayTransactionId
-        if (relay.relays.length > 0 && !staleRelay) {
+        if (relay.endpoints.length > 0 && !staleRelay) {
             if (transactionId !== null) call.relayTransactionId = transactionId
-            call.relayData = {
-                endpoints: relay.relays,
-                participantJids: relay.participantJids,
-                uuid: relay.uuid,
-                selfPid: relay.selfPid,
-                peerPid: relay.peerPid,
-                hbhKey: relay.hbhKey
-            }
+            call.relayData = relay
         }
         const settings = parseVoipSettings(node, this.logger)
         if (settings) call.voipSettings = settings
@@ -1041,18 +987,13 @@ export class WaCallManager extends EventEmitter {
         if (this.destroyed) throw new Error('call manager destroyed')
     }
 
-    /**
-     * Terminates an offer that left while `destroy` ran; best effort, the socket may be closing.
-     * A group offer is withdrawn with the same reason-less terminate to the call a leave sends
-     * (assumed: the shape of a withdrawal is not known).
-     */
+    /** Terminates an offer that left while `destroy` ran, as a leave would; best effort. */
     private async withdrawOffer(session: WaCallMediaSession): Promise<void> {
-        const info = session.info
         try {
             await this.deps.lowLevelCoordinator.sendNode(session.buildTerminateStanza())
         } catch (err) {
             this.logger.warn('terminate of an offer sent during destroy failed', {
-                callId: info.callId,
+                callId: session.callId,
                 message: toError(err).message
             })
         }
@@ -1068,11 +1009,15 @@ export class WaCallManager extends EventEmitter {
         const rekeyMsgId = node.attrs?.id
         if (!rekeyMsgId) return
 
-        const creds = this.deps.authClient.getCurrentCredentials()
-        const ourJid = creds?.meLid || creds?.meJid || ''
         try {
             await this.deps.lowLevelCoordinator.sendNode(
-                buildEncRekeyReceiptStanza(peerJid, rekeyMsgId, callId, callCreator, ourJid)
+                buildEncRekeyReceiptStanza(
+                    peerJid,
+                    rekeyMsgId,
+                    callId,
+                    callCreator,
+                    selfJidOf(this.deps)
+                )
             )
         } catch (err) {
             this.logger.warn('enc_rekey receipt send failed', {
@@ -1133,6 +1078,7 @@ export class WaCallManager extends EventEmitter {
                 emitPeerMute: (call, muted, participantJid) =>
                     this.emit('call_peer_mute', call, muted, participantJid),
                 emitInboundAudio: (call, pcm) => this.emit('call_inbound_audio', call, pcm),
+                wantsInboundAudio: () => this.listenerCount('call_inbound_audio') > 0,
                 emitInboundVideoRtp: (call, packet, participantJid) =>
                     this.emit('call_inbound_video_rtp', call, packet, participantJid),
                 emitInboundVideo: (call, frame, participantJid) =>
@@ -1161,12 +1107,9 @@ export class WaCallManager extends EventEmitter {
                 emitParticipantsChanged: (call, diff) =>
                     this.emit('call_participants_changed', call, diff),
                 emitError: (_call, error) => this.emit('call_error', error),
+                // On a group call ending is this side leaving, which the session's end already is.
                 endCall: (call, reason) => {
-                    // A group call losing our media path is this side leaving, not the call ending.
-                    const teardown = call.isGroupCall
-                        ? this.leaveCall(call.callId, reason)
-                        : this.endCall(call.callId, reason)
-                    teardown.catch((err: unknown) => {
+                    this.endCall(call.callId, reason).catch((err: unknown) => {
                         this.logger.warn('ending a call with no media path failed', {
                             callId: call.callId,
                             message: toError(err).message
@@ -1278,9 +1221,7 @@ export class WaCallManager extends EventEmitter {
             }
         }
 
-        // WhatsApp omits call-id from some offer ACKs sent after accepting an
-        // incoming call. When there is only one live call, it is unambiguous
-        // and the ACK contains the final relay participant/device metadata.
+        // Some offer acks come without a call-id: one call still connecting is the one it names.
         if (active.length === 1) return active[0]
 
         this.logger.debug('offer ack could not be routed', {
@@ -1326,7 +1267,7 @@ export class WaCallManager extends EventEmitter {
     }
 
     private async resolvePeerDeviceJids(peerJid: string): Promise<string[]> {
-        const primaryJid = /:\d+@/.test(peerJid) ? peerJid : peerJid.replace('@', ':0@')
+        const primaryJid = toDeviceJid(peerJid)
         if (/:[1-9]\d*@/.test(peerJid)) return [peerJid]
 
         try {
@@ -1366,30 +1307,37 @@ export class WaCallManager extends EventEmitter {
 
     private async activateWaitingIncoming(session: WaCallMediaSession): Promise<void> {
         session.info.stateData.acceptBlocked = false
-
-        const creds = this.deps.authClient.getCurrentCredentials()
-        const selfLid = creds?.meLid || creds?.meJid || ''
-
-        const peerDeviceJids = await this.resolvePeerDeviceJids(session.info.peerJid)
-        if (this.endedDuringSetup(session)) return
-        if (session.info.relayData) {
-            session.info.relayData.participantJids = [
-                ...peerDeviceJids,
-                ...(session.info.relayData.participantJids || []).filter(
-                    (jid) => !peerDeviceJids.includes(jid)
-                )
-            ]
-        }
-        await session.initMedia(selfLid, session.info.peerJid)
-        if (this.endedDuringSetup(session)) return
-        await session.sendIncomingPreaccept(session.info.peerJid)
-        if (this.endedDuringSetup(session)) return
-        await session.sendRelayLatency()
+        if (!(await this.activateIncoming(session))) return
         if (this.endedDuringSetup(session)) return
 
         this.emitState(session.info)
 
         this.logger.debug('waiting incoming call unblocked', { callId: session.callId })
+    }
+
+    /**
+     * Brings an incoming call up: the peer's devices first among the relay participants, then
+     * media, preaccept and relay latency. `false` once a concurrent end stopped it.
+     */
+    private async activateIncoming(session: WaCallMediaSession): Promise<boolean> {
+        const info = session.info
+        const selfLid = selfJidOf(this.deps)
+        const peerDeviceJids = await this.resolvePeerDeviceJids(info.peerJid)
+        if (this.endedDuringSetup(session)) return false
+        if (info.relayData) {
+            info.relayData.participantJids = [
+                ...peerDeviceJids,
+                ...(info.relayData.participantJids || []).filter(
+                    (jid) => !peerDeviceJids.includes(jid)
+                )
+            ]
+        }
+        await session.initMedia(selfLid, info.peerJid)
+        if (this.endedDuringSetup(session)) return false
+        await session.sendIncomingPreaccept(info.peerJid)
+        if (this.endedDuringSetup(session)) return false
+        await session.sendRelayLatency()
+        return true
     }
 
     /**

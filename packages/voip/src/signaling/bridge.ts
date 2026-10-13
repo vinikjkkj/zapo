@@ -61,7 +61,7 @@ export async function routeCallStanza(
             await manager.handleCallAccept(node, normalizedPeerJid)
             break
         case 'transport':
-            await manager.handleCallTransport(node, normalizedPeerJid)
+            await manager.handleCallTransport(node)
             break
         case 'terminate':
             await manager.handleCallTerminate(node, normalizedPeerJid)
@@ -75,12 +75,9 @@ export async function routeCallStanza(
         case 'user_action':
             manager.handleCallUserAction(node, normalizedPeerJid)
             break
-        // A distinct message type, not a variant of `user_action` above, and still sent by
-        // current clients: without this case the hand is lost in `default`.
         case 'raise_hand':
             manager.handleCallRaiseHand(node, normalizedPeerJid)
             break
-        // `screen_share` negotiates the share; `screen` adds the surface geometry.
         case 'screen_share':
         case 'screen':
             manager.handleCallScreenShare(node, normalizedPeerJid)
@@ -91,24 +88,15 @@ export async function routeCallStanza(
         case 'group_update':
             await manager.handleCallGroupUpdate(node)
             break
-        // A group offer carries no key: it arrives here or not at all.
         case 'enc_rekey':
             await manager.handleCallEncRekey(node, normalizedPeerJid)
             break
         case 'relay_election':
             manager.handleRelayElection(node)
             break
-        case 'reject':
-            break
-        default:
-            break
     }
 
     return tag
-}
-
-export async function routeCallAck(manager: WaCallManager, node: BinaryNode): Promise<void> {
-    await manager.handleCallAck(node)
 }
 
 export async function routeCallReceipt(deps: WaVoipDeps, node: BinaryNode): Promise<boolean> {

@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { writeUInt32BE } from '../../bytes.js'
+import { bytesToHex, writeUInt32BE } from '../../bytes.js'
 import { buildPictureLossIndication } from '../../media/rtcp.js'
 import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { nodeCrypto } from '../../node/crypto.js'
 import type { SrtpKeyingMaterial } from '../../types.js'
+import { webCrypto } from '../../web/crypto.js'
 import {
+    ReplayWindow,
     SRTCP_AUTH_TAG_LEN,
     SrtcpContext,
     SrtcpSession,
@@ -34,9 +36,27 @@ test('SrtpSession protect/unprotect round-trips RTP payload', async () => {
     const protectedPacket = session.protect(packet)
     const unprotected = session.unprotect(protectedPacket)
 
+    assert.ok(unprotected)
     assert.equal(unprotected.header.sequenceNumber, 7)
     assert.equal(unprotected.header.ssrc, 0x11223344)
     assert.deepEqual(unprotected.payload, payload)
+})
+
+test('an unprotected payload owns its bytes, so the datagram can be reused after', () => {
+    const keying = keyingFrom(new Uint8Array(32).fill(0x22))
+    for (const crypto of [nodeCrypto, webCrypto]) {
+        const sender = new SrtpSession(crypto, keying, keying, 4, 4)
+        const receiver = new SrtpSession(crypto, keying, keying, 4, 4)
+        const payload = Uint8Array.from([0x7c, 0x85, 1, 2, 3, 4, 5, 6])
+        const datagram = sender.protect(
+            new RtpPacket(new RtpHeader(97, 1, 90, 0x0a0b0c0d), payload)
+        )
+
+        const unprotected = receiver.unprotect(datagram)
+        datagram.fill(0)
+
+        assert.deepEqual(unprotected?.payload, payload)
+    }
 })
 
 test('keying material handed to a session cannot be swapped under it', () => {
@@ -103,6 +123,7 @@ test('SrtpSession round-trips across the sequence-number rollover', () => {
     for (const seq of [65533, 65534, 65535, 0, 1, 2]) {
         const header = new RtpHeader(120, seq, (seq * 960) >>> 0, 0x0a0b0c0d)
         const out = session.unprotect(session.protect(new RtpPacket(header, payload)))
+        assert.ok(out)
         assert.equal(out.header.sequenceNumber, seq)
         assert.deepEqual(out.payload, payload)
     }
@@ -128,11 +149,12 @@ test('SrtpSession authenticates a reordered packet delayed across rollover', () 
     session.unprotect(b)
     session.unprotect(c)
     const out = session.unprotect(delayed)
+    assert.ok(out)
     assert.equal(out.header.sequenceNumber, 65532)
     assert.deepEqual(out.payload, payload)
 })
 
-test('SrtpSession rejects a replayed packet', () => {
+test('SrtpSession answers a replayed packet with null', () => {
     const callKey = new Uint8Array(32)
     callKey.fill(0x55)
     const keying = keyingFrom(callKey)
@@ -141,8 +163,8 @@ test('SrtpSession rejects a replayed packet', () => {
     const header = new RtpHeader(120, 100, 96000, 0x0c0d0e0f)
     const packet = session.protect(new RtpPacket(header, payload))
 
-    session.unprotect(packet)
-    assert.throws(() => session.unprotect(packet), /replay/)
+    assert.ok(session.unprotect(packet))
+    assert.equal(session.unprotect(packet), null)
 })
 
 test('SrtcpContext defaults to the 10-byte RTCP auth tag', () => {
@@ -172,7 +194,7 @@ test('SrtcpContext protect/unprotect round-trips an RTCP packet', () => {
     }
 })
 
-test('SrtcpContext unprotect rejects a replayed packet', () => {
+test('SrtcpContext unprotect answers a replayed packet with null', () => {
     const callKey = new Uint8Array(32)
     callKey.fill(0x77)
     const keying = keyingFrom(callKey)
@@ -182,10 +204,7 @@ test('SrtcpContext unprotect rejects a replayed packet', () => {
     const protectedPacket = sender.protect(pli, 0x0a0b0c0d)
 
     assert.deepEqual(receiver.unprotect(protectedPacket), pli)
-    assert.throws(
-        () => receiver.unprotect(protectedPacket),
-        (error: unknown) => error instanceof SrtpError && error.type === 'replay'
-    )
+    assert.equal(receiver.unprotect(protectedPacket), null)
 })
 
 test('SrtcpContext unprotect rejects a tampered packet', () => {
@@ -271,7 +290,7 @@ test('SrtcpSession accepts interleaved packets from independent SSRC streams', (
     }
 })
 
-test('SrtcpSession still rejects a replayed packet within a single stream', () => {
+test('SrtcpSession still answers a replay within a single stream with null', () => {
     const callKey = new Uint8Array(32)
     callKey.fill(0xbb)
     const keying = keyingFrom(callKey)
@@ -282,10 +301,7 @@ test('SrtcpSession still rejects a replayed packet within a single stream', () =
     const protectedPacket = sender.protect(pli, 0x0a0b0c0d)
 
     assert.deepEqual(receiver.unprotect(protectedPacket), pli)
-    assert.throws(
-        () => receiver.unprotect(protectedPacket),
-        (error: unknown) => error instanceof SrtpError && error.type === 'replay'
-    )
+    assert.equal(receiver.unprotect(protectedPacket), null)
 })
 
 /**
@@ -352,10 +368,7 @@ test('SrtcpSession does not let a forged SSRC evict a legitimate context and era
         'an unauthenticated forgery must not evict the legitimate context'
     )
 
-    assert.throws(
-        () => receiver.unprotect(legitProtected),
-        (error: unknown) => error instanceof SrtpError && error.type === 'replay'
-    )
+    assert.equal(receiver.unprotect(legitProtected), null)
 })
 
 test('SrtcpContext unprotect passes through a payload the sender left in the clear', () => {
@@ -367,4 +380,110 @@ test('SrtcpContext unprotect passes through a payload the sender left in the cle
     writeUInt32BE(unencrypted, 7, pli.length)
 
     assert.deepEqual(context.unprotect(unencrypted), pli)
+})
+
+test('SrtpSession and SrtcpContext protect to pinned bytes across the rollover', () => {
+    const seed = new Uint8Array(30).map((_, i) => (i * 37 + 11) & 0xff)
+    const keying = keyingFrom(seed)
+    const session = new SrtpSession(nodeCrypto, keying, keying, 4, 4)
+    const rtp = [65534, 65535, 0, 1].map((seq) =>
+        bytesToHex(
+            session.protect(
+                new RtpPacket(
+                    new RtpHeader(120, seq, seq * 960, 0xdeadbeef),
+                    new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])
+                )
+            )
+        )
+    )
+    const context = new SrtcpContext(nodeCrypto, keying)
+    const pli = buildPictureLossIndication(0x0a0b0c0d, 0x01020304)
+    const rtcp = [0, 1].map(() => bytesToHex(context.protect(pli, 0x0a0b0c0d)))
+
+    assert.deepEqual(rtp, [
+        '8078fffe03bff880deadbeefd675a846deda04194e56009b',
+        '8078ffff03bffc40deadbeefdd52fcc281f6883af0ed42df',
+        '8078000000000000deadbeef0574e6cb8834f27e92be0301',
+        '80780001000003c0deadbeef12d8c3f5ef6af23d0bd0eada'
+    ])
+    assert.deepEqual(rtcp, [
+        '81ce00020a0b0c0d04ff072480000000717ff4158bc1275d81f8',
+        '81ce00020a0b0c0d19157216800000010692a041f6e159f3dead'
+    ])
+})
+
+test('SrtpSession answers duplicates with null and keeps decrypting newer packets', () => {
+    const keying = keyingFrom(new Uint8Array(32).fill(0x5a))
+    const sender = new SrtpSession(nodeCrypto, keying, keying, 4, 4)
+    const receiver = new SrtpSession(nodeCrypto, keying, keying, 4, 4)
+    const payload = new Uint8Array([1, 2, 3])
+    const packets = new Map<number, Uint8Array>()
+    for (const seq of [100, 101, 102, 103, 104, 200]) {
+        packets.set(
+            seq,
+            sender.protect(new RtpPacket(new RtpHeader(120, seq, seq * 960, 0x0d0e0f10), payload))
+        )
+    }
+    const at = (seq: number): Uint8Array => packets.get(seq) ?? new Uint8Array()
+
+    for (const seq of [100, 101, 103]) assert.ok(receiver.unprotect(at(seq)))
+    assert.equal(receiver.unprotect(at(101)), null)
+    assert.equal(receiver.unprotect(at(103)), null)
+    assert.deepEqual(receiver.unprotect(at(102))?.payload, payload)
+    assert.equal(receiver.unprotect(at(102)), null)
+
+    assert.deepEqual(receiver.unprotect(at(200))?.payload, payload)
+    assert.equal(receiver.unprotect(at(104)), null, 'older than the 64-packet window')
+    assert.equal(receiver.unprotect(at(200)), null)
+})
+
+test('SrtpSession tracks the rollover counter and answers replays on either side of it with null', () => {
+    const keying = keyingFrom(new Uint8Array(32).fill(0x6b))
+    const sender = new SrtpSession(nodeCrypto, keying, keying, 4, 4)
+    const receiver = new SrtpSession(nodeCrypto, keying, keying, 4, 4)
+    const payload = new Uint8Array([7, 8, 9])
+    const send = (seq: number): Uint8Array =>
+        sender.protect(new RtpPacket(new RtpHeader(120, seq, 0, 0x01020304), payload))
+
+    for (let wrap = 0; wrap < 3; wrap++) {
+        let beforeWrap: Uint8Array = new Uint8Array()
+        for (let seq = 65500; seq <= 65535; seq++) {
+            beforeWrap = send(seq)
+            assert.deepEqual(receiver.unprotect(beforeWrap)?.payload, payload)
+        }
+        const afterWrap = send(0)
+        assert.deepEqual(receiver.unprotect(afterWrap)?.payload, payload)
+        assert.equal(receiver.unprotect(beforeWrap), null)
+        assert.equal(receiver.unprotect(afterWrap), null)
+        for (let seq = 1500; seq < 65500; seq += 1500) {
+            assert.deepEqual(receiver.unprotect(send(seq))?.payload, payload)
+        }
+    }
+})
+
+test('ReplayWindow slides across the 32-bit word boundary', () => {
+    const window = new ReplayWindow()
+    assert.equal(window.has(1000), false)
+    assert.equal(window.add(1000), true)
+    assert.equal(window.has(1000), true)
+
+    assert.equal(window.add(1032), true)
+    assert.equal(window.has(1000), true, 'offset 32 lands in the high word')
+    assert.equal(window.has(1031), false)
+    assert.equal(window.add(1001), false)
+    assert.equal(window.has(1001), true)
+
+    assert.equal(window.add(1063), true)
+    assert.equal(window.has(1000), true, 'offset 63 is still inside')
+    assert.equal(window.has(999), true, 'offset 64 is outside, so treated as seen')
+    assert.equal(window.add(1064), true)
+    assert.equal(window.has(1001), true)
+    assert.equal(window.has(1002), false)
+
+    assert.equal(window.add(1064 + 31), true)
+    assert.equal(window.has(1064), true)
+    assert.equal(window.has(1032), true)
+    assert.equal(window.add(1064 + 31 + 200), true)
+    assert.equal(window.has(1064 + 31), true, 'a jump past the window clears it')
+    assert.equal(window.has(1064 + 31 + 199), false)
 })

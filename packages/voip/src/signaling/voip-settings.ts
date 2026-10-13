@@ -1,40 +1,28 @@
 import { createNoopLogger, type Logger } from 'zapo-js'
 import { type BinaryNode, findNodeChild, getNodeChildren } from 'zapo-js/transport'
-import { base64ToBytes, toError } from 'zapo-js/util'
+import { base64ToBytes, TEXT_DECODER, toError, tryAsNumber } from 'zapo-js/util'
 
-import { TEXT_DECODER } from '../bytes.js'
-
-/** Name of the node the server attaches to the offer with the call configuration. */
 const VOIP_SETTINGS_TAG = 'voip_settings'
 
-/**
- * The only value ever observed in the node attribute of the same name. Any
- * other value marks a variant whose format this client has no sample to decode.
- */
+/** The only known value of this attribute is `1`; any other is a variant with no known decoding. */
 const UNCOMPRESSED_ATTR = 'uncompressed'
 
-/** The video rate-control section, where the video RTCP gates live. */
 const VIDEO_RATE_CONTROL_SECTION = 'vid_rc'
-
-/**
- * The audio rate-control section (`audio_nack_*`, `dtx`, `mlow_*`,
- * `target_bitrate`), where the RTCP interval lives.
- */
 const RATE_CONTROL_SECTION = 'rc'
-
-/** The gate that turns RTCP REMB off for this call. */
 const DISABLE_RTCP_REMB_KEY = 'disable_rtcp_remb'
-
-/** The interval between RTCP reports, in milliseconds. */
 const RTCP_INTERVAL_MS_KEY = 'rtcp_interval_ms'
-
-/** The audio codec section, where the frame duration lives. */
 const ENCODE_SECTION = 'encode'
 const FRAME_MS_KEY = 'frame_ms'
-/** Most audio frames bundled per packet, in `rc`. */
 const MAX_FRAMES_PER_PACKET_KEY = 'maxfpp'
+const OPTIONS_SECTION = 'options'
+const VIDEO_STATE_TXN_RECV_ENFORCE_KEY = 'video_state_txn_id_recv_enforce'
+const HEARTBEAT_INTERVAL_KEY = 'heartbeat_interval_s'
+const ENABLE_APP_DATA_STREAM_KEY = 'enable_app_data_stream'
+const APP_DATA_STREAM_VERSION_KEY = 'app_data_stream_version'
+const SFRAME_SECTION = 'sframe'
+const ENABLE_SFRAME_KEY = 'enable_sframe'
+const ENABLE_SFRAME_RX_KEY = 'enable_sframe_rx'
 
-/** `{`, the first character of a payload that already arrived as plain JSON. */
 const OPEN_BRACE = 0x7b
 
 const SPACE = 0x20
@@ -42,11 +30,7 @@ const TAB = 0x09
 const LINE_FEED = 0x0a
 const CARRIAGE_RETURN = 0x0d
 
-/**
- * Tells whether the text opens a JSON object, skipping leading whitespace. It
- * separates content that already arrived as JSON from content that arrived as
- * base64, without copying the 34 KB just to look at the first character.
- */
+/** Whether the text opens a JSON object after leading whitespace, without copying it. */
 function looksLikeJsonObject(text: string): boolean {
     for (let i = 0; i < text.length; i++) {
         const code = text.charCodeAt(i)
@@ -58,12 +42,7 @@ function looksLikeJsonObject(text: string): boolean {
     return false
 }
 
-/**
- * The boolean behind the raw value. Every JSON value arrives as a string, and
- * the forms that actually show up are `"1"`, `"0"`, `"true"` and `"false"`. A
- * value of another type, or outside those forms, returns `null`, and the caller
- * applies the default instead of deciding by guesswork.
- */
+/** `"1"`/`"0"`/`"true"`/`"false"` (or a real boolean or number) as a boolean; anything else is `null`. */
 function toFlag(value: unknown): boolean | null {
     if (typeof value === 'boolean') return value
     if (typeof value === 'number') return Number.isFinite(value) ? value !== 0 : null
@@ -75,22 +54,6 @@ function toFlag(value: unknown): boolean | null {
     return null
 }
 
-/**
- * The number behind the raw value, under the same rule as the boolean: an empty
- * string, non-numeric text and an unexpected type all return `null`, never
- * `NaN` and never the zero that `Number('')` would produce.
- */
-function toNumber(value: unknown): number | null {
-    if (typeof value === 'number') return Number.isFinite(value) ? value : null
-    if (typeof value !== 'string') return null
-
-    const text = value.trim()
-    if (text.length === 0) return null
-
-    const parsed = Number(text)
-    return Number.isFinite(parsed) ? parsed : null
-}
-
 /** One section of the JSON, or `null` when the name does not point at an object. */
 function toSection(value: unknown): Record<string, unknown> | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -98,58 +61,64 @@ function toSection(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * The configuration the server attaches to every call offer in the
- * `<voip_settings uncompressed='1'>` node, whose content is base64 of a JSON
- * document tens of KB long. It is the server telling this session how to
- * behave, per call.
- *
- * The node has two profiles, and the media type of the offer is what picks
- * between them. An audio offer, with no `<video>`, carries 20 sections and 510
- * leaf keys; an offer with `<video>` carries 22 sections and 678 leaf keys,
- * about 34 KB. Neither profile is a subset of the other: `rc.rtcp_interval_ms`
- * appears only in the audio one and `vid_rc.disable_rtcp_remb` only in the
- * video one, so every key applied here has to know what to do when the profile
- * at hand does not carry it.
- *
- * Every value arrives as a string, booleans and numbers included: `"1"`, `"0"`,
- * `"true"`, `"false"`, `"35000"`. Normalization happens on read, and a missing
- * key, a missing section or an unexpected type return the default instead of
- * throwing.
- *
- * Out of this catalogue this client applies a handful of keys:
- * `vid_rc.disable_rtcp_remb`, {@link rtcpIntervalMs}, {@link audioFrameMs} and
- * {@link audioMaxFramesPerPacket}. All the others stay
- * readable through the generic accessors and change no behavior at all. The
- * whole node being absent has to leave the call exactly as it was before the
- * node existed.
- *
- * Ignoring the node has a measured cost, not a hypothetical one. RTCP REMB was
- * implemented and started going out on every interval while
- * `vid_rc.disable_rtcp_remb` was `"1"` in that very offer: the packet went out
- * correct and the peer did not process it, because the server had turned that
- * feedback transport off. In the same JSON, `vid_rc.minbwe` was 35000, the
- * exact number the peer bitrate kept pinning at, and the one that cost three
- * rounds of investigation to find.
- *
- * The parse runs once, when the offer arrives, and the result is kept on the
- * call. 34 KB of JSON per call is acceptable; per packet it would not be, so a
- * caller reading a gate on a hot path resolves the value once and keeps the
- * boolean.
+ * The per-call configuration the server sends in `<voip_settings>`, a JSON document whose values
+ * mostly arrive as strings. The typed fields are every key this client applies, read once at
+ * parse; a missing section, key or unexpected type reads as the default.
  */
 export class WaVoipSettings {
     private readonly root: Record<string, unknown>
 
+    /** `vid_rc.disable_rtcp_remb`: the server turned RTCP REMB off for this call. */
+    readonly disableRtcpRemb: boolean
+    /** `rc.rtcp_interval_ms`, positive only, else `null`. Only the audio profile carries it. */
+    readonly rtcpIntervalMs: number | null
+    /** `encode.frame_ms`, the audio frame duration (`60` observed), positive only, else `null`. */
+    readonly audioFrameMs: number | null
+    /** `rc.maxfpp`, most audio frames per packet (`2` observed), positive only, else `null`. */
+    readonly audioMaxFramesPerPacket: number | null
+    /** `options.video_state_txn_id_recv_enforce`: inbound `<video>` txn ids are enforced. */
+    readonly videoStateTxnRecvEnforce: boolean
+    /** `options.heartbeat_interval_s` in milliseconds, positive only, else `null`. */
+    readonly heartbeatIntervalMs: number | null
+    /** `options.enable_app_data_stream`. */
+    readonly appDataStream: boolean
+    /** `options.app_data_stream_version`, `0` when absent. */
+    readonly appDataStreamVersion: number
+    /** `sframe.enable_sframe`. */
+    readonly sframe: boolean
+    /** `sframe.enable_sframe_rx`. */
+    readonly sframeRx: boolean
+
     private constructor(root: Record<string, unknown>) {
         this.root = root
+        this.disableRtcpRemb = this.getFlag(
+            VIDEO_RATE_CONTROL_SECTION,
+            DISABLE_RTCP_REMB_KEY,
+            false
+        )
+        this.rtcpIntervalMs = this.positiveNumber(RATE_CONTROL_SECTION, RTCP_INTERVAL_MS_KEY)
+        this.audioFrameMs = this.positiveNumber(ENCODE_SECTION, FRAME_MS_KEY)
+        this.audioMaxFramesPerPacket = this.positiveNumber(
+            RATE_CONTROL_SECTION,
+            MAX_FRAMES_PER_PACKET_KEY
+        )
+        this.videoStateTxnRecvEnforce = this.getFlag(
+            OPTIONS_SECTION,
+            VIDEO_STATE_TXN_RECV_ENFORCE_KEY,
+            false
+        )
+        const heartbeatSeconds = this.positiveNumber(OPTIONS_SECTION, HEARTBEAT_INTERVAL_KEY)
+        this.heartbeatIntervalMs = heartbeatSeconds === null ? null : heartbeatSeconds * 1000
+        this.appDataStream = this.getFlag(OPTIONS_SECTION, ENABLE_APP_DATA_STREAM_KEY, false)
+        this.appDataStreamVersion = this.getNumber(OPTIONS_SECTION, APP_DATA_STREAM_VERSION_KEY, 0)
+        this.sframe = this.getFlag(SFRAME_SECTION, ENABLE_SFRAME_KEY, false)
+        this.sframeRx = this.getFlag(SFRAME_SECTION, ENABLE_SFRAME_RX_KEY, false)
     }
 
     /**
-     * An instance from the already decoded JSON. A root that is not an object
-     * returns `null`, the same safe path as an absent node.
+     * An instance from the decoded JSON, or `null` when the root is not an object.
      *
-     * @throws the `JSON.parse` error when the text is not JSON. The stanza
-     * reader calls this from inside a try, logs the message and carries on with
-     * the defaults: no failure from here reaches the call.
+     * @throws the `JSON.parse` error when the text is not JSON.
      */
     static fromJson(text: string): WaVoipSettings | null {
         const root = toSection(JSON.parse(text))
@@ -167,6 +136,11 @@ export class WaVoipSettings {
         return bucket ? bucket[key] : undefined
     }
 
+    private positiveNumber(section: string, key: string): number | null {
+        const value = this.getNumber(section, key, 0)
+        return value > 0 ? value : null
+    }
+
     /**
      * The boolean gate of the section, or `fallback` when the section, the key
      * or the shape of the value is not there.
@@ -180,54 +154,13 @@ export class WaVoipSettings {
      * key or the shape of the value is not there.
      */
     getNumber(section: string, key: string, fallback: number): number {
-        return toNumber(this.leaf(section, key)) ?? fallback
+        return tryAsNumber(this.leaf(section, key)) ?? fallback
     }
 
-    /**
-     * The textual value of the section exactly as the server wrote it, or
-     * `fallback` when the section, the key or the type is not there. It
-     * converts neither number nor boolean into text: a caller that wants the
-     * normalized value uses the accessor for that type.
-     */
+    /** The string value exactly as the server wrote it, or `fallback` when it is not a string. */
     getText(section: string, key: string, fallback: string | null = null): string | null {
         const value = this.leaf(section, key)
         return typeof value === 'string' ? value : fallback
-    }
-
-    /**
-     * `vid_rc.disable_rtcp_remb`. When it is `"1"`, the server has turned RTCP
-     * REMB off, and a REMB emitted anyway is a packet the peer does not
-     * process. When absent, the default is `false` and the behavior stays what
-     * it was before this node was ever read.
-     */
-    get disableRtcpRemb(): boolean {
-        return this.getFlag(VIDEO_RATE_CONTROL_SECTION, DISABLE_RTCP_REMB_KEY, false)
-    }
-
-    /**
-     * `rc.rtcp_interval_ms`: the interval between RTCP reports the server
-     * orders this session to use, or `null` to keep the compiled interval. Only
-     * a positive number is accepted: a zero would order a report on every
-     * packet.
-     *
-     * The key exists in the audio profile only, where it is `"1500"`; the video profile lacks it,
-     * so a video call, upgraded or not, runs on the media session's compiled 1000 ms.
-     */
-    get rtcpIntervalMs(): number | null {
-        const value = this.getNumber(RATE_CONTROL_SECTION, RTCP_INTERVAL_MS_KEY, 0)
-        return value > 0 ? value : null
-    }
-
-    /** `encode.frame_ms`, the audio frame duration (`60` observed), or `null` when absent. */
-    get audioFrameMs(): number | null {
-        const value = this.getNumber(ENCODE_SECTION, FRAME_MS_KEY, 0)
-        return value > 0 ? value : null
-    }
-
-    /** `rc.maxfpp`, most audio frames per packet (`2` observed), or `null` when absent. */
-    get audioMaxFramesPerPacket(): number | null {
-        const value = this.getNumber(RATE_CONTROL_SECTION, MAX_FRAMES_PER_PACKET_KEY, 0)
-        return value > 0 ? value : null
     }
 }
 
@@ -246,12 +179,7 @@ function findVoipSettingsNode(node: BinaryNode): BinaryNode | null {
     return null
 }
 
-/**
- * The JSON text of the node content. The observed content is base64, but the
- * stanza decoder hands over a string sometimes and bytes other times, and a
- * payload that already arrives as JSON is taken as is instead of going through
- * a base64 decode it is not.
- */
+/** The JSON text of the node content, given as a string or bytes, base64 or already JSON. */
 function decodeSettingsText(content: BinaryNode['content']): string | null {
     const raw =
         typeof content === 'string'
@@ -269,22 +197,8 @@ function decodeSettingsText(content: BinaryNode['content']): string | null {
 }
 
 /**
- * Reads the `<voip_settings>` out of a call stanza and returns the
- * configuration, or `null` when there is nothing usable in there.
- *
- * No failure from here may bring a call down: an absent node, an unknown
- * variant attribute, corrupted base64, invalid JSON and a root that is not an
- * object all land on the same `null`, and the caller carries on with the
- * compiled defaults. That is half the reason this function exists - the content
- * comes from the server and can change without notice.
- *
- * `uncompressed='1'` is the only value ever seen in the attribute. A different
- * value is a variant with no sample to decode, and the whole node is discarded
- * instead of the format being guessed.
- *
- * @param node the call stanza, its ack, or the `<voip_settings>` node itself.
- * The search covers the node, its children and its grandchildren, so it serves
- * both `<call><offer><voip_settings>` and `<call><voip_settings>`.
+ * Reads the `<voip_settings>` of `node`, one of its children or grandchildren. Never throws:
+ * an absent node, an unknown variant, bad base64 or bad JSON all return `null`.
  */
 export function parseVoipSettings(node: BinaryNode, logger?: Logger): WaVoipSettings | null {
     const log = logger ?? createNoopLogger()

@@ -33,6 +33,8 @@ export interface WaCallMediaLinkEvents {
     /** `senderId` names the group sender the reaction came from, when the host knows it. */
     onReaction(reaction: WaCallReaction, senderId?: string): void
     onInboundAudio(pcm: Float32Array): void
+    /** Whether anything takes {@link onInboundAudio} right now; absent means always. */
+    wantsInboundAudio?(): boolean
     onInboundVideoRtp(packet: InboundVideoRtpPacket): void
     onInboundVideo(frame: InboundVideoFrame): void
     onOutboundAudioFinished(): void
@@ -108,7 +110,7 @@ export function toCompanionModelSource(
     }
 }
 
-export interface WaLocalCallMediaOptions {
+interface WaLocalCallMediaOptions {
     readonly logger: Logger
     readonly events: WaCallMediaLinkEvents
     readonly useOriginalRelayPort: boolean
@@ -160,8 +162,11 @@ export class WaLocalCallMedia implements WaCallMediaLink {
             sendCapturedAudio: (pcm, capturedAtMs) => this.plane.pushCapture(pcm, capturedAtMs)
         })
         this.audio.setPlayoutSource((out) => this.plane.pullPlayout(out))
-        // The engine reuses its buffer on the next tick, so copy before handing it out.
-        this.audio.setPlaybackSink((pcm) => events.onInboundAudio(pcm.slice()))
+        // The engine reuses its buffer, so a listener gets a copy; no listener, no copy.
+        this.audio.setPlaybackSink((pcm) => {
+            if (events.wantsInboundAudio?.() === false) return
+            events.onInboundAudio(pcm.slice())
+        })
         this.audio.setOnAudioFinished(() => events.onOutboundAudioFinished())
     }
 
@@ -293,7 +298,7 @@ export class WaRemoteCallMedia implements WaCallMediaLink {
             this.recordHostFeatures(event.features)
             return
         }
-        /** A host that knows the event sends it before anything else. */
+        // A host that knows the `host` event sends it before anything else.
         if (this.hostFeatures === null) this.recordHostFeatures([])
         switch (event.type) {
             case 'active':

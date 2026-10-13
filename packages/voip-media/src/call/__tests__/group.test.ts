@@ -14,8 +14,6 @@ import { nodeCrypto } from '../../node/crypto.js'
 import {
     type InboundVideoFrame,
     type InboundVideoRtpPacket,
-    SRTP_RECV_AUTH_TAG_LEN,
-    SRTP_SEND_AUTH_TAG_LEN,
     type SrtpKeyingMaterial
 } from '../../types.js'
 import {
@@ -231,13 +229,7 @@ function protectedRtp(
     payloadType = 120,
     payload: Uint8Array = PAYLOAD
 ): Uint8Array {
-    const peer = new SrtpSession(
-        nodeCrypto,
-        keying,
-        keying,
-        SRTP_SEND_AUTH_TAG_LEN,
-        SRTP_RECV_AUTH_TAG_LEN
-    )
+    const peer = new SrtpSession(nodeCrypto, keying, keying)
     return peer.protect(new RtpPacket(new RtpHeader(payloadType, seq, seq * FRAME, ssrc), payload))
 }
 
@@ -633,7 +625,7 @@ test('our audio sender report carries a block per sender heard', async (t) => {
         srtpSession: unknown
         srtcpContext: unknown
         audioReportSchedule: unknown
-        sendOpusFrame: (frame: Uint8Array, ts: number, marker: boolean, captureMs: number) => void
+        sendAudioPacket: (frame: Uint8Array, ts: number, marker: boolean, captureMs: number) => void
     }
     passThrough.srtpSession = {
         protect: (packet: RtpPacket) => packet.encode(),
@@ -644,9 +636,9 @@ test('our audio sender report carries a block per sender heard', async (t) => {
     const reports = (): Uint8Array[] => relay.sent.filter((packet) => packet[1] === 200)
 
     internals.onRelayData(plainRtp(A_AUDIO, 1, FRAME, PAYLOAD))
-    passThrough.sendOpusFrame(PAYLOAD, FRAME, false, 0)
+    passThrough.sendAudioPacket(PAYLOAD, FRAME, false, 0)
     internals.onRelayData(plainRtp(B_AUDIO, 1, FRAME, PAYLOAD))
-    passThrough.sendOpusFrame(PAYLOAD, 2 * FRAME, false, 0)
+    passThrough.sendAudioPacket(PAYLOAD, 2 * FRAME, false, 0)
 
     const [one, two] = reports()
     assert.equal(one[0] & 0x1f, 1)
@@ -925,39 +917,6 @@ test('a 1:1 call decodes PT 122 on the peer stream PT 120 numbers', async (t) =>
     assert.equal(plane.getStats().audioReceived, 1)
 })
 
-test('PT 122 is described in the log: first bytes, sizes and timestamp steps', async (t) => {
-    const logged: Record<string, unknown>[] = []
-    const logger: Logger = {
-        ...createNoopLogger(),
-        debug: (message: string, context?: Record<string, unknown>) => {
-            if (message === 'pt 122 audio received' && context) logged.push(context)
-        },
-        child: () => logger
-    }
-    const { plane, internals } = createPlane({}, logger)
-    t.after(() => plane.stop())
-    await plane.apply({ ssrcs: SSRCS, keys: keys(1), group: group(SENDER_A) })
-
-    for (let seq = 1; seq <= 10; seq++) {
-        internals.onRelayData(
-            protectedRtp(SENDER_A.recv, A_AUDIO, seq, 122, Uint8Array.of(0x58, seq, 0, 0, 0))
-        )
-    }
-
-    assert.equal(logged.length, 2, 'at the first packet and the tenth')
-    assert.deepEqual(logged[1], {
-        ssrc: `0x${A_AUDIO.toString(16)}`,
-        packets: 10,
-        decoded: 10,
-        rejected: 0,
-        firstBytes: { '0x58': 10 },
-        minBytes: 5,
-        maxBytes: 5,
-        meanBytes: 5,
-        timestampSteps: { '960': 9 }
-    })
-})
-
 const A_VIDEO = 0x0a0a0a03
 const A_APP = 0x0a0a0a06
 const B_VIDEO = 0x0b0b0b03
@@ -993,13 +952,7 @@ function reactionPacket(sender: WaCallMediaSender, ssrc: number, reaction: strin
 
 /** One single-NAL key frame on `ssrc`, closed by the marker. */
 function videoKeyFrame(sender: WaCallMediaSender, ssrc: number, seq = 1): Uint8Array {
-    const peer = new SrtpSession(
-        nodeCrypto,
-        sender.recv,
-        sender.recv,
-        SRTP_SEND_AUTH_TAG_LEN,
-        SRTP_RECV_AUTH_TAG_LEN
-    )
+    const peer = new SrtpSession(nodeCrypto, sender.recv, sender.recv)
     const header = new RtpHeader(97, seq, seq * 3000, ssrc)
     header.marker = true
     return peer.protect(new RtpPacket(header, Uint8Array.of(0x65, 0x88, 0x84)))

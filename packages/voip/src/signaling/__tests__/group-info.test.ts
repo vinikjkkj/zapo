@@ -4,12 +4,9 @@ import { test } from 'node:test'
 import type { BinaryNode } from 'zapo-js/transport'
 
 import {
-    type GroupInfoParticipant,
     normalizeParticipantDeviceJids,
     parseGroupInfoNode,
     toGroupCallParticipants,
-    toMediaIdentityJid,
-    toParticipantMediaIdentityJids,
     WA_CALL_MAX_DEVICES_PER_USER
 } from '../group-info.js'
 
@@ -375,22 +372,7 @@ test('normalizeParticipantDeviceJids refuses a jid set that mixes LID and phone 
     )
 })
 
-test('toMediaIdentityJid keeps the device, including the zero of the primary', () => {
-    assert.equal(toMediaIdentityJid('50062877036657:0@lid'), '50062877036657:0@lid')
-    assert.equal(toMediaIdentityJid('50062877036657@lid'), '50062877036657:0@lid')
-    assert.equal(toMediaIdentityJid('50062877036657:76@lid'), '50062877036657:76@lid')
-})
-
-test('toMediaIdentityJid collapses the hosted LID onto the plain one', () => {
-    assert.equal(toMediaIdentityJid('50062877036657:99@hosted.lid'), '50062877036657:99@lid')
-})
-
-test('toMediaIdentityJid refuses anything that is not a LID', () => {
-    assert.throws(() => toMediaIdentityJid('5511999999999:0@s.whatsapp.net'), /needs a LID jid/)
-    assert.throws(() => toMediaIdentityJid('5511999999999:99@hosted'), /needs a LID jid/)
-})
-
-test('toParticipantMediaIdentityJids reads the devices and never the user_pn', () => {
+test('the device jids of a participant come from its devices and never the user_pn', () => {
     const participant = parseGroupInfoNode(
         groupInfo([
             node('user', { jid: USER, user_pn: '5511999999999@s.whatsapp.net' }, [
@@ -400,22 +382,10 @@ test('toParticipantMediaIdentityJids reads the devices and never the user_pn', (
         ])
     ).participants[0]
 
-    assert.deepEqual(toParticipantMediaIdentityJids(participant), [
-        '50062877036657:0@lid',
-        '50062877036657:8@lid'
-    ])
-})
-
-test('toParticipantMediaIdentityJids refuses a participant whose devices are phone numbers', () => {
-    const participant: GroupInfoParticipant = parseGroupInfoNode(
-        groupInfo([
-            node('user', { jid: '5511999999999@s.whatsapp.net' }, [
-                device('5511999999999:0@s.whatsapp.net')
-            ])
-        ])
-    ).participants[0]
-
-    assert.throws(() => toParticipantMediaIdentityJids(participant), /needs a LID jid/)
+    assert.deepEqual(
+        participant.devices.map((entry) => entry.jid),
+        ['50062877036657:0@lid', '50062877036657:8@lid']
+    )
 })
 
 test('the rekey the server asks for sits on the group info, not on a participant', () => {

@@ -309,6 +309,12 @@ test('the first frame is encoded as a key frame at its own size and its access u
         width: 640,
         height: 480
     })
+    encoder().emit('delta', 100_001, [0, 0, 1, 0x41])
+    assert.deepEqual(
+        sink.sent[1],
+        { data: [0, 0, 1, 0x41], timestampUs: 100_001 },
+        'a shorter chunk after a longer one is passed at its own length'
+    )
 })
 
 test('a source faster than the frame rate is thinned to it', async (t) => {

@@ -6,11 +6,7 @@ import { unrefTimer } from '../timers.js'
 
 import { decodeAppDataPayload, encodeReactionPayload, type WaCallReaction } from './protocol.js'
 
-/**
- * How long one reaction keeps being retransmitted, and how often. Both measured on the
- * wire: nine packets about 60 ms apart, then the sender stopped - with no packet marking
- * the end, which is why nothing here sends one either.
- */
+/** One reaction is resent every 60 ms for 600 ms, with no packet marking the end. */
 const DEFAULT_RETRANSMISSION_INTERVAL_MS = 60
 const DEFAULT_CLEAR_INTERVAL_MS = 600
 
@@ -18,12 +14,8 @@ const DEFAULT_CLEAR_INTERVAL_MS = 600
 const MAX_TRACKED_TRANSACTIONS = 64
 
 /**
- * The RTP payload type this side stamps on the app-data it sends.
- *
- * Nothing negotiates it: each client registers its own and the offer carries none,
- * so this is a choice rather than a match. It is the number a capture of the
- * reference client used - the conservative pick, since a peer demultiplexes app
- * data by SSRC but its receive path still compares the type against one it expects.
+ * The RTP payload type this side stamps on the app-data it sends. Nothing negotiates it; it
+ * is the one the official client uses, since a receiver still compares it against its own.
  */
 export const WA_APP_DATA_PAYLOAD_TYPE = 119
 
@@ -50,14 +42,9 @@ export interface WaAppDataStreamOptions {
 }
 
 /**
- * The app-data stream of one call: the RTP stream that carries reactions. Not a call
- * stanza and not the data channel - an RTP packet on the audio's own media socket, on an
- * SSRC of its own, under the same per-jid end-to-end SRTP. It exists in a plain audio call
- * too, because that profile also ships `enable_app_data_stream=1`.
- *
- * Best-effort: one reaction is sent repeatedly until its clear interval elapses and the
- * receiver deduplicates by transaction id. How the official client signals the *clear*
- * half is not established, so nothing is fabricated - the buffer just empties.
+ * The app-data stream of one call, which carries reactions: RTP on the audio's media socket,
+ * on an SSRC of its own, under the audio's SRTP. Each reaction is resent until its clear
+ * interval elapses; the receiver deduplicates by transaction id.
  */
 export class WaAppDataStream {
     readonly ssrc: number
@@ -69,40 +56,22 @@ export class WaAppDataStream {
 
     private sequenceNumber = randomInt(0, 65_536)
 
-    /**
-     * RTP timestamp of every packet of this stream: a random constant, since the stream
-     * has no media clock. Safe because the SRTP initialization vector is built from the
-     * SSRC and the packet index, never from the timestamp.
-     */
+    /** A random constant: the stream has no media clock, and the SRTP IV ignores timestamps. */
     private readonly timestamp = randomInt(0, 0xffffffff)
 
     private outgoing: OutgoingReaction | null = null
     private retransmitTimer: ReturnType<typeof setInterval> | null = null
 
-    /**
-     * Dedup keys of the reactions already surfaced, each one an inbound SSRC paired with a
-     * transaction id. The SSRC is part of the key because the id only counts within one
-     * sender: every device numbers its own reactions from 1, so two devices of the peer
-     * open a call with the same id and a shared set would swallow the second reaction.
-     */
+    /** Reactions already surfaced, as `ssrc:transactionId`: each device numbers its own from 1. */
     private readonly seenTransactions = new Set<string>()
 
     /**
-     * Numbers this stream's own reactions, counting from one.
-     *
-     * The field is a `uint64` and a random one is legal, but the reference client
-     * sends small counters - the first reaction of a call arrives as `1` - and a
-     * random one lands above 2^63 half the time, which is where a receiver reading
-     * it as a JavaScript number stops being able to hold it. The peer then tracks
-     * the transaction and renders nothing, with no error on either side.
+     * This stream's own reaction counter, from one as the official client counts: a random
+     * `uint64` past 2^63 is tracked by the peer but never rendered.
      */
     private nextTransactionId = 1n
 
-    private learnedPayloadType: number | null
-    private configuredPayloadType: number | null
-
-    private sframeRequired = false
-    private sframeProtect: ((payload: Uint8Array) => Uint8Array) | null = null
+    private readonly configuredPayloadType: number | null
 
     private txReactionCount = 0
     private txReactionErrorCount = 0
@@ -113,51 +82,14 @@ export class WaAppDataStream {
         this.ssrc = options.ssrc
         this.sendPacket = options.sendPacket
         this.configuredPayloadType = options.payloadType ?? null
-        this.learnedPayloadType = null
         this.retransmissionIntervalMs =
             options.retransmissionIntervalMs ?? DEFAULT_RETRANSMISSION_INTERVAL_MS
         this.clearIntervalMs = options.clearIntervalMs ?? DEFAULT_CLEAR_INTERVAL_MS
     }
 
-    /**
-     * RTP payload type this stream stamps on what it sends; nothing negotiates it. The
-     * number in the stream descriptor is a category, not an RTP type, and never leaves
-     * the client that builds it.
-     */
+    /** RTP payload type this stream stamps on what it sends. */
     get payloadType(): number {
         return this.configuredPayloadType ?? WA_APP_DATA_PAYLOAD_TYPE
-    }
-
-    /**
-     * The payload type seen on the peer's app-data stream, or `null` so far.
-     * Informational: inbound packets are recognized by SSRC, outbound carry our own type.
-     */
-    get peerPayloadType(): number | null {
-        return this.learnedPayloadType
-    }
-
-    /** Records an inbound payload type. Informational only; see {@link peerPayloadType}. */
-    observeInboundPayloadType(payloadType: number): void {
-        if (this.configuredPayloadType !== null || this.learnedPayloadType === payloadType) return
-        this.learnedPayloadType = payloadType
-        this.logger.debug('app data payload type learned from peer', {
-            payloadType,
-            ssrc: `0x${this.ssrc.toString(16)}`
-        })
-    }
-
-    /**
-     * Supplies the transform that applies SFrame, and records whether the server
-     * announced it for this call.
-     *
-     * **Do not gate the send on `required`.** The announcement is not an instruction: a
-     * reaction from the reference client on such a call arrives readable with the
-     * end-to-end keys alone. `protect` is `null` today, so gating would make every
-     * reaction vanish on every call where the server announces SFrame - most of them.
-     */
-    setSframe(required: boolean, protect: ((payload: Uint8Array) => Uint8Array) | null): void {
-        this.sframeRequired = required
-        this.sframeProtect = protect
     }
 
     /**
@@ -197,13 +129,9 @@ export class WaAppDataStream {
 
         const decoded = decodeAppDataPayload(payload)
         if (!decoded) {
-            // With SFrame on this is expected, not a malformed peer: the bytes are
-            // ciphertext and nothing here holds the key.
             this.logger.debug('app data payload not understood', {
                 ssrc: `0x${this.ssrc.toString(16)}`,
-                bytes: payload.length,
-                sframeRequired: this.sframeRequired,
-                sframeKeyed: this.sframeProtect !== null
+                bytes: payload.length
             })
             return EMPTY_REACTIONS
         }
@@ -256,7 +184,6 @@ export class WaAppDataStream {
         this.retransmitTimer = setInterval(() => {
             this.onRetransmissionTick()
         }, this.retransmissionIntervalMs)
-        // A best-effort retransmission must not keep an otherwise idle program alive.
         unrefTimer(this.retransmitTimer)
     }
 
@@ -300,10 +227,7 @@ export class WaAppDataStream {
                 this.ssrc
             )
             this.sequenceNumber = (this.sequenceNumber + 1) & 0xffff
-            const payload = this.sframeProtect
-                ? this.sframeProtect(outgoing.payload)
-                : outgoing.payload
-            return this.sendPacket(new RtpPacket(header, payload))
+            return this.sendPacket(new RtpPacket(header, outgoing.payload))
         } catch (err: unknown) {
             this.txReactionErrorCount++
             this.logger.debug('failed to send app data rtp packet', {

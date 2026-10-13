@@ -1,4 +1,4 @@
-import type { Logger } from '../logger.js'
+import { isLogLevelEnabled, type Logger } from '../logger.js'
 
 export interface WaJitterBufferStats {
     /** Samples currently queued for playout. */
@@ -17,6 +17,7 @@ export interface WaJitterBufferStats {
  */
 export class WaJitterBuffer {
     private readonly logger: Logger
+    private readonly traceEnabled: boolean
     private readonly ring: Float32Array
     private writePosition = 0
     private readPosition = 0
@@ -36,6 +37,7 @@ export class WaJitterBuffer {
         }
         this.ring = new Float32Array(capacitySamples)
         this.logger = logger
+        this.traceEnabled = isLogLevelEnabled(logger, 'trace')
     }
 
     write(samples: Float32Array): void {
@@ -55,10 +57,11 @@ export class WaJitterBuffer {
             this.readPosition = (this.readPosition + overflow) % capacity
             this.length -= overflow
             this.droppedSamples += overflow
-            this.logger.trace('jitter buffer overflow, dropped oldest', {
-                droppedSamples: overflow,
-                totalDropped: this.droppedSamples
-            })
+            if (this.traceEnabled)
+                this.logger.trace('jitter buffer overflow, dropped oldest', {
+                    droppedSamples: overflow,
+                    totalDropped: this.droppedSamples
+                })
         }
 
         const head = Math.min(source.length, capacity - this.writePosition)
@@ -102,6 +105,11 @@ export class WaJitterBuffer {
         this.writePosition = 0
         this.readPosition = 0
         this.length = 0
+    }
+
+    /** Samples currently queued, without building {@link stats}. */
+    get buffered(): number {
+        return this.length
     }
 
     get stats(): WaJitterBufferStats {

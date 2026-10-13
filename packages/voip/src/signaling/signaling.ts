@@ -13,7 +13,8 @@ import { bytesToHex, toError, tryAsNumber } from 'zapo-js/util'
 
 import { randomBytes } from '@zapo-js/voip-media'
 
-import { groupParticipantAccountKey, type WaGroupParticipant } from '../call/group-participants.js'
+import type { WaCallGroupParticipant } from '../call/group-participants.js'
+import { groupParticipantAccountKey } from '../jid.js'
 import type {
     CallOfferParticipant,
     NodeInfo,
@@ -37,17 +38,36 @@ function encodeSignedDeviceIdentity(
     return proto.ADVSignedDeviceIdentity.encode(account).finish()
 }
 
-export function generateCallId(): string {
-    const bytes = new Uint8Array(16)
-    for (let i = 0; i < 16; i++) {
-        bytes[i] = Math.floor(Math.random() * 256)
-    }
-
-    return bytesToHex(bytes).toUpperCase()
-}
-
+/** 16 random bytes as 32 uppercase hex characters. */
 export function generateCallStanzaId(): string {
     return bytesToHex(randomBytes(16)).toUpperCase()
+}
+
+/** A new call id, in the stanza id format. */
+export function generateCallId(): string {
+    return generateCallStanzaId()
+}
+
+/** A `<call>` to `to` whose one child names the call: `call-id`, `call-creator`, then `attrs` in order. */
+export function callStanza(
+    to: string,
+    tag: string,
+    callId: string,
+    callCreator: string,
+    attrs?: Readonly<Record<string, string>>,
+    content?: BinaryNode[]
+): BinaryNode {
+    const childAttrs = { 'call-id': callId, 'call-creator': callCreator, ...attrs }
+    return {
+        tag: 'call',
+        attrs: { to, id: generateCallStanzaId() },
+        content: [content ? { tag, attrs: childAttrs, content } : { tag, attrs: childAttrs }]
+    }
+}
+
+/** Where a call answer goes: `<call-id>@call` on a group call, the peer device verbatim on 1:1. */
+function callTarget(peerJid: string, callId: string, isGroupCall: boolean): string {
+    return isGroupCall ? toCallServerJid(callId) : peerJid
 }
 
 export function extractNodeInfo(node: BinaryNode): NodeInfo | null {
@@ -60,18 +80,11 @@ export function extractNodeInfo(node: BinaryNode): NodeInfo | null {
         tag: innerNode.tag,
         peerJid: node.attrs.from,
         callId: innerNode.attrs?.['call-id'] || '',
-        peerPlatform: node.attrs.platform || '',
-        peerAppVersion: node.attrs.version || '',
-        epochId: innerNode.attrs?.e,
-        timestamp: innerNode.attrs?.t,
         innerNode
     }
 }
 
-/**
- * `joinable` of an `<offer>`: whether others may still join. Independent of `group-jid`, since
- * an ad-hoc multi-party call is joinable with no group; absent means not joinable.
- */
+/** `joinable` of an `<offer>`: whether others may still join. Says nothing about group-ness. */
 export function parseJoinableAttr(innerNode: BinaryNode): boolean {
     const raw = innerNode.attrs?.joinable
     return raw === '1' || raw === 'true'
@@ -88,45 +101,9 @@ export function parseReRingAttr(innerNode: BinaryNode): boolean {
     return innerNode.attrs?.['re-ring'] === '1'
 }
 
-/** The `<av_upgrade>` of a `<group_update>`. */
-export interface GroupAvUpgrade {
-    /**
-     * `av-upgrader`, in `normalizeDeviceJid` form: the device that turned the call into a video
-     * call. `null` when absent: the node then only says whether the call can be upgraded.
-     */
-    readonly upgraderJid: string | null
-    /** `av-upgradable='1'`, sent to a member joining the call. */
-    readonly upgradable: boolean
-}
-
-/** Reads the `<av_upgrade>` of a `<group_update>`; an upgrade happened only with `upgraderJid`. */
-export function parseGroupAvUpgrade(groupUpdate: BinaryNode): GroupAvUpgrade | null {
-    const node = findNodeChild(groupUpdate, 'av_upgrade')
-    if (!node) return null
-
-    const raw = node.attrs?.['av-upgrader']
-    return {
-        upgraderJid: raw ? normalizedOrRaw(raw) : null,
-        upgradable: node.attrs?.['av-upgradable'] === '1'
-    }
-}
-
-function normalizedOrRaw(jid: string): string {
-    try {
-        return normalizeDeviceJid(jid)
-    } catch {
-        return jid
-    }
-}
-
 /**
- * `state` of a `<video>` message. The number on the wire **is** this ordinal - no
- * separate wire enum, no translation table.
- *
- * Two disjoint families share the tag, because two senders emit it: one announces the
- * video of a call that already has it, the other negotiates the upgrade. That is why a
- * capture of a camera turning on emits `6` then `4` without contradicting itself - `6` is
- * `Stopped`, never "enabled".
+ * `state` of a `<video>` message, written to the wire as this ordinal. Two families share it:
+ * announcing the video of a call that has it, and negotiating the upgrade (`6` is `Stopped`).
  */
 export const WA_VIDEO_STATE = Object.freeze({
     Disabled: 0,
@@ -182,30 +159,23 @@ export const WA_VIDEO_UPGRADE_RESULT = Object.freeze({
 export type WaVideoUpgradeResult =
     (typeof WA_VIDEO_UPGRADE_RESULT)[keyof typeof WA_VIDEO_UPGRADE_RESULT]
 
-/**
- * The `dec` this package announces: H.264 only, which is what every current client
- * decodes. The `enc_supported` bitmask carries the same fact as an integer and is
- * deliberately not sent - the string is what a capture of the official client shows.
- */
-export const WA_VIDEO_DECODE_CAPABILITY = 'H264'
+/** `<video enc>` we uplink and `<video dec>` we decode, in the asymmetric spelling the peer uses. */
+const VIDEO_ENC_H264 = 'h.264'
+const VIDEO_DEC_H264 = 'H264'
 
 /** Attributes of a `<video>` this side sends. */
-export interface VideoStateStanzaOptions {
+interface VideoStateStanzaOptions {
     /** One of {@link WA_VIDEO_STATE}, written to the wire as it is. */
     readonly state: number
     /** Our own counter over the video states we have sent, starting at 1. */
     readonly transactionId: number
-    /** `dec`; defaults to {@link WA_VIDEO_DECODE_CAPABILITY}. */
+    /** `dec`; defaults to H.264. */
     readonly decoderCodec?: string
     /** `device_orientation`, 0 to 3; defaults to 0, upright. */
     readonly deviceOrientation?: number
 }
 
-/**
- * The `voip_settings` profile a request to upgrade to video names. It rides the two
- * request states and nothing else. Not cosmetic: the server reads it and attaches the
- * matching profile, and a real peer answers an upgrade without parameters with `Error`.
- */
+/** `voip_settings` profile on the two upgrade-request states; without it the peer answers `Error`. */
 const WA_VIDEO_UPGRADE_SETTINGS_PROFILE = 'video'
 
 /**
@@ -220,27 +190,20 @@ export function buildVideoStateStanza(
     callCreator: string,
     options: VideoStateStanzaOptions
 ): BinaryNode {
-    return {
-        tag: 'call',
-        attrs: { to: peerDeviceJid, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'video',
-                attrs: {
-                    'call-id': callId,
-                    'call-creator': callCreator,
-                    state: String(options.state),
-                    device_orientation: String(options.deviceOrientation ?? 0),
-                    dec: options.decoderCodec ?? WA_VIDEO_DECODE_CAPABILITY,
-                    'transaction-id': String(options.transactionId),
-                    ...(options.state === WA_VIDEO_STATE.UpgradeRequestV2 ||
-                    options.state === WA_VIDEO_STATE.UpgradeRequest
-                        ? { voip_settings: WA_VIDEO_UPGRADE_SETTINGS_PROFILE }
-                        : {})
-                }
-            }
-        ]
+    const attrs: Record<string, string> = {
+        state: String(options.state),
+        device_orientation: String(options.deviceOrientation ?? 0),
+        dec: options.decoderCodec ?? VIDEO_DEC_H264,
+        'transaction-id': String(options.transactionId)
     }
+    if (
+        options.state === WA_VIDEO_STATE.UpgradeRequestV2 ||
+        options.state === WA_VIDEO_STATE.UpgradeRequest
+    ) {
+        attrs.voip_settings = WA_VIDEO_UPGRADE_SETTINGS_PROFILE
+    }
+
+    return callStanza(peerDeviceJid, 'video', callId, callCreator, attrs)
 }
 
 /**
@@ -345,44 +308,9 @@ export async function decryptCallKey(
  * (`enable_mlow_red`, `0x10` of the last byte) nor 38 (`enable_mlow_separate_pt_tx`, `0x40`): a peer
  * that sees them may send RED this side cannot fully unwrap, in-band or on its own payload type.
  */
-const CAPABILITY_OFFER_BASE = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x07])
-const CAPABILITY_VIDEO_OFFER_BASE = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe0, 0xfa, 0x03])
-const CAPABILITY_PREACCEPT_BASE = new Uint8Array([0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x07])
-
-/** `enable_mlow_red`, the capability index the in-band RED trial announces. */
-const MLOW_RED_CAPABILITY_INDEX = 36
-/** Live trial of in-band RED only: announces bit 36 in the offer, preaccept and accept. Off. */
-const ANNOUNCE_MLOW_RED = false as boolean
-
-/** `blob` with bit 36 set on a copy when `announce` is on, `blob` itself otherwise. */
-export function withMlowRedCapability(blob: Uint8Array, announce: boolean): Uint8Array {
-    if (!announce) return blob
-    const announced = blob.slice()
-    announced[2 + (MLOW_RED_CAPABILITY_INDEX >> 3)] |= 1 << (MLOW_RED_CAPABILITY_INDEX & 7)
-    return announced
-}
-
-const CAPABILITY_OFFER = withMlowRedCapability(CAPABILITY_OFFER_BASE, ANNOUNCE_MLOW_RED)
-const CAPABILITY_VIDEO_OFFER = withMlowRedCapability(CAPABILITY_VIDEO_OFFER_BASE, ANNOUNCE_MLOW_RED)
-const CAPABILITY_PREACCEPT = withMlowRedCapability(CAPABILITY_PREACCEPT_BASE, ANNOUNCE_MLOW_RED)
-
-/**
- * Codec identifiers for the `<video enc dec>` attrs shared by the offer and
- * the accept. `VIDEO_ENC_H264` is the codec we encode for uplink; current
- * mobile clients uplink H.264, so answering with anything else keeps
- * signalling alive but yields no video RTP.
- *
- * `VIDEO_DEC_H264` is the codec we decode for downlink. The `dec` attribute
- * is how a peer picks what to encode for us, so both sides that emit a
- * `<video>` node must advertise it consistently.
- */
-const VIDEO_ENC_H264 = 'h.264'
-const VIDEO_DEC_H264 = 'H264'
-
-export interface CallParticipantNodes {
-    nodes: BinaryNode[]
-    shouldIncludeDeviceIdentity: boolean
-}
+const CAPABILITY_OFFER = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x07])
+const CAPABILITY_VIDEO_OFFER = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe0, 0xfa, 0x03])
+const CAPABILITY_PREACCEPT = new Uint8Array([0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x07])
 
 interface EncryptedCallKeyNodes {
     /** One `<enc>` per device, in the order the devices came in. */
@@ -419,24 +347,15 @@ async function encryptCallKeyForDevices(
     }
 }
 
-export async function buildCallParticipantNodes(
-    deps: WaVoipDeps,
-    devices: string[],
-    callKey: Uint8Array
-): Promise<CallParticipantNodes> {
-    const { encNodes, shouldIncludeDeviceIdentity } = await encryptCallKeyForDevices(
-        deps,
-        devices,
-        callKey
-    )
-
-    const nodes: BinaryNode[] = devices.map((jid, index) => ({
-        tag: 'to',
-        attrs: { jid },
-        content: [encNodes[index]]
-    }))
-
-    return { nodes, shouldIncludeDeviceIdentity }
+/** `<device-identity>` of our account, sent beside a `pkmsg` key. */
+function deviceIdentityNode(
+    signedIdentity: Parameters<typeof proto.ADVSignedDeviceIdentity.encode>[0]
+): BinaryNode {
+    return {
+        tag: 'device-identity',
+        attrs: {},
+        content: encodeSignedDeviceIdentity(signedIdentity)
+    }
 }
 
 /** The media an offer announces, 1:1 or group: the two opus rates, video when asked, `<net>`. */
@@ -484,11 +403,16 @@ export async function buildOfferStanza(
         throw new Error(`no device sessions to encrypt the call offer for ${peerJid}`)
     }
 
-    const { nodes: destinations, shouldIncludeDeviceIdentity } = await buildCallParticipantNodes(
+    const { encNodes, shouldIncludeDeviceIdentity } = await encryptCallKeyForDevices(
         deps,
         devices,
         callKey
     )
+    const destinations: BinaryNode[] = devices.map((jid, index) => ({
+        tag: 'to',
+        attrs: { jid },
+        content: [encNodes[index]]
+    }))
 
     const offerContent: BinaryNode[] = []
 
@@ -524,24 +448,10 @@ export async function buildOfferStanza(
     })
 
     if (shouldIncludeDeviceIdentity && creds?.signedIdentity) {
-        offerContent.push({
-            tag: 'device-identity',
-            attrs: {},
-            content: encodeSignedDeviceIdentity(creds.signedIdentity)
-        })
+        offerContent.push(deviceIdentityNode(creds.signedIdentity))
     }
 
-    return {
-        tag: 'call',
-        attrs: { to: peerJid, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'offer',
-                attrs: { 'call-id': callId, 'call-creator': callCreator },
-                content: offerContent
-            }
-        ]
-    }
+    return callStanza(peerJid, 'offer', callId, callCreator, undefined, offerContent)
 }
 
 /** The server a group call's stanzas are addressed at, as `<call-id>@call`. */
@@ -552,18 +462,19 @@ export function toCallServerJid(callId: string): string {
     return `${callId}@${WA_CALL_SERVER}`
 }
 
+const CALL_SERVER_SUFFIX = `@${WA_CALL_SERVER}`
+
 /** The call id a `<call-id>@call` address names, or `null` for any other jid. */
 export function callIdOfCallServerJid(jid: string | undefined): string | null {
-    const suffix = `@${WA_CALL_SERVER}`
-    if (!jid?.endsWith(suffix)) return null
-    const callId = jid.slice(0, -suffix.length)
+    if (!jid?.endsWith(CALL_SERVER_SUFFIX)) return null
+    const callId = jid.slice(0, -CALL_SERVER_SUFFIX.length)
     return callId ? callId : null
 }
 
 /** A group `<offer>` and the participants it named, creator first, devices addressed. */
-export interface GroupOfferStanza {
+interface GroupOfferStanza {
     readonly node: BinaryNode
-    readonly participants: readonly WaGroupParticipant[]
+    readonly participants: readonly WaCallGroupParticipant[]
 }
 
 /**
@@ -604,7 +515,10 @@ async function resolveOfferParticipantDevices(
     }))
 }
 
-function buildGroupUserNode(participant: WaGroupParticipant, capability?: Uint8Array): BinaryNode {
+function buildGroupUserNode(
+    participant: WaCallGroupParticipant,
+    capability?: Uint8Array
+): BinaryNode {
     return {
         tag: 'user',
         attrs: { jid: participant.jid },
@@ -620,8 +534,8 @@ function buildGroupUserNode(participant: WaGroupParticipant, capability?: Uint8A
 
 /**
  * Builds the `<offer>` that places a group call: addressed to `<call-id>@call`, with the
- * participants in an attribute-less `<group_info>` (creator first, the only device carrying a
- * `<capability>`) and no `<destination>`, `<enc>`, `<encopt>` or `<device-identity>`: the key
+ * participants in an attribute-less `<group_info>` (creator first, with only the device placing the
+ * call, the only one carrying a `<capability>`) and no `<destination>`, `<enc>`, `<encopt>` or `<device-identity>`: the key
  * arrives later over `enc_rekey`. The server fills `joinable` and the `<group_info>` attributes.
  *
  * @throws with no own jid, with nobody left to ring, or through
@@ -654,15 +568,14 @@ export async function buildGroupOfferStanza(
         throw new Error(`group call on ${groupJid} has no participant to ring`)
     }
 
-    // Only the device placing the call: our other devices are not on it.
-    const creator: WaGroupParticipant = {
+    const creator: WaCallGroupParticipant = {
         jid: toUserJid(callCreator),
         devices: normalizeParticipantDeviceJids(callCreator, [callCreator])
     }
-    const listed: WaGroupParticipant[] = [creator]
+    const listed: WaCallGroupParticipant[] = [creator]
     const users = [buildGroupUserNode(creator, isVideo ? CAPABILITY_VIDEO_OFFER : CAPABILITY_OFFER)]
     for (const participant of resolved) {
-        const entry: WaGroupParticipant = {
+        const entry: WaCallGroupParticipant = {
             jid: toUserJid(participant.jid),
             devices: normalizeParticipantDeviceJids(participant.jid, participant.devices)
         }
@@ -671,29 +584,19 @@ export async function buildGroupOfferStanza(
     }
 
     return {
-        node: {
-            tag: 'call',
-            attrs: { to: toCallServerJid(callId), id: generateCallStanzaId() },
-            content: [
-                {
-                    tag: 'offer',
-                    attrs: {
-                        'call-id': callId,
-                        'call-creator': callCreator,
-                        'group-jid': groupJid
-                    },
-                    content: [
-                        ...buildOfferMediaNodes(isVideo),
-                        { tag: 'group_info', attrs: {}, content: users }
-                    ]
-                }
-            ]
-        },
+        node: callStanza(
+            toCallServerJid(callId),
+            'offer',
+            callId,
+            callCreator,
+            { 'group-jid': groupJid },
+            [...buildOfferMediaNodes(isVideo), { tag: 'group_info', attrs: {}, content: users }]
+        ),
         participants: listed
     }
 }
 
-export interface EncRekeyStanzaParams {
+interface EncRekeyStanzaParams {
     readonly callId: string
     readonly callCreator: string
     /** The `transaction-id` of the `<group_info>` that asked for this rekey. */
@@ -704,10 +607,8 @@ export interface EncRekeyStanzaParams {
 }
 
 /**
- * Builds the `<enc_rekey>` carrying a new call key to one device: addressed to that device,
- * `transaction-id` echoing the `<group_info>` that asked, `<encopt keygen='2'/>` then a direct
- * `<enc>`. `<device-identity>` rides along on a `pkmsg`, as on the 1:1 offer (assumed: only
- * `msg` has been seen here).
+ * Builds the `<enc_rekey>` carrying a new call key to one device: `transaction-id` echoing the
+ * `<group_info>` that asked, `<encopt keygen='2'/>`, a direct `<enc>`, `<device-identity>` on a `pkmsg`.
  *
  * @throws when there is no Signal session for the device; a fan-out contains it per device.
  */
@@ -728,69 +629,23 @@ export async function buildEncRekeyStanza(
     const content: BinaryNode[] = [{ tag: 'encopt', attrs: { keygen: '2' } }, encNode]
     const creds = deps.authClient.getCurrentCredentials()
     if (shouldIncludeDeviceIdentity && creds?.signedIdentity) {
-        content.push({
-            tag: 'device-identity',
-            attrs: {},
-            content: encodeSignedDeviceIdentity(creds.signedIdentity)
-        })
+        content.push(deviceIdentityNode(creds.signedIdentity))
     }
 
-    return {
-        tag: 'call',
-        attrs: { to: params.peerDeviceJid, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'enc_rekey',
-                attrs: {
-                    'call-id': params.callId,
-                    'call-creator': params.callCreator,
-                    'transaction-id': String(params.transactionId)
-                },
-                content
-            }
-        ]
-    }
+    return callStanza(
+        params.peerDeviceJid,
+        'enc_rekey',
+        params.callId,
+        params.callCreator,
+        { 'transaction-id': String(params.transactionId) },
+        content
+    )
 }
 
 /**
- * Builds the `<call><accept>` answer to an incoming offer.
- *
- * The accept carries no `<enc>` and no `<device-identity>`. Under the offer's
- * `encopt keygen='2'` the call key travels in the offer's `<enc>`, which the
- * callee decrypts, so the accept only confirms and has no key left to ship.
- * The server runs the encrypt-and-attach path for `offer` and `enc_rekey`
- * only and silently drops an accept that carries an `<enc>` child: no ack
- * comes back, the caller never learns the call was answered and keeps ringing
- * until its 90s timeout. Nothing is missing here, do not add crypto back.
- *
- * A 1:1 accept carries no `<encopt>` either. A live call acked an accept whose
- * only children were `<audio>` and `<net>`, while the literal `encopt` is
- * absent from the WhatsApp Web bundle, which assembles this stanza inside its
- * WASM, so an accept-side `<encopt>` was never confirmed. Dropping it matches
- * that acked format. There is no evidence that an `<encopt>` child makes the
- * server discard the stanza, only that the server acks without it.
- *
- * `<audio>` and `<net>` are part of the real accept and stay.
- *
- * `peerJid` is addressed verbatim so a companion caller keeps its `:device`
- * suffix, matching the target `preaccept`, `transport` and `mute_v2` use.
- *
- * A group accept (`isGroupCall`) goes to `<call-id>@call` and carries
- * `<encopt keygen='2'/>`: addressed to the creator instead, the server never
- * marks this side connected and the rekey never reaches it. `<net medium>`
- * stays `3` on both.
- *
- * The video reply advertises H.264 because current mobile clients uplink
- * H.264: answering VP8 keeps signalling alive but yields no video RTP.
- *
- * The video node carries `dec` beside `enc`, each with the asymmetric spelling the peer
- * uses: `enc='h.264'`, `dec='H264'`. `dec` is how a peer picks what to encode for us and
- * this side is almost always the callee, so an accept without it leaves most calls
- * advertising no decoder. Our preaccept still carries no `<video>` node at all, for want
- * of a capture to copy.
- *
- * There is no call-key parameter: the decrypted offer key is not serialized
- * into this stanza, since it already reached both sides through the offer.
+ * Builds the `<call><accept>`: no `<enc>` or `<device-identity>` (the server drops an accept
+ * carrying `<enc>`), `<encopt>` only on a group accept, which goes to `<call-id>@call`; a 1:1
+ * accept goes to the caller device verbatim. Video answers `enc='h.264' dec='H264'`.
  */
 export async function buildAcceptStanza(
     deps: WaVoipDeps,
@@ -813,22 +668,15 @@ export async function buildAcceptStanza(
     if (isGroupCall) {
         acceptContent.push({ tag: 'encopt', attrs: { keygen: '2' } })
     }
-    if (ANNOUNCE_MLOW_RED) {
-        const capability = isVideo ? CAPABILITY_VIDEO_OFFER : CAPABILITY_PREACCEPT
-        acceptContent.push({ tag: 'capability', attrs: { ver: '1' }, content: capability })
-    }
 
-    return {
-        tag: 'call',
-        attrs: { to: isGroupCall ? toCallServerJid(callId) : peerJid, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'accept',
-                attrs: { 'call-id': callId, 'call-creator': callCreator },
-                content: acceptContent
-            }
-        ]
-    }
+    return callStanza(
+        callTarget(peerJid, callId, isGroupCall),
+        'accept',
+        callId,
+        callCreator,
+        undefined,
+        acceptContent
+    )
 }
 
 export function buildTerminateStanza(
@@ -838,10 +686,7 @@ export function buildTerminateStanza(
     audioDurationMs?: number,
     reason?: string
 ): BinaryNode {
-    const attrs: Record<string, string> = {
-        'call-id': callId,
-        'call-creator': callCreator
-    }
+    const attrs: Record<string, string> = {}
     if (audioDurationMs !== undefined && audioDurationMs >= 0) {
         const ms = String(Math.floor(audioDurationMs))
         attrs.duration = ms
@@ -851,27 +696,12 @@ export function buildTerminateStanza(
         attrs.reason = reason
     }
 
-    return {
-        tag: 'call',
-        attrs: { to: peerJid, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'terminate',
-                attrs,
-                content: undefined
-            }
-        ]
-    }
+    return callStanza(peerJid, 'terminate', callId, callCreator, attrs)
 }
 
 /**
- * The reject goes to the device that sent the offer, as the accept and the
- * terminate do. Addressed to the bare user instead, the server acknowledges it
- * and never delivers it to a companion caller, which keeps ringing; a phone,
- * device 0, is the same jid either way.
- *
- * A group reject (`isGroupCall`) goes to `<call-id>@call` with `count='0'`: sent to
- * the creator instead, the others keep listing this side as ringing.
+ * The reject goes to the device that sent the offer (a bare user never reaches a companion), or
+ * to `<call-id>@call` with `count='0'` on a group call, so the others stop listing us as ringing.
  */
 export function buildRejectStanza(
     peerJid: string,
@@ -879,14 +709,13 @@ export function buildRejectStanza(
     callCreator: string,
     isGroupCall = false
 ): BinaryNode {
-    const attrs: Record<string, string> = { 'call-id': callId, 'call-creator': callCreator }
-    if (isGroupCall) attrs.count = '0'
-
-    return {
-        tag: 'call',
-        attrs: { to: isGroupCall ? toCallServerJid(callId) : peerJid, id: generateCallStanzaId() },
-        content: [{ tag: 'reject', attrs }]
-    }
+    return callStanza(
+        callTarget(peerJid, callId, isGroupCall),
+        'reject',
+        callId,
+        callCreator,
+        isGroupCall ? { count: '0' } : undefined
+    )
 }
 
 /** A group preaccept (`isGroupCall`) carries the same children, addressed to `<call-id>@call`. */
@@ -896,21 +725,18 @@ export function buildPreacceptStanza(
     callCreator: string,
     isGroupCall = false
 ): BinaryNode {
-    return {
-        tag: 'call',
-        attrs: { to: isGroupCall ? toCallServerJid(callId) : peerJid, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'preaccept',
-                attrs: { 'call-id': callId, 'call-creator': callCreator },
-                content: [
-                    { tag: 'audio', attrs: { enc: 'opus', rate: '16000' } },
-                    { tag: 'encopt', attrs: { keygen: '2' } },
-                    { tag: 'capability', attrs: { ver: '1' }, content: CAPABILITY_PREACCEPT }
-                ]
-            }
+    return callStanza(
+        callTarget(peerJid, callId, isGroupCall),
+        'preaccept',
+        callId,
+        callCreator,
+        undefined,
+        [
+            { tag: 'audio', attrs: { enc: 'opus', rate: '16000' } },
+            { tag: 'encopt', attrs: { keygen: '2' } },
+            { tag: 'capability', attrs: { ver: '1' }, content: CAPABILITY_PREACCEPT }
         ]
-    }
+    )
 }
 
 export function buildRelayLatencyStanza(
@@ -922,8 +748,7 @@ export function buildRelayLatencyStanza(
         latency: number
         addressBytes?: Uint8Array
     }>,
-    destinationJids: string[],
-    meId: string
+    destinationJids: string[]
 ): BinaryNode {
     const seenRelays = new Set<string>()
     const teNodes: BinaryNode[] = []
@@ -941,65 +766,32 @@ export function buildRelayLatencyStanza(
         })
     }
 
-    const destinationContent: BinaryNode[] = destinationJids.map((jid) => ({
-        tag: 'to',
-        attrs: { jid },
-        content: undefined
-    }))
-
-    const relayLatencyContent: BinaryNode[] = [...teNodes]
-    if (destinationContent.length > 0) {
-        relayLatencyContent.push({
+    if (destinationJids.length > 0) {
+        teNodes.push({
             tag: 'destination',
             attrs: {},
-            content: destinationContent
+            content: destinationJids.map((jid) => ({ tag: 'to', attrs: { jid } }))
         })
     }
 
-    const toJidClean = toUserJid(peerJid)
-    return {
-        tag: 'call',
-        attrs: { to: toJidClean, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'relaylatency',
-                attrs: { 'call-id': callId, 'call-creator': callCreator },
-                content: relayLatencyContent
-            }
-        ]
-    }
+    return callStanza(toUserJid(peerJid), 'relaylatency', callId, callCreator, undefined, teNodes)
 }
 
 export function buildTransportStanza(
     peerJid: string,
     callId: string,
     callCreator: string,
-    meId: string,
     messageType = '0',
     p2pCandRound = '0'
 ): BinaryNode {
-    return {
-        tag: 'call',
-        attrs: { to: peerJid, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'transport',
-                attrs: {
-                    'call-id': callId,
-                    'call-creator': callCreator,
-                    'transport-message-type': messageType,
-                    'p2p-cand-round': p2pCandRound
-                },
-                content: [
-                    {
-                        tag: 'net',
-                        attrs: { medium: '2', protocol: '0' },
-                        content: undefined
-                    }
-                ]
-            }
-        ]
-    }
+    return callStanza(
+        peerJid,
+        'transport',
+        callId,
+        callCreator,
+        { 'transport-message-type': messageType, 'p2p-cand-round': p2pCandRound },
+        [{ tag: 'net', attrs: { medium: '2', protocol: '0' } }]
+    )
 }
 
 /**
@@ -1013,20 +805,9 @@ export function buildMuteV2Stanza(
     callCreator: string,
     muted: boolean
 ): BinaryNode {
-    return {
-        tag: 'call',
-        attrs: { to: peerDeviceJid, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'mute_v2',
-                attrs: {
-                    'call-id': callId,
-                    'call-creator': callCreator,
-                    'mute-state': muted ? '1' : '0'
-                }
-            }
-        ]
-    }
+    return callStanza(peerDeviceJid, 'mute_v2', callId, callCreator, {
+        'mute-state': muted ? '1' : '0'
+    })
 }
 
 /**
@@ -1034,18 +815,14 @@ export function buildMuteV2Stanza(
  * every 10 s, whether it answered, placed or joined the call.
  */
 export function buildHeartbeatStanza(callId: string, callCreator: string): BinaryNode {
-    return {
-        tag: 'call',
-        attrs: { to: toCallServerJid(callId), id: generateCallStanzaId() },
-        content: [{ tag: 'heartbeat', attrs: { 'call-id': callId, 'call-creator': callCreator } }]
-    }
+    return callStanza(toCallServerJid(callId), 'heartbeat', callId, callCreator)
 }
 
 /** The `state` a `<peer_state>` reports for a peer; only `Invisible` has been seen on the wire. */
 export const WA_PEER_STATE = Object.freeze({ Invisible: 'invisible', Visible: 'visible' } as const)
 
 /** One of the values of {@link WA_PEER_STATE}. */
-export type WaPeerState = (typeof WA_PEER_STATE)[keyof typeof WA_PEER_STATE]
+type WaPeerState = (typeof WA_PEER_STATE)[keyof typeof WA_PEER_STATE]
 
 /**
  * Builds the `<call><peer_state>` telling the server what this side sees of one group-call member,
@@ -1059,21 +836,14 @@ export function buildPeerStateStanza(
     state: WaPeerState,
     nowMs: number = Date.now()
 ): BinaryNode {
-    return {
-        tag: 'call',
-        attrs: { to: toCallServerJid(callId), id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'peer_state',
-                attrs: {
-                    'call-id': callId,
-                    'call-creator': callCreator,
-                    t: String(Math.floor(nowMs))
-                },
-                content: [{ tag: 'user', attrs: { state, jid: toUserJid(peerAccountJid) } }]
-            }
-        ]
-    }
+    return callStanza(
+        toCallServerJid(callId),
+        'peer_state',
+        callId,
+        callCreator,
+        { t: String(Math.floor(nowMs)) },
+        [{ tag: 'user', attrs: { state, jid: toUserJid(peerAccountJid) } }]
+    )
 }
 
 /** `request-state` of a `<mute_v2>` asking its target to mute; the only value seen on the wire. */
@@ -1090,23 +860,12 @@ export function buildMuteRequestStanza(
     callCreator: string,
     requestState: string = WA_MUTE_REQUEST_STATE.Mute
 ): BinaryNode {
-    return {
-        tag: 'call',
-        attrs: { to: targetDeviceJid, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'mute_v2',
-                attrs: {
-                    'call-id': callId,
-                    'call-creator': callCreator,
-                    'request-state': requestState
-                }
-            }
-        ]
-    }
+    return callStanza(targetDeviceJid, 'mute_v2', callId, callCreator, {
+        'request-state': requestState
+    })
 }
 
-export interface MuteV2Payload {
+interface MuteV2Payload {
     /**
      * Microphone state the sender announced through `mute-state`. `null` when absent or
      * unrecognized, so an unknown state is never guessed into a boolean.
@@ -1133,28 +892,15 @@ export function parseMuteV2(inner: BinaryNode): MuteV2Payload {
     return { muted, isRequest: requestState !== null, requestState }
 }
 
-/**
- * Wire name of the raise-hand action, in three places at once: the envelope's `action`
- * attribute, the tag of the state element inside it, and the tag of the stanza that
- * carries the same state on its own. The integer action code never reaches the wire.
- */
+/** `action` of the `<user_action>`, tag of its state child, and tag of the standalone stanza. */
 const RAISE_HAND_ACTION = 'raise_hand'
 
-/**
- * Attribute carrying the state in both wire shapes, always hyphenated. The underscore
- * spelling `raise_hand_state` names log lines and events only, never an attribute.
- */
+/** The state attribute in both shapes, always hyphenated. */
 const RAISE_HAND_STATE_ATTR = 'raise-hand-state'
 
 /**
- * Builds the `<call><user_action>` that announces the local raise-hand state: durable
- * per-participant state, which is why it travels over signalling rather than the media
- * path the reactions take.
- *
- * Every part is measured - the envelope rather than the bare stanza, `action` as the
- * string `raise_hand`, the hyphen in `raise-hand-state`, and `'0'` spelled out on
- * lowering rather than the attribute going away. `broadcast` is off by default: captures
- * of a live 1:1 raise hand carry it nowhere and the predicate that sets it is unknown.
+ * Builds the `<call><user_action>` announcing the local raise-hand state; lowering writes `'0'`
+ * rather than dropping the attribute. `broadcast` is off unless asked for.
  */
 export function buildRaiseHandStanza(
     peerDeviceJid: string,
@@ -1163,42 +909,19 @@ export function buildRaiseHandStanza(
     raised: boolean,
     broadcast = false
 ): BinaryNode {
-    const attrs: Record<string, string> = {
-        'call-id': callId,
-        'call-creator': callCreator,
-        action: RAISE_HAND_ACTION
-    }
+    const attrs: Record<string, string> = { action: RAISE_HAND_ACTION }
     if (broadcast) {
         attrs.broadcast = '1'
     }
 
-    return {
-        tag: 'call',
-        attrs: { to: peerDeviceJid, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'user_action',
-                attrs,
-                content: [
-                    {
-                        tag: RAISE_HAND_ACTION,
-                        attrs: { [RAISE_HAND_STATE_ATTR]: raised ? '1' : '0' }
-                    }
-                ]
-            }
-        ]
-    }
+    return callStanza(peerDeviceJid, 'user_action', callId, callCreator, attrs, [
+        { tag: RAISE_HAND_ACTION, attrs: { [RAISE_HAND_STATE_ATTR]: raised ? '1' : '0' } }
+    ])
 }
 
 /**
- * Reads the raise-hand state an incoming stanza carries, or `null` when there is none.
- *
- * Both wire shapes are accepted, because the sender chooses between them with a gate this
- * side cannot see and both are live traffic: the `<user_action>` envelope, and a
- * top-level `<raise_hand>` that is a message type of its own, acked under its own tag.
- *
- * A `<user_action>` naming another action has no `<raise_hand>` child and so reads as
- * absent; anything other than `0` and `1` counts as absent too, never as a guess.
+ * Reads the raise-hand state of a `<user_action>` envelope or a standalone `<raise_hand>`;
+ * `null` when absent or anything other than `0`/`1`.
  */
 export function parseRaiseHandState(node: BinaryNode): boolean | null {
     const stateNode = node.tag === RAISE_HAND_ACTION ? node : findNodeChild(node, RAISE_HAND_ACTION)
@@ -1242,8 +965,6 @@ export function buildEncRekeyReceiptStanza(
     })
 }
 
-export const ENCRYPTED_TAGS = ['preaccept', 'accept'] as const
-
 export function needsDecryption(tag: string): boolean {
-    return ENCRYPTED_TAGS.includes(tag as any)
+    return tag === 'preaccept' || tag === 'accept'
 }
