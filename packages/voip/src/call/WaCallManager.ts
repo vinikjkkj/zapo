@@ -38,6 +38,7 @@ import {
     CallState,
     type CallVideoSubscription,
     EndCallReason,
+    type GroupCallOfferOptions,
     type RelayData,
     type WaVoipDeps,
     type WaVoipStores
@@ -247,7 +248,10 @@ export class WaCallManager extends EventEmitter {
      * Places a group call: one offer to the call itself naming every participant. It carries
      * no key: the call is keyed later over `enc_rekey`.
      */
-    private async startGroupCall(groupJid: string, options: CallOfferOptions): Promise<string> {
+    private async startGroupCall(
+        groupJid: string,
+        options: GroupCallOfferOptions
+    ): Promise<string> {
         const participants = options.participants ?? []
         if (participants.length === 0) {
             throw new Error(`a group call on ${groupJid} needs the participants to ring`)
@@ -282,6 +286,7 @@ export class WaCallManager extends EventEmitter {
 
         const session = this.createSession(info)
         session.seedOutgoingGroupComposition(offer.participants)
+        this.applyPendingCallKey(session)
         this.announcedCalls.add(info)
 
         try {
@@ -422,8 +427,10 @@ export class WaCallManager extends EventEmitter {
         session.seedGroupJoin({
             participants: joinable.participants ?? [],
             transactionId: joinable.rosterTransactionId,
+            relayData: joinable.relayData,
             voipSettings: joinable.voipSettings
         })
+        this.applyPendingCallKey(session)
 
         try {
             const creds = this.deps.authClient.getCurrentCredentials()
@@ -593,6 +600,7 @@ export class WaCallManager extends EventEmitter {
         this.joinableCalls.delete(callId)
         session.applyVoipSettings(voipSettings)
         session.seedGroupComposition(nodeInfo.innerNode)
+        this.applyPendingCallKey(session)
 
         if (!atCapacity) {
             try {
@@ -1160,18 +1168,25 @@ export class WaCallManager extends EventEmitter {
         })
 
         this.calls.set(info.callId, session)
-
-        const pending = this.pendingCallKeys.get(info.callId)
-        if (pending) {
-            this.pendingCallKeys.delete(info.callId)
-            session.applyCallKey(pending.callKey, pending.transactionId).catch((err: unknown) => {
-                this.logger.warn('call key held for this call failed to apply', {
-                    callId: info.callId,
-                    message: toError(err).message
-                })
-            })
-        }
         return session
+    }
+
+    /**
+     * Applies a call key an `<enc_rekey>` delivered ahead of the call. Run once the composition
+     * is seeded: a roster-only offer is a group call only from then on, and before it the key
+     * would be refused and lost.
+     */
+    private applyPendingCallKey(session: WaCallMediaSession): void {
+        const callId = session.callId
+        const pending = this.pendingCallKeys.get(callId)
+        if (!pending) return
+        this.pendingCallKeys.delete(callId)
+        session.applyCallKey(pending.callKey, pending.transactionId).catch((err: unknown) => {
+            this.logger.warn('call key held for this call failed to apply', {
+                callId,
+                message: toError(err).message
+            })
+        })
     }
 
     /**

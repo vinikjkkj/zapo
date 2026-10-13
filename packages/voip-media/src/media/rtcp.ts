@@ -1,4 +1,4 @@
-import { readUInt32BE, TEXT_ENCODER, writeUInt16BE, writeUInt32BE } from '../bytes.js'
+import { readUInt16BE, readUInt32BE, TEXT_ENCODER, writeUInt16BE, writeUInt32BE } from '../bytes.js'
 import { randomBytes } from '../crypto/random.js'
 
 const NTP_UNIX_OFFSET = 2208988800
@@ -193,6 +193,8 @@ interface MutableReception {
 export function senderReportSourceSsrc(rtcp: Uint8Array): number | null {
     if (rtcp.length < SR_REPORT_BLOCK_OFFSET) return null
     if ((rtcp[0] & 0xc0) !== 0x80 || rtcp[1] !== PT_SENDER_REPORT) return null
+    const declared = (readUInt16BE(rtcp, 2) + 1) * 4
+    if (declared < SR_REPORT_BLOCK_OFFSET || declared > rtcp.length) return null
     return readUInt32BE(rtcp, 4)
 }
 

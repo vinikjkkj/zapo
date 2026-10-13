@@ -8,6 +8,7 @@ import { routeCallStanza } from '../../signaling/bridge.js'
 import { encodeWAMessage } from '../../signaling/signaling.js'
 import {
     CallMediaType,
+    type CallOfferOptions,
     CallState,
     EndCallReason,
     type WaVoipDeps,
@@ -436,7 +437,7 @@ test('startCall with a group jid places one offer to the call and seeds who it r
 test('startCall needs a peer, or a group with participants', async () => {
     const manager = createManager(createMock())
 
-    await assert.rejects(() => manager.startCall({}), /peerJid/)
+    await assert.rejects(() => manager.startCall({} as CallOfferOptions), /peerJid/)
     await assert.rejects(
         () => manager.startCall({ groupJid: GROUP_JID, participants: [] }),
         /participants/
@@ -1202,4 +1203,20 @@ test('the server acks of heartbeats and peer reports reach their call and change
 
     assert.equal(call.stateData.state, CallState.Active)
     assert.equal(mock.sent.length, before)
+})
+
+test('a call key ahead of a roster-only group offer keys the call once the offer lands', async () => {
+    const mock = createMock()
+    const manager = createManager(mock)
+    mock.setDecrypted(CALL_KEY)
+
+    await manager.handleCallEncRekey(encRekey('D2'), OTHER_DEVICE)
+    mock.setDecrypted(null)
+    await manager.handleCallOffer(inviteIntoOneToOneOffer('D2'), COMPANION_CREATOR)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    const call = manager.getCall('D2')
+    assert.equal(call?.groupJid, undefined)
+    assert.equal(call?.isGroupCall, true)
+    assert.deepEqual(call?.encryptionKey, CALL_KEY)
 })

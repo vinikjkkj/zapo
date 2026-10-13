@@ -290,10 +290,15 @@ export function normalizeParticipantDeviceJids(
     }
 
     const userIsLid = isLidServer(userServer)
+    const userIdentity = `${user.user}@${canonicalizeSignalServer(userServer)}`
     const resolved = deviceJids.map((jid) => {
         const addressed = addressDeviceJid(jid)
         if (isLidServer(addressed.server) !== userIsLid) {
             throw new Error(`participant ${userJid} mixes LID and non-LID device jids`)
+        }
+        const deviceUser = parseSignalAddressFromJid(jid).user
+        if (`${deviceUser}@${canonicalizeSignalServer(addressed.server)}` !== userIdentity) {
+            throw new Error(`device ${jid} is not a device of participant ${userJid}`)
         }
         return addressed
     })

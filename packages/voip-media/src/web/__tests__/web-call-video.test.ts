@@ -766,6 +766,16 @@ test('a group call raises the decoders held at once with maxStreams', (t) => {
     )
 })
 
+test('a maxStreams that is not a number keeps the default of four', (t) => {
+    const { receiver } = startReceiver(t, Number.NaN)
+    for (const ssrc of [1, 2, 3, 4, 5]) receiver.push(inbound(ssrc, 0, true))
+
+    assert.deepEqual(
+        FakeVideoDecoder.all.map((decoder) => decoder.state),
+        ['closed', 'configured', 'configured', 'configured', 'configured']
+    )
+})
+
 test('a key frame with another profile reconfigures the stream', (t) => {
     const { receiver } = startReceiver(t)
     receiver.push(inbound(7, 0, true))

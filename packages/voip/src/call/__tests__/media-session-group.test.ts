@@ -1920,3 +1920,35 @@ test('somebody arriving gets our mute state again, and our hand only while it is
     )
     assert.deepEqual(sentWithTag(harness, 'video'), [], 'video is not replayed')
 })
+
+test('a connected member listed with no device is never reported invisible', async () => {
+    const harness = await activeGroupSession({
+        composition: [...THREE_WAY, { jid: FOURTH, devices: [], state: CONNECTED }]
+    })
+    await harness.session.applyCallKey(CALL_KEY, 1)
+    const peerSender = [...harness.call.groupSenders].find(([, jid]) => jid === PEER_DEVICE)?.[0]
+    harness.session.handleSenderMedia(peerSender as string, true)
+    harness.session.handleSenderMedia(
+        [...harness.call.groupSenders].find(([, jid]) => jid === THIRD_KEY)?.[0] as string,
+        true
+    )
+    ;(harness.session as unknown as { sweepInvisibleSenders(): void }).sweepInvisibleSenders()
+
+    assert.deepEqual(sentWithTag(harness, 'peer_state'), [])
+})
+
+test('a mute request for a device not on the roster is refused, an account names its first', async () => {
+    const harness = await activeGroupSession()
+
+    await harness.session.requestParticipantMute(PEER)
+    await harness.session.requestParticipantMute(PEER_SECOND_DEVICE)
+    await assert.rejects(
+        () => harness.session.requestParticipantMute('50062877036657:99@lid'),
+        /not on call/
+    )
+
+    assert.deepEqual(
+        sentWithTag(harness, 'mute_v2').map((node) => node.attrs.to),
+        [PEER_DEVICE, PEER_SECOND_DEVICE]
+    )
+})

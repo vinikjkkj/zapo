@@ -78,6 +78,8 @@ export type {
     CallOfferParticipant,
     CallManagerEvents,
     CallVideoSubscription,
+    GroupCallOfferOptions,
+    OneToOneCallOfferOptions,
     InboundVideoFrame,
     InboundVideoRtpPacket,
     PeerVideoStateChange

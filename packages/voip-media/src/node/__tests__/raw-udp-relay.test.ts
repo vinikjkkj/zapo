@@ -380,7 +380,10 @@ function rawRelayConfig(advertisedPort: number, name: string) {
     }
 }
 
-/** Media after a re-issue reaches the newest relay alone; the older relay keeps being probed. */
+/**
+ * Media after a re-issue reaches the newest relay alone; the older relay keeps being probed. The
+ * older relay answers our media so its leg's return path holds however slow the run.
+ */
 test('media after a re-issue reaches the newest relay alone', async () => {
     const older = await startFakeRelay()
     const newest = await startFakeRelay()
@@ -395,6 +398,7 @@ test('media after a re-issue reaches the newest relay alone', async () => {
             await waitFor(() => mediaCount(older) === 1, 3_000),
             'no media before the re-issue'
         )
+        older.reply(PEER_MEDIA)
 
         await relay.configureRelays([rawRelayConfig(newest.port, 'newest')], { generation: 1 })
         assert.ok(

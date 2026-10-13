@@ -104,7 +104,13 @@ class AudioReceiveSender {
         this.onDecoded = onSenderAudio
             ? (pcm) => {
                   this.playout.write(pcm)
-                  onSenderAudio(this.id, pcm)
+                  try {
+                      onSenderAudio(this.id, pcm)
+                  } catch (err: unknown) {
+                      playoutLogger.warn('sender audio handler failed', {
+                          message: toError(err).message
+                      })
+                  }
               }
             : (pcm) => this.playout.write(pcm)
     }

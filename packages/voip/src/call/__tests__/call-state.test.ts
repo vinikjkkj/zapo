@@ -228,10 +228,17 @@ test('a joinable terminate is ignored while our accept is in flight, reason or n
 test('the outgoing side of connecting is not an accept in flight', () => {
     const call = CallInfo.newOutgoing(ID, 'peer@lid', 'me@lid', CallMediaType.Audio)
     call.joinable = true
+    call.groupJid = '120363000000000000@g.us'
     call.applyTransition({ type: 'offer_sent' })
     call.applyTransition({ type: 'remote_accepted' })
 
+    assert.equal(call.isGroupCall, true)
     assert.equal(decideJoinableTerminate(call, 'accepted_elsewhere'), WA_TERMINATE_DECISION.End)
+    // The incoming side in the same state keeps the call: its accept is in flight.
+    assert.equal(
+        decideJoinableTerminate(acceptSent(), 'accepted_elsewhere'),
+        WA_TERMINATE_DECISION.Ignore
+    )
 })
 
 test('the server ending an established joinable call ends it, held or not', () => {

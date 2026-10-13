@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { createNoopLogger, type Logger } from '../../logger.js'
 import {
     type AudioReceiveSenderSpec,
     AudioReceiveSet,
@@ -353,5 +354,35 @@ test('PT 122 packets are counted against their sender with what the decoder made
             [0, 0, 0]
         ]
     )
+    set.clear()
+})
+
+test('a sender audio handler that throws is logged and the packet still plays', () => {
+    const warnings: string[] = []
+    const logger: Logger = {
+        ...createNoopLogger(),
+        warn: (message: string) => {
+            warnings.push(message)
+        },
+        child: () => logger
+    }
+    const handled: Handled = { seqs: [], streams: [], destroyed: 0, reset: 0 }
+    const set = new AudioReceiveSet({
+        clockRate: CLOCK,
+        videoClockRate: VIDEO_CLOCK,
+        playoutCapacity: FRAME * 8,
+        maxSenders: 32,
+        logger,
+        onSenderAudio: () => {
+            throw new Error('listener broke')
+        },
+        createDecoder: () => recordingDecoder(handled, 0.25)
+    })
+    set.sync([SENDER_A])
+
+    assert.equal(set.receive(FIRST, 1, FRAME, PAYLOAD, 0, 1), 'decoded')
+    const out = new Float32Array(FRAME)
+    assert.equal(set.pullPlayout(out), FRAME)
+    assert.deepEqual(warnings, ['sender audio handler failed'])
     set.clear()
 })

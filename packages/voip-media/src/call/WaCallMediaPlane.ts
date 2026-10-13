@@ -922,7 +922,7 @@ export class WaCallMediaPlane {
             this.groupAudio.clear()
             this.groupAudio = null
             this.stopSenderSilenceCheck()
-            this.maxVideoStreams = MAX_H264_DEPACKETIZERS
+            this.setMaxVideoStreams(MAX_H264_DEPACKETIZERS)
             this.refreshPeerAppData()
             this.applyVideoSubscriptions(null)
             this.logger.debug('group senders cleared')
@@ -948,9 +948,8 @@ export class WaCallMediaPlane {
         this.groupSenders = senders
         for (const senderId of this.groupAudio.sync(senders)) this.emitSenderMedia(senderId, false)
         this.installGroupRecvKeys()
-        this.maxVideoStreams = Math.max(
-            MAX_H264_DEPACKETIZERS,
-            senders.length * VIDEO_STREAMS_PER_SENDER
+        this.setMaxVideoStreams(
+            Math.max(MAX_H264_DEPACKETIZERS, senders.length * VIDEO_STREAMS_PER_SENDER)
         )
         this.refreshPeerAppData()
         this.applyVideoSubscriptions(group)
@@ -997,6 +996,16 @@ export class WaCallMediaPlane {
         if (bound < srtp.maxRecvContexts) {
             srtp.setMaxRecvContexts(bound)
             srtcp.setMaxRecvContexts(bound)
+        }
+    }
+
+    /** Bounds the video streams reassembled at once; a lower bound drops the oldest past it. */
+    private setMaxVideoStreams(max: number): void {
+        this.maxVideoStreams = max
+        for (const [ssrc, stream] of this.inboundVideoStreams) {
+            if (this.inboundVideoStreams.size <= max) break
+            stream.depacketizer.reset()
+            this.inboundVideoStreams.delete(ssrc)
         }
     }
 

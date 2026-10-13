@@ -464,3 +464,14 @@ test('the participants keep the pid of each device that carried one, 0 included'
     assert.deepEqual(participants[0].devicePids, { '50062877036657:0@lid': 0 })
     assert.equal('devicePids' in participants[1], false)
 })
+
+test('normalizeParticipantDeviceJids refuses a device of another account of the same kind', () => {
+    assert.throws(
+        () => normalizeParticipantDeviceJids(USER, ['50062877036657:1@lid', '999999:2@lid']),
+        /999999:2@lid is not a device of participant/
+    )
+    // The hosted spelling of the same account is the same account.
+    assert.deepEqual(normalizeParticipantDeviceJids(USER, ['50062877036657:4@hosted.lid']), [
+        '50062877036657:4@hosted.lid'
+    ])
+})

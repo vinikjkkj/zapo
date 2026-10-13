@@ -201,7 +201,7 @@ client.on('voip_call_ended', async (call) => {
 
 ### In-call features
 
-Mute, raise hand, reactions, video and screen share work on a group call, and every participant event names the device it came from in `participantJid`. Our own announcements go to the call itself, and the per-device state lives on `call.participantMedia`; the 1:1 fields (`stateData.peerAudioMuted`, `peerVideoState`, `peerScreenShare`) stay `undefined` on a group call.
+Mute, raise hand, reactions, video and screen share work on a group call, and every participant event names the device it came from in `participantJid` when the sender can be attributed. Our own announcements go to the call itself, and the per-device state lives on `call.participantMedia`; the 1:1 fields (`stateData.peerAudioMuted`, `peerVideoState`, `peerScreenShare`) stay `undefined` on a group call.
 
 ```ts
 client.on('voip_call_peer_mute', ({ participantJid, muted }) => {
@@ -356,14 +356,14 @@ You can also use `client.voip.on('call_state', ...)` etc. for the manager-level 
 
 ## Screen share
 
-When the peer starts or stops sharing its screen, the state is parsed onto `call.peerScreenShare` and emitted:
+When a participant starts or stops sharing its screen, the state is emitted with the sharing device in `participantJid`, and kept on `call.peerScreenShare` on a 1:1 call or on that device's `call.participantMedia` entry on a group call:
 
 ```ts
 import { WA_SCREEN_SHARE_STATE } from '@zapo-js/voip'
 
-client.on('voip_call_screen_share', ({ call, share }) => {
+client.on('voip_call_screen_share', ({ participantJid, share }) => {
     if (share.state === WA_SCREEN_SHARE_STATE.Started) {
-        console.log('peer is sharing', share.screenWidth, share.screenHeight)
+        console.log(participantJid, 'is sharing', share.screenWidth, share.screenHeight)
     }
 })
 ```

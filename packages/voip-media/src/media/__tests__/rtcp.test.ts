@@ -1249,3 +1249,15 @@ test('a REMB lists every source a group estimate covers, and one source stays th
         'a list of one is the single-source packet'
     )
 })
+
+/** The compound may hold enough bytes while the sender report itself declares too few. */
+test('a sender report whose own length is short or overruns the compound names no source', () => {
+    const short = new Uint8Array(40)
+    short.set([0x80, 200, 0x00, 0x01, 0xde, 0xad, 0xbe, 0xef])
+    short.set([0x81, 202, 0x00, 0x07], 8)
+    const overrun = buildSenderReportWithSdes(0xdeadbeef, 10, 100, 960).slice(0, 40)
+    overrun[3] = 0x20
+
+    assert.equal(senderReportSourceSsrc(short), null)
+    assert.equal(senderReportSourceSsrc(overrun), null)
+})

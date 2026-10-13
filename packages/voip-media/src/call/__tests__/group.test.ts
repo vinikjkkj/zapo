@@ -1148,8 +1148,14 @@ test('the plan sizes the video streams reassembled at once', async (t) => {
 
     assert.equal(internals.maxVideoStreams, 24)
     assert.equal(internals.inboundVideoStreams.size, 12, 'more than the 1:1 bound of 8')
+    const oldest = [...internals.inboundVideoStreams.keys()].slice(0, 4)
     await plane.apply({ group: null })
     assert.equal(internals.maxVideoStreams, 8)
+    assert.equal(internals.inboundVideoStreams.size, 8, 'the streams past the lower bound go')
+    assert.ok(
+        oldest.every((ssrc) => !internals.inboundVideoStreams.has(ssrc)),
+        'oldest first'
+    )
 })
 
 test('a sender is heard on its first authenticated packet and silent after the silence', async (t) => {

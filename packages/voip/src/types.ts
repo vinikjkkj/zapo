@@ -241,17 +241,8 @@ export interface CallOfferParticipant {
     readonly devices?: readonly string[]
 }
 
-/** Options for placing an outgoing call via `client.voip.startCall`. */
-export interface CallOfferOptions {
-    /** Bare or device JID to call. Required for a 1:1 call, not read on a group one. */
-    peerJid?: string
-    /**
-     * The group (`...@g.us`) this call belongs to. Setting it places a group call, addressed
-     * to the call itself and ringing {@link participants}.
-     */
-    groupJid?: string
-    /** Who to ring on a group call, ourselves excluded. Required with {@link groupJid}. */
-    participants?: readonly CallOfferParticipant[]
+/** What a 1:1 and a group call offer share. */
+interface CallOfferCommonOptions {
     /**
      * Flag the call as a video call (default `false`). When set, H.264 video
      * media flows alongside audio: send access units with
@@ -261,9 +252,30 @@ export interface CallOfferOptions {
     isVideo?: boolean
     /** Audio file to preload and play once the call connects (needs ffmpeg). */
     audioFile?: string
+}
+
+/** A 1:1 call to {@link peerJid}. */
+export interface OneToOneCallOfferOptions extends CallOfferCommonOptions {
+    /** Bare or device JID to call. */
+    peerJid: string
     /** Explicit peer device JIDs to ring; omit to resolve them automatically. */
     peerDevices?: string[]
+    groupJid?: never
+    participants?: never
 }
+
+/** A group call on {@link groupJid}, addressed to the call itself and ringing {@link participants}. */
+export interface GroupCallOfferOptions extends CallOfferCommonOptions {
+    /** The group (`...@g.us`) this call belongs to. */
+    groupJid: string
+    /** Who to ring, ourselves excluded. */
+    participants: readonly CallOfferParticipant[]
+    peerJid?: never
+    peerDevices?: never
+}
+
+/** Options for placing an outgoing call via `client.voip.startCall`: 1:1 or group, never both. */
+export type CallOfferOptions = OneToOneCallOfferOptions | GroupCallOfferOptions
 
 /** One sender's video asked of a group call's relay; see `client.voip.setVideoSubscriptions`. */
 export interface CallVideoSubscription {

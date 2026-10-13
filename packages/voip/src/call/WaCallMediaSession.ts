@@ -1590,10 +1590,15 @@ export class WaCallMediaSession {
             (entry) => groupParticipantAccountKey(entry.jid) === key
         )
         if (!participant) return null
+        // An account names its first device; a device jid names itself or nothing.
+        if (toUserJid(jid) === jid) {
+            const first = participant.devices[0]
+            return first ? this.participantKey(first) : null
+        }
         const wanted = this.participantKey(jid)
-        const device =
-            participant.devices.find((deviceJid) => this.participantKey(deviceJid) === wanted) ??
-            participant.devices[0]
+        const device = participant.devices.find(
+            (deviceJid) => this.participantKey(deviceJid) === wanted
+        )
         return device ? this.participantKey(device) : null
     }
 
@@ -2567,6 +2572,8 @@ export class WaCallMediaSession {
             if (participant.state !== WA_CALL_PARTICIPANT_STATE.Connected) continue
             const accountKey = groupParticipantAccountKey(participant.jid)
             if (accountKey === selfKey || this.invisibleReported.has(accountKey)) continue
+            // No device means no media to wait on.
+            if (participant.devices.length === 0) continue
 
             let silentMs = Infinity
             for (const deviceJid of participant.devices) {

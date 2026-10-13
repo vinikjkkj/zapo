@@ -388,7 +388,10 @@ export class WaWebCallVideoReceiver {
         this.onFrameDecoded = options.onFrame
         this.onError = options.onError
         this.hardwareAcceleration = options.hardwareAcceleration
-        this.maxStreams = Math.max(1, Math.trunc(options.maxStreams ?? DEFAULT_MAX_DECODED_STREAMS))
+        const maxStreams = options.maxStreams ?? DEFAULT_MAX_DECODED_STREAMS
+        this.maxStreams = Number.isFinite(maxStreams)
+            ? Math.max(1, Math.trunc(maxStreams))
+            : DEFAULT_MAX_DECODED_STREAMS
     }
 
     get stats(): WaWebCallVideoReceiverStats {
