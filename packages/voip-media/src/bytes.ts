@@ -20,6 +20,11 @@ export function bytesToHex(value: Uint8Array): string {
     return out
 }
 
+/** An SSRC as logged. */
+export function hexSsrc(ssrc: number): string {
+    return `0x${ssrc.toString(16)}`
+}
+
 export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
     let total = 0
     for (let i = 0; i < parts.length; i += 1) {

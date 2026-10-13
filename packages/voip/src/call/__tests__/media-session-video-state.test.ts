@@ -35,9 +35,8 @@ interface SubscriptionUpdate {
 }
 
 interface SessionInternals {
-    selfDeviceJid: string
-    peerStreamSsrcs: number[]
-    videoSendPathOpened: boolean
+    streams: { selfDeviceJid: string; peerStreamSsrcs: number[] }
+    video: { videoSendPathOpened: boolean }
 }
 
 interface Harness {
@@ -113,8 +112,8 @@ function createSession(mediaType: CallMediaType = CallMediaType.Audio): Harness 
     })
 
     const internals = session as unknown as SessionInternals
-    internals.selfDeviceJid = SELF_DEVICE_JID
-    internals.peerStreamSsrcs = [PEER_AUDIO_MAIN_SSRC]
+    internals.streams.selfDeviceJid = SELF_DEVICE_JID
+    internals.streams.peerStreamSsrcs = [PEER_AUDIO_MAIN_SSRC]
 
     const union = (base: readonly number[], extra: readonly number[]): number[] => [
         ...base,
@@ -388,7 +387,7 @@ test('an upgrade request goes out as UpgradeRequestV2 and opens no sender yet', 
         voip_settings: 'video'
     })
     assert.equal(
-        harness.internals.videoSendPathOpened,
+        harness.internals.video.videoSendPathOpened,
         false,
         'nothing this side sends can reach the wire before the peer accepts'
     )
@@ -407,7 +406,7 @@ test('the peer accept concludes the handshake and opens the local sender', async
     peerState(harness, WA_VIDEO_STATE.UpgradeAccept)
 
     assert.equal(await pending, WA_VIDEO_UPGRADE_RESULT.Accepted)
-    assert.equal(harness.internals.videoSendPathOpened, true)
+    assert.equal(harness.internals.video.videoSendPathOpened, true)
     assert.equal(
         harness.registeredSelfStreams().length,
         audioSsrcCount + 3,
@@ -452,7 +451,7 @@ test('a refusal, an unanswered ring and a failure settle apart from each other',
 
         assert.equal(await pending, expected)
         assert.equal(
-            harness.internals.videoSendPathOpened,
+            harness.internals.video.videoSendPathOpened,
             false,
             `no sender opened on ${expected}`
         )
@@ -482,7 +481,7 @@ test('a request nobody answers times out and withdraws itself', async (t) => {
         // cancels belong to a request an application withdraws on purpose.
         'the timer downgrades the call rather than cancelling the request'
     )
-    assert.equal(harness.internals.videoSendPathOpened, false)
+    assert.equal(harness.internals.video.videoSendPathOpened, false)
 
     harness.session.cleanup()
 })
@@ -493,7 +492,7 @@ test('a request that crosses one from the peer answers it instead of asking agai
 
     assert.equal(await harness.session.requestVideoUpgrade(), WA_VIDEO_UPGRADE_RESULT.Accepted)
     assert.deepEqual(sentStates(harness), [4, 1])
-    assert.equal(harness.internals.videoSendPathOpened, true)
+    assert.equal(harness.internals.video.videoSendPathOpened, true)
 
     harness.session.cleanup()
 })
@@ -511,7 +510,7 @@ test('accepting an upgrade the peer asked for opens the sender and announces the
         harness.sentVideoStates.map((node) => node.attrs['transaction-id']),
         ['1', '2']
     )
-    assert.equal(harness.internals.videoSendPathOpened, true)
+    assert.equal(harness.internals.video.videoSendPathOpened, true)
     assert.equal(harness.call.stateData.videoOff, false)
 
     harness.session.cleanup()
@@ -524,7 +523,7 @@ test('rejecting one answers it and leaves the call on audio', async () => {
     await harness.session.rejectVideoUpgrade()
 
     assert.deepEqual(sentStates(harness), [5])
-    assert.equal(harness.internals.videoSendPathOpened, false)
+    assert.equal(harness.internals.video.videoSendPathOpened, false)
     assert.equal(harness.call.stateData.videoOff, true)
 
     harness.session.cleanup()
@@ -537,7 +536,7 @@ test('answering a request the peer never made sends nothing', async () => {
     await harness.session.rejectVideoUpgrade()
 
     assert.deepEqual(sentStates(harness), [])
-    assert.equal(harness.internals.videoSendPathOpened, false)
+    assert.equal(harness.internals.video.videoSendPathOpened, false)
 
     harness.session.cleanup()
 })
@@ -563,7 +562,7 @@ test('cancelling withdraws the request and settles the caller waiting on it', as
 
     assert.equal(await pending, WA_VIDEO_UPGRADE_RESULT.Cancelled)
     assert.deepEqual(sentStates(harness), [11, 8])
-    assert.equal(harness.internals.videoSendPathOpened, false)
+    assert.equal(harness.internals.video.videoSendPathOpened, false)
 
     harness.session.cleanup()
 })
@@ -649,7 +648,7 @@ test('a terminal code leaves the peer with no request to accept', async () => {
         await harness.session.acceptVideoUpgrade()
 
         assert.deepEqual(sentStates(harness), [], `state ${state} left a request outstanding`)
-        assert.equal(harness.internals.videoSendPathOpened, false)
+        assert.equal(harness.internals.video.videoSendPathOpened, false)
 
         // And the next request opens a handshake instead of answering the dead one.
         const next = harness.session.requestVideoUpgrade()
@@ -677,7 +676,7 @@ test('a request that times out closes one the peer crossed it with', async (t) =
     await harness.session.acceptVideoUpgrade()
 
     assert.deepEqual(sentStates(harness), [11, 0], 'the downgrade was not followed by an accept')
-    assert.equal(harness.internals.videoSendPathOpened, false)
+    assert.equal(harness.internals.video.videoSendPathOpened, false)
 
     harness.session.cleanup()
 })
@@ -766,7 +765,7 @@ test('an accept that never left is retryable; a lost announcement does not undo 
     failing.failSends('offline')
     await assert.rejects(() => failing.session.acceptVideoUpgrade(), /offline/)
     assert.deepEqual(sentStates(failing), [], 'nothing reached the wire')
-    assert.equal(failing.internals.videoSendPathOpened, false, 'no sender on a lost accept')
+    assert.equal(failing.internals.video.videoSendPathOpened, false, 'no sender on a lost accept')
 
     /**
      * The request has to still be outstanding: had accepting cleared it, this retry would
@@ -775,7 +774,7 @@ test('an accept that never left is retryable; a lost announcement does not undo 
     failing.failSends(null)
     await failing.session.acceptVideoUpgrade()
     assert.deepEqual(sentStates(failing), [WA_VIDEO_STATE.UpgradeAccept, WA_VIDEO_STATE.Enabled])
-    assert.equal(failing.internals.videoSendPathOpened, true)
+    assert.equal(failing.internals.video.videoSendPathOpened, true)
     failing.session.cleanup()
 
     const announcing = createActiveSession()
@@ -786,7 +785,7 @@ test('an accept that never left is retryable; a lost announcement does not undo 
     await announcing.session.acceptVideoUpgrade()
 
     assert.deepEqual(sentStates(announcing), [WA_VIDEO_STATE.UpgradeAccept])
-    assert.equal(announcing.internals.videoSendPathOpened, true)
+    assert.equal(announcing.internals.video.videoSendPathOpened, true)
     announcing.session.cleanup()
 })
 
@@ -804,7 +803,7 @@ test('a request the peer takes back cannot be accepted afterwards', async () => 
     await harness.session.acceptVideoUpgrade()
 
     assert.deepEqual(sentStates(harness), [], 'nothing was announced to a peer back on audio')
-    assert.equal(harness.internals.videoSendPathOpened, false)
+    assert.equal(harness.internals.video.videoSendPathOpened, false)
 
     harness.session.cleanup()
 })
@@ -846,7 +845,7 @@ test('a refusal that never left stays retryable', async () => {
     await harness.session.rejectVideoUpgrade()
 
     assert.deepEqual(sentStates(harness), [WA_VIDEO_STATE.UpgradeReject])
-    assert.equal(harness.internals.videoSendPathOpened, false, 'refusing opens no sender')
+    assert.equal(harness.internals.video.videoSendPathOpened, false, 'refusing opens no sender')
 
     harness.session.cleanup()
 })
@@ -873,7 +872,7 @@ test('a request withdrawn mid-send is not put back by the failed answer', async 
         await harness.session.acceptVideoUpgrade()
 
         assert.deepEqual(sentStates(harness), [], `state ${withdrawal} was answered anyway`)
-        assert.equal(harness.internals.videoSendPathOpened, false)
+        assert.equal(harness.internals.video.videoSendPathOpened, false)
 
         harness.session.cleanup()
     }

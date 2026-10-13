@@ -137,10 +137,12 @@ interface Released {
 }
 
 interface GateInternals {
-    readonly peerVideoReadyGate: {
-        readonly isHeld: boolean
-        readonly guardTimer: unknown
-        readonly timeoutTimer: unknown
+    readonly video: {
+        readonly peerVideoReadyGate: {
+            readonly isHeld: boolean
+            readonly guardTimer: unknown
+            readonly timeoutTimer: unknown
+        }
     }
 }
 
@@ -446,7 +448,7 @@ test('a call that ends with the video held lets nothing go and leaves no timer b
 
     await acceptPeerUpgrade(harness)
     peerState(harness, WA_VIDEO_STATE.Enabled)
-    const { peerVideoReadyGate: gate } = harness.session as unknown as GateInternals
+    const { peerVideoReadyGate: gate } = (harness.session as unknown as GateInternals).video
     assert.equal(gate.isHeld, true)
     assert.notEqual(gate.guardTimer, null, 'the guard the camera started is running')
     assert.notEqual(gate.timeoutTimer, null, 'and so is the timeout')
@@ -686,7 +688,7 @@ test('an accept on a call we have not answered holds nothing', async (t) => {
     await harness.session.handleCallAccept(node, OWN_OTHER_DEVICE_JID)
     await settle()
 
-    const { peerVideoReadyGate: gate } = harness.session as unknown as GateInternals
+    const { peerVideoReadyGate: gate } = (harness.session as unknown as GateInternals).video
     assert.equal(gate.isHeld, false)
     assert.equal(gate.timeoutTimer, null)
     assert.ok(videoSections(harness).every((video) => video?.sendHeld === undefined))
@@ -717,7 +719,7 @@ test('a call born as video that the peer ends while held lets nothing go and lea
     const harness = await createActiveCall(CallMediaType.Video)
 
     muteV2(harness.session)
-    const { peerVideoReadyGate: gate } = harness.session as unknown as GateInternals
+    const { peerVideoReadyGate: gate } = (harness.session as unknown as GateInternals).video
     assert.notEqual(gate.guardTimer, null, 'the guard the mute_v2 started is running')
     assert.notEqual(gate.timeoutTimer, null, 'and so is the timeout')
 

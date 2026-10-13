@@ -24,12 +24,12 @@ async function createPlane(): Promise<AudioPlaneHarness> {
 
     const internals = plane as unknown as {
         sctpRelay: { hasConnection: () => boolean }
-        onDecodedAudio: (pcm: Float32Array) => void
+        inboundAudio: { onDecodedAudio: (pcm: Float32Array) => void }
     }
     internals.sctpRelay.hasConnection = () => true
     await plane.apply({ accepted: true })
 
-    return { plane, decode: internals.onDecodedAudio }
+    return { plane, decode: internals.inboundAudio.onDecodedAudio }
 }
 
 function frame(value: number): Float32Array {

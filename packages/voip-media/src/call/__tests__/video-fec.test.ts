@@ -56,7 +56,7 @@ interface PlaneInternals {
     videoReception: RtpStreamReception
     videoRecvPackets: number
     reedSolomonFecPackets: number
-    inboundVideoStreams: Map<number, { keyFrameReceived: boolean }>
+    inboundVideo: { streams: Map<number, { keyFrameReceived: boolean }> }
     onRelayData: (data: Uint8Array) => void
 }
 
@@ -103,7 +103,7 @@ async function createPlane(): Promise<FecHarness> {
 
 /** Whether any inbound video stream got a key frame. */
 function keyFrameReceived(internals: PlaneInternals): boolean {
-    return [...internals.inboundVideoStreams.values()].some((stream) => stream.keyFrameReceived)
+    return [...internals.inboundVideo.streams.values()].some((stream) => stream.keyFrameReceived)
 }
 
 /** An RTP packet as the peer sends it, with marker set to close the frame. */

@@ -89,7 +89,9 @@ test('the call announces its mute state once the media is connected', async () =
 
     const callId = await manager.startCall({ peerJid: '2222222222@lid' })
     const session = (
-        manager as unknown as { calls: Map<string, { announceInitialMuteState: () => void }> }
+        manager as unknown as {
+            calls: Map<string, { announcements: { announceInitialMute: () => void } }>
+        }
     ).calls.get(callId)
     assert.ok(session)
 
@@ -97,7 +99,7 @@ test('the call announces its mute state once the media is connected', async () =
     // The reference client sends a message of its own a fraction of a second after
     // the call goes active, carrying `mute-state="0"` with nobody having touched the
     // microphone. Both ends send one, whichever placed the call.
-    session.announceInitialMuteState()
+    session.announcements.announceInitialMute()
     await Promise.resolve()
 
     const announced = findByInnerTag(sent.slice(before), 'mute_v2')
@@ -107,7 +109,7 @@ test('the call announces its mute state once the media is connected', async () =
     assert.equal(inner.attrs['call-id'], callId)
 
     // Sent once: a second transition to active must not restate it.
-    session.announceInitialMuteState()
+    session.announcements.announceInitialMute()
     await Promise.resolve()
     assert.equal(findByInnerTag(sent.slice(before), 'mute_v2').length, 1)
 })

@@ -1,3 +1,5 @@
+import type { Logger } from 'zapo-js'
+
 import type { PeerScreenShare } from '../signaling/screen-share.js'
 import type { WaVoipSettings } from '../signaling/voip-settings.js'
 import {
@@ -452,4 +454,28 @@ export function decideJoinableTerminate(
         return WA_TERMINATE_DECISION.IgnoreSilently
     }
     return WA_TERMINATE_DECISION.Ignore
+}
+
+/** One entry per device the stanzas name: 32 connected participants, five devices each. */
+const MAX_TRACKED_PARTICIPANT_MEDIA = 160
+
+/** The media entry of a device, created on first sight; `null` once tracking is full. */
+export function trackParticipantMedia(
+    info: CallInfo,
+    deviceJid: string,
+    logger: Logger
+): WaCallParticipantMedia | null {
+    const media = info.participantMedia
+    const existing = media.get(deviceJid)
+    if (existing) return existing
+    if (media.size >= MAX_TRACKED_PARTICIPANT_MEDIA) {
+        logger.debug('participant media tracking full, state dropped', {
+            callId: info.callId,
+            participantJid: deviceJid
+        })
+        return null
+    }
+    const entry: WaCallParticipantMedia = { deviceJid }
+    media.set(deviceJid, entry)
+    return entry
 }

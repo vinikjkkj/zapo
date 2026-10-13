@@ -7,6 +7,9 @@ export interface SrtpKeyingMaterial {
 /** Sample rate of call audio, mono, and the clock rate of its RTP timestamps. */
 export const AUDIO_SAMPLE_RATE = 16_000
 
+/** Clock rate of the H.264 stream, the unit of its RTP timestamps. */
+export const VIDEO_CLOCK_RATE = 90_000
+
 export enum PayloadType {
     WhatsAppOpus = 120,
     /** `mlow-red-1`: MLow, plain or with in-band RED, numbered apart from PT 120. */

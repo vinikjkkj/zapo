@@ -68,7 +68,7 @@ const VIDEO_FRAME = new Uint8Array([0, 0, 0, 1, 0x65, 0x88, 0x84, 0x00])
 const VIDEO_MAX_PAYLOAD = 800
 
 interface PlaneInternals {
-    videoStreamOpen: boolean
+    outboundVideo: { streamOpen: boolean }
     rtpSession: RtpSession
     videoRtpSession: RtpSession
     codec: MLowCodec
@@ -85,10 +85,12 @@ interface PlaneInternals {
         setSubscriptionSsrc: (ssrc: number) => void
         resendSubscriptions: () => void
     }
-    audioReception: RtpStreamReception
+    inboundAudio: { reception: RtpStreamReception }
     videoReception: RtpStreamReception
-    videoReportSchedule: SenderReportSchedule
-    receiverEstimateSchedule: SenderReportSchedule
+    rtcp: {
+        videoReportSchedule: SenderReportSchedule
+        receiverEstimateSchedule: SenderReportSchedule
+    }
     onRelayData: (data: Uint8Array) => void
 }
 
@@ -160,13 +162,14 @@ async function createPlane(
     internals.codec = fixedFrameCodec(AUDIO_SAMPLES_PER_PACKET)
     if (mediaType === 'video') {
         internals.videoRtpSession = new RtpSession(SELF_VIDEO_SSRC, 97)
-        internals.videoReportSchedule = SenderReportSchedule.onWallClock(videoReportIntervalMs)
-        internals.receiverEstimateSchedule = SenderReportSchedule.onWallClock(videoReportIntervalMs)
+        internals.rtcp.videoReportSchedule = SenderReportSchedule.onWallClock(videoReportIntervalMs)
+        internals.rtcp.receiverEstimateSchedule =
+            SenderReportSchedule.onWallClock(videoReportIntervalMs)
     }
     // Media goes out only once it flows: the call accepted, with a leg up.
     await plane.apply({ accepted: true })
     // A stream already running: video is open.
-    internals.videoStreamOpen = true
+    internals.outboundVideo.streamOpen = true
 
     return { plane, sent, internals, time, videoFrames: 0 }
 }
@@ -458,7 +461,7 @@ test('a video sender report follows the frame, not the packets it took', async (
 test('each sender report block describes the inbound stream of its own sender', async () => {
     const harness = await createPlane('video')
 
-    harness.internals.audioReception.observe(PEER_AUDIO_SSRC, 700, 1_000, 0)
+    harness.internals.inboundAudio.reception.observe(PEER_AUDIO_SSRC, 700, 1_000, 0)
     harness.internals.videoReception.observe(PEER_VIDEO_SSRC, 9, 90_000, 0)
     sendAudioUntilReport(harness)
     sendVideoUntilReport(harness)

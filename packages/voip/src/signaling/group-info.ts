@@ -270,6 +270,28 @@ export function readGroupUpdateTransactionId(inner: BinaryNode): number | null {
 }
 
 /**
+ * The number a `group_update` is ordered by: its `<group_info>`'s, else the wrapper's, else the
+ * highest a participant carries, else one past the last applied.
+ */
+export function resolveGroupUpdateTransactionId(
+    inner: BinaryNode,
+    listed: readonly GroupInfoParticipant[],
+    lastTransactionId: number | null,
+    rosterTransactionId: number | null
+): number {
+    if (rosterTransactionId !== null) return rosterTransactionId
+    const own = tryAsNumber(inner.attrs?.['transaction-id'])
+    if (own !== null) return own
+
+    let highest: number | null = null
+    for (const participant of listed) {
+        const id = participant.transactionId
+        if (id !== null && (highest === null || id > highest)) highest = id
+    }
+    return highest ?? (lastTransactionId ?? 0) + 1
+}
+
+/**
  * The devices a participant addresses, each with its `:device`, primary first. A count
  * outside one to five collapses onto the primary device of the user jid.
  *

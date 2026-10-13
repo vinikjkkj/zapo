@@ -117,8 +117,10 @@ interface PlaneInternals {
     codec: FakeCodec
     srtpSession: { protect: (packet: RtpPacket) => Uint8Array }
     srtcpContext: { protect: (rtcp: Uint8Array) => Uint8Array }
-    audioReportSchedule: SenderReportSchedule
-    videoReportSchedule: SenderReportSchedule
+    rtcp: {
+        audioReportSchedule: SenderReportSchedule
+        videoReportSchedule: SenderReportSchedule
+    }
 }
 
 interface Harness {
@@ -558,8 +560,11 @@ test('video timestamps only go forward, whatever the host stamps', async () => {
 /** Stamped with the packet's own timestamp, a report lags by each stream's own delay. */
 test('the sender reports of both streams carry the clock at the instant they are assembled', async () => {
     const harness = await createPlane('video')
-    harness.internals.audioReportSchedule = SenderReportSchedule.onMediaClock(0, AUDIO_CLOCK_RATE)
-    harness.internals.videoReportSchedule = SenderReportSchedule.onWallClock(0)
+    harness.internals.rtcp.audioReportSchedule = SenderReportSchedule.onMediaClock(
+        0,
+        AUDIO_CLOCK_RATE
+    )
+    harness.internals.rtcp.videoReportSchedule = SenderReportSchedule.onWallClock(0)
 
     for (let frame = 0; frame < 4; frame++) {
         const captured = START_MS + frame * FRAME_MS

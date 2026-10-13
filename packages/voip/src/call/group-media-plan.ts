@@ -346,6 +346,32 @@ export class WaCallDerivations {
     }
 }
 
+/** A group call's sending devices with their streams, shared by one sync's sections. */
+export interface GroupSenders {
+    readonly devices: readonly string[]
+    readonly streamsOf: (deviceJid: string) => number[]
+}
+
+/** The sending devices and their streams, each device's derived on first ask. */
+export function groupSendersOf(
+    devices: readonly string[],
+    derivations: WaCallDerivations,
+    coversVideo: boolean
+): GroupSenders {
+    const streams = new Map<string, number[]>()
+    return {
+        devices,
+        streamsOf: (deviceJid) => {
+            let found = streams.get(deviceJid)
+            if (!found) {
+                found = derivations.senderStreams(deviceJid, coversVideo)
+                streams.set(deviceJid, found)
+            }
+            return found
+        }
+    }
+}
+
 const MAX_VIDEO_SUBSCRIPTIONS = 4
 /** Video subscriptions are processed once more than this many participants are connected. */
 const MIN_CONNECTED_FOR_VIDEO_SUBSCRIPTIONS = 2

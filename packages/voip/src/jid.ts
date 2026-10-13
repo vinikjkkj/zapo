@@ -1,4 +1,9 @@
-import { canonicalizeSignalServer, parseSignalAddressFromJid, WA_DEFAULTS } from 'zapo-js/protocol'
+import {
+    canonicalizeSignalServer,
+    parseSignalAddressFromJid,
+    toUserJid,
+    WA_DEFAULTS
+} from 'zapo-js/protocol'
 
 /**
  * A device jid with its `:device`, bare meaning the primary: the form SSRCs and SRTP keys derive
@@ -31,4 +36,10 @@ export function addressDeviceJid(jid: string): {
     const address = parseSignalAddressFromJid(jid)
     const server = address.server ?? WA_DEFAULTS.HOST_DOMAIN
     return { jid: `${address.user}:${address.device}@${server}`, deviceId: address.device, server }
+}
+
+/** Our device as the relay lists it among the participants, else our account jid. */
+export function relayListedDeviceJid(ourJid: string, participantJids: readonly string[]): string {
+    const ourBase = ourJid ? toUserJid(ourJid) : ''
+    return participantJids.find((jid) => toUserJid(jid) === ourBase && /:\d+@/.test(jid)) || ourJid
 }
