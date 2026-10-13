@@ -55,6 +55,12 @@ const CONFIG = {
      * through every leg never moves it; short, so following a peer that moved costs half a second.
      */
     RX_ELECTION_HOLD_MS: 400,
+    /** How long an accepted, sending call may hear no peer media before WebRTC legs re-allocate. */
+    DOWNLINK_REALLOCATE_AFTER_MS: 5_000,
+    /** How much longer before they are redialled; doubled after each redial of the same call. */
+    DOWNLINK_REDIAL_AFTER_MS: 5_000,
+    /** Redials of stalled WebRTC legs per call. */
+    DOWNLINK_MAX_REDIALS: 3,
     ICE_DISCONNECT_GRACE_MS: 4000,
     FIXED_FINGERPRINT:
         'sha-256 F9:CA:0C:98:A3:CC:71:D6:42:CE:5A:E2:53:D2:15:20:D3:1B:BA:D8:57:A4:F0:AF:BE:0B:FB:F3:6B:0C:A0:68'
@@ -283,6 +289,15 @@ export class WaSctpRelay {
      * the peer; `RX_ELECTION_HOLD_MS` after it, the peer is followed back to an older leg.
      */
     private newestSendingSince: number | null = null
+    /** Whether the call was accepted; see {@link setMediaFlowing}. */
+    private mediaFlowing = false
+    /**
+     * Since when no leg heard authenticated peer media (RTP or SRTCP) while the accepted call
+     * sends; `null` until the next send after the call is accepted or the peer is heard.
+     */
+    private downlinkStalledSince: number | null = null
+    private downlinkReallocated = false
+    private downlinkRedials = 0
     /** The scope of the last election, logged when it changes. */
     private electionScope: ElectionScope = 'newest'
     private stats = {
@@ -1297,6 +1312,7 @@ export class WaSctpRelay {
 
     /** Moves every leg's keepalive to the cadence of an accepted call; later legs start on it. */
     setMediaFlowing(): void {
+        this.mediaFlowing = true
         if (this.pingIntervalMs === CONFIG.PING_INTERVAL_MS) return
         this.pingIntervalMs = CONFIG.PING_INTERVAL_MS
         for (const conn of this.connections.values()) {
@@ -1840,6 +1856,73 @@ export class WaSctpRelay {
         if (this.newestSendingSince === null && leg.generation === this.generation) {
             if (!this.newestProved()) this.newestSendingSince = this.now()
         }
+        if (this.mediaFlowing) this.watchDownlink()
+        return true
+    }
+
+    /**
+     * Recovers WebRTC legs that keep answering while no peer media arrives on any leg: past
+     * `DOWNLINK_REALLOCATE_AFTER_MS` they re-allocate on the same connection, and
+     * `DOWNLINK_REDIAL_AFTER_MS` later the newest generation's WebRTC legs are redialled, with
+     * backoff and at most `DOWNLINK_MAX_REDIALS` times per call. Raw legs police their own
+     * return path.
+     */
+    private watchDownlink(): void {
+        const now = this.now()
+        if (this.downlinkStalledSince === null) {
+            this.downlinkStalledSince = now
+            return
+        }
+        const stalledMs = Math.round(now - this.downlinkStalledSince)
+        if (!this.downlinkReallocated) {
+            if (stalledMs < CONFIG.DOWNLINK_REALLOCATE_AFTER_MS) return
+            this.downlinkReallocated = true
+            this.reallocateStalledLegs(stalledMs)
+            return
+        }
+        if (this.downlinkRedials >= CONFIG.DOWNLINK_MAX_REDIALS) return
+        const redialAfterMs =
+            CONFIG.DOWNLINK_REALLOCATE_AFTER_MS +
+            CONFIG.DOWNLINK_REDIAL_AFTER_MS * 2 ** this.downlinkRedials
+        if (stalledMs < redialAfterMs) return
+        if (this.redialStalledLegs(stalledMs)) this.downlinkRedials++
+        this.downlinkStalledSince = now
+        this.downlinkReallocated = false
+    }
+
+    private stalledWebRtcLegs(newestOnly: boolean): Connection[] {
+        const legs: Connection[] = []
+        for (const conn of this.connections.values()) {
+            if (conn.rawLeg || conn.relayInfo.transport === 'raw-udp') continue
+            if (newestOnly && conn.generation !== this.generation) continue
+            legs.push(conn)
+        }
+        return legs
+    }
+
+    private reallocateStalledLegs(stalledMs: number): void {
+        const legs = this.stalledWebRtcLegs(false).filter((conn) => this.isConnOpen(conn))
+        if (legs.length === 0) return
+        this.logger.warn('relay downlink stalled, re-allocating', { stalledMs, legs: legs.length })
+        for (const conn of legs) this.sendStunAllocateOnOpen(conn)
+    }
+
+    /** Redials the newest generation's WebRTC legs on new peer connections; whether any was. */
+    private redialStalledLegs(stalledMs: number): boolean {
+        const legs = this.stalledWebRtcLegs(true)
+        if (legs.length === 0) return false
+        this.logger.warn('relay downlink stalled, redialling', {
+            stalledMs,
+            legs: legs.length,
+            attempt: this.downlinkRedials + 1,
+            maxAttempts: CONFIG.DOWNLINK_MAX_REDIALS
+        })
+        const redialled = legs.map((leg) => {
+            const { relayInfo, generation } = leg
+            this.endLegQuietly(leg)
+            return this.registerConnection(relayInfo, generation)
+        })
+        for (const conn of redialled) void this.startConnection(conn)
         return true
     }
 
@@ -1871,6 +1954,8 @@ export class WaSctpRelay {
         if (!conn) return
         const now = this.now()
         conn.peerMediaAt = now
+        this.downlinkStalledSince = null
+        this.downlinkReallocated = false
         if (this.isConnOpen(conn)) this.retireOlderGenerations(conn)
 
         const current = this.mediaLeg
@@ -2065,6 +2150,10 @@ export class WaSctpRelay {
         this.generation = 0
         this.retiredBelow = 0
         this.newestSendingSince = null
+        this.mediaFlowing = false
+        this.downlinkStalledSince = null
+        this.downlinkReallocated = false
+        this.downlinkRedials = 0
         this.electionScope = 'newest'
         this.stats.connected = 0
         this.audioSsrc = 0
