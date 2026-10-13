@@ -4,6 +4,10 @@ import { test } from 'node:test'
 import { createNoopLogger, type WaClientPluginContext } from 'zapo-js'
 import { WA_MESSAGE_TAGS } from 'zapo-js/protocol'
 
+import type { WaCallReaction } from '@zapo-js/voip-media'
+
+import type { CallInfo } from '../call/call-state.js'
+import type { VoipEvents } from '../events.js'
 import { WaVoipCoordinator, type WaVoipCoordinatorOptions } from '../WaVoipCoordinator.js'
 
 function mockCtx(isMobilePrimary: () => boolean = () => false) {
@@ -54,6 +58,86 @@ test('WaVoipCoordinator re-emits manager events on the host client', () => {
     const forwarded = emitted.find(([event]) => event === 'voip_call_error')
     assert.ok(forwarded)
     assert.equal(forwarded[1][0], error)
+
+    coordinator.dispose()
+})
+
+test('participant events reach the client with the device that sent them', () => {
+    const { ctx, emitted } = mockCtx()
+    const coordinator = new WaVoipCoordinator(ctx)
+    const manager = (
+        coordinator as unknown as { manager: { emit: (event: string, ...args: unknown[]) => void } }
+    ).manager
+    const call = { callId: 'CID' }
+    const pcm = new Float32Array(4)
+    const device = '184478207058035:9@lid'
+
+    manager.emit('call_peer_mute', call, true, device)
+    manager.emit('call_peer_mute', call, false)
+    manager.emit('call_mute_requested', call, device, '1')
+    manager.emit('call_participant_media', call, device, false)
+    manager.emit('call_participant_audio', call, device, pcm)
+    manager.emit('call_video_upgraded', call, device)
+    manager.emit('call_reaction', call, { transactionId: '1', reaction: '👍' }, device)
+    manager.emit('call_peer_video_state', call, { state: 6 }, device)
+    manager.emit('call_screen_share', call, { state: 1 }, device)
+    manager.emit('call_inbound_video', call, { ssrc: 1 }, device)
+    manager.emit('call_inbound_video_rtp', call, { ssrc: 1 }, device)
+
+    const payloadOf = (event: string, index = 0) =>
+        emitted.filter(([name]) => name === event)[index]?.[1][0]
+    assert.deepEqual(payloadOf('voip_call_peer_mute'), {
+        call,
+        muted: true,
+        participantJid: device
+    })
+    assert.deepEqual(payloadOf('voip_call_peer_mute', 1), {
+        call,
+        muted: false,
+        participantJid: undefined
+    })
+    assert.deepEqual(payloadOf('voip_call_mute_requested'), {
+        call,
+        participantJid: device,
+        requestState: '1'
+    })
+    assert.deepEqual(payloadOf('voip_call_participant_media'), {
+        call,
+        participantJid: device,
+        receiving: false
+    })
+    assert.deepEqual(payloadOf('voip_call_participant_audio'), {
+        call,
+        participantJid: device,
+        pcm
+    })
+    assert.deepEqual(payloadOf('voip_call_video_upgraded'), { call, participantJid: device })
+    for (const event of [
+        'voip_call_reaction',
+        'voip_call_peer_video_state',
+        'voip_call_screen_share',
+        'voip_call_inbound_video',
+        'voip_call_inbound_video_rtp'
+    ]) {
+        assert.equal(
+            (payloadOf(event) as { participantJid?: string }).participantJid,
+            device,
+            event
+        )
+    }
+
+    coordinator.dispose()
+})
+
+test('a listener written before participantJid still fits', () => {
+    const { ctx } = mockCtx()
+    const coordinator = new WaVoipCoordinator(ctx)
+    const oldMute: (call: CallInfo, muted: boolean) => void = () => undefined
+    const oldReaction: (call: CallInfo, reaction: WaCallReaction) => void = () => undefined
+    const oldVoipMute: VoipEvents['voip_call_peer_mute'] = ({ call, muted }) => void [call, muted]
+
+    coordinator.on('call_peer_mute', oldMute).on('call_reaction', oldReaction)
+    assert.equal(typeof oldVoipMute, 'function')
 
     coordinator.dispose()
 })

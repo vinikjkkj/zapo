@@ -6,6 +6,9 @@ import type { BinaryNode } from 'zapo-js/transport'
 import { CallState, EndCallReason, type WaVoipDeps, type WaVoipStores } from '../../types.js'
 import {
     buildAcceptStanza,
+    buildEncRekeyReceiptStanza,
+    buildEncRekeyStanza,
+    buildMuteRequestStanza,
     buildMuteV2Stanza,
     buildOfferStanza,
     buildPreacceptStanza,
@@ -13,14 +16,21 @@ import {
     buildRejectStanza,
     buildTerminateStanza,
     buildVideoStateStanza,
+    callIdOfCallServerJid,
     extractNodeInfo,
     extractRelayEndpoints,
     generateCallId,
     generateCallStanzaId,
     needsDecryption,
+    parseGroupAvUpgrade,
+    parseGroupJidAttr,
+    parseJoinableAttr,
     parseMuteV2,
     parseRaiseHandState,
+    parseReRingAttr,
     parseVideoStateNode,
+    toCallServerJid,
+    WA_MUTE_REQUEST_STATE,
     WA_VIDEO_STATE,
     withMlowRedCapability
 } from '../signaling.js'
@@ -55,6 +65,54 @@ test('buildRejectStanza emits a reject payload', () => {
     const node = buildRejectStanza('12345@lid', 'CALLID', '12345@lid')
     const inner = (node.content as unknown as Array<{ tag: string }>)[0]
     assert.equal(inner.tag, 'reject')
+})
+
+test('a group reject goes to the call itself, with count 0', () => {
+    const node = buildRejectStanza(
+        '50062877036657:87@lid',
+        '00CAB48DC231B97E24B5B26470C2F752',
+        '50062877036657:87@lid',
+        true
+    )
+
+    assert.equal(node.attrs.to, '00CAB48DC231B97E24B5B26470C2F752@call')
+    const inner = (node.content as BinaryNode[])[0]
+    assert.equal(inner.tag, 'reject')
+    assert.deepEqual(inner.attrs, {
+        'call-id': '00CAB48DC231B97E24B5B26470C2F752',
+        'call-creator': '50062877036657:87@lid',
+        count: '0'
+    })
+
+    const oneToOne = (buildRejectStanza('a:1@lid', 'CID', 'a:1@lid').content as BinaryNode[])[0]
+    assert.equal(oneToOne.attrs.count, undefined)
+})
+
+test('a group preaccept goes to the call itself, with the 1:1 children', () => {
+    const callId = '00CAB48DC231B97E24B5B26470C2F752'
+    const group = buildPreacceptStanza(
+        '50062877036657:87@lid',
+        callId,
+        '50062877036657:87@lid',
+        true
+    )
+    const oneToOne = buildPreacceptStanza('50062877036657:87@lid', callId, '50062877036657:87@lid')
+
+    assert.equal(group.attrs.to, `${callId}@call`)
+    assert.equal(oneToOne.attrs.to, '50062877036657:87@lid')
+    const groupInner = (group.content as BinaryNode[])[0]
+    const oneToOneInner = (oneToOne.content as BinaryNode[])[0]
+    assert.equal(groupInner.tag, 'preaccept')
+    assert.deepEqual(groupInner.attrs, oneToOneInner.attrs)
+    assert.deepEqual(groupInner.content, oneToOneInner.content)
+    assert.deepEqual(
+        (groupInner.content as BinaryNode[]).map((child) => [child.tag, child.attrs]),
+        [
+            ['audio', { enc: 'opus', rate: '16000' }],
+            ['encopt', { keygen: '2' }],
+            ['capability', { ver: '1' }]
+        ]
+    )
 })
 
 const CALLER_DEVICE_JID = '50062877036657:76@lid'
@@ -125,6 +183,30 @@ test('buildAcceptStanza addresses the caller device jid with its suffix', async 
     assert.equal(accept.attrs['call-creator'], CALLER_DEVICE_JID)
 })
 
+test('a group accept is addressed to the call itself and carries encopt', async () => {
+    const node = await buildAcceptStanza(
+        createAcceptDeps(),
+        'CALLID',
+        CALLER_DEVICE_JID,
+        CALLER_DEVICE_JID,
+        false,
+        true
+    )
+    assert.equal(node.attrs.to, 'CALLID@call')
+
+    const accept = (node.content as BinaryNode[])[0]
+    assert.equal(accept.attrs['call-id'], 'CALLID')
+    assert.equal(accept.attrs['call-creator'], CALLER_DEVICE_JID)
+
+    const children = accept.content as BinaryNode[]
+    assert.deepEqual(
+        children.map((child) => child.tag),
+        ['audio', 'net', 'encopt']
+    )
+    assert.deepEqual(children.find((child) => child.tag === 'encopt')?.attrs, { keygen: '2' })
+    assert.equal(children.find((child) => child.tag === 'net')?.attrs.medium, '3')
+})
+
 test('buildAcceptStanza advertises h.264 on a video accept', async () => {
     const accept = ((await buildAccept(true)).content as BinaryNode[])[0]
     const video = (accept.content as BinaryNode[]).find((child) => child.tag === 'video')
@@ -175,6 +257,24 @@ async function buildOffer(isVideo: boolean): Promise<BinaryNode> {
         isVideo
     )
 }
+
+test('a 1:1 offer addresses the peer and keeps its children in order', async () => {
+    const node = await buildOffer(false)
+    assert.equal(node.attrs.to, CALLER_DEVICE_JID)
+
+    const offer = (node.content as BinaryNode[])[0]
+    assert.deepEqual(offer.attrs, { 'call-id': 'CALLID', 'call-creator': '1111111111@lid' })
+    assert.deepEqual(
+        (offer.content as BinaryNode[]).map((child) => child.tag),
+        ['audio', 'audio', 'net', 'capability', 'destination', 'encopt', 'device-identity']
+    )
+
+    const videoOffer = ((await buildOffer(true)).content as BinaryNode[])[0]
+    assert.deepEqual(
+        (videoOffer.content as BinaryNode[]).map((child) => child.tag),
+        ['audio', 'audio', 'video', 'net', 'capability', 'destination', 'encopt', 'device-identity']
+    )
+})
 
 test('buildAcceptStanza advertises the same dec as buildOfferStanza on a video call', async () => {
     const offer = ((await buildOffer(true)).content as BinaryNode[])[0]
@@ -464,11 +564,13 @@ test('buildMuteV2Stanza announces the unmuted state as mute-state 0', () => {
 test('parseMuteV2 reads the two known mute-state values', () => {
     assert.deepEqual(parseMuteV2({ tag: 'mute_v2', attrs: { 'mute-state': '1' } }), {
         muted: true,
-        isRequest: false
+        isRequest: false,
+        requestState: null
     })
     assert.deepEqual(parseMuteV2({ tag: 'mute_v2', attrs: { 'mute-state': '0' } }), {
         muted: false,
-        isRequest: false
+        isRequest: false,
+        requestState: null
     })
 })
 
@@ -482,6 +584,35 @@ test('parseMuteV2 flags a request-state stanza as a request', () => {
     const parsed = parseMuteV2({ tag: 'mute_v2', attrs: { 'request-state': '1' } })
     assert.equal(parsed.isRequest, true)
     assert.equal(parsed.muted, null)
+})
+
+test('parseMuteV2 hands request-state over raw, never mapped onto a mute', () => {
+    assert.equal(parseMuteV2({ tag: 'mute_v2', attrs: { 'request-state': '1' } }).requestState, '1')
+    const unknown = parseMuteV2({ tag: 'mute_v2', attrs: { 'request-state': '2' } })
+    assert.equal(unknown.requestState, '2')
+    assert.equal(unknown.isRequest, true)
+    assert.equal(unknown.muted, null)
+})
+
+/** What a group admin sent to the one device it asked to mute, attribute by attribute. */
+test('a mute request goes to the target device with request-state and no mute-state', () => {
+    const node = buildMuteRequestStanza(
+        '184478207058035:9@lid',
+        '00FFD3D11243F580F2284050F8ACAF2E',
+        '50062877036657:87@lid'
+    )
+
+    assert.equal(node.attrs.to, '184478207058035:9@lid')
+    const inner = (node.content as BinaryNode[])[0]
+    assert.equal(inner.tag, 'mute_v2')
+    assert.deepEqual(inner.attrs, {
+        'call-id': '00FFD3D11243F580F2284050F8ACAF2E',
+        'call-creator': '50062877036657:87@lid',
+        'request-state': '1'
+    })
+    assert.equal(inner.content, undefined)
+    assert.equal(WA_MUTE_REQUEST_STATE.Mute, '1')
+    assert.deepEqual(parseMuteV2(inner), { muted: null, isRequest: true, requestState: '1' })
 })
 
 /**
@@ -635,6 +766,28 @@ test('buildVideoStateStanza writes the upgrade request as the raw ordinal', () =
     })
 })
 
+/** The upgrade request a group participant sent to the call, attribute by attribute. */
+test('the group upgrade request is the video stanza with state 3, sent to the call', () => {
+    const callId = '00FFD3D11243F580F2284050F8ACAF2E'
+    const node = buildVideoStateStanza(toCallServerJid(callId), callId, '50062877036657:87@lid', {
+        state: WA_VIDEO_STATE.UpgradeRequest,
+        transactionId: 1
+    })
+
+    assert.equal(node.attrs.to, `${callId}@call`)
+    const inner = (node.content as BinaryNode[])[0]
+    assert.equal(inner.tag, 'video')
+    assert.deepEqual(inner.attrs, {
+        'call-id': callId,
+        'call-creator': '50062877036657:87@lid',
+        state: '3',
+        device_orientation: '0',
+        dec: 'H264',
+        voip_settings: 'video',
+        'transaction-id': '1'
+    })
+})
+
 test('only the upgrade request carries voip_settings', () => {
     for (const state of [
         WA_VIDEO_STATE.UpgradeAccept,
@@ -689,4 +842,106 @@ test('a built video state parses back to the state it was given', () => {
         const inner = (node.content as BinaryNode[])[0]
         assert.equal(parseVideoStateNode(inner)?.state, state)
     }
+})
+
+function offerNode(attrs: Record<string, string>): BinaryNode {
+    return { tag: 'offer', attrs: { 'call-id': 'CID', ...attrs }, content: undefined }
+}
+
+test('parseJoinableAttr reads the flag an offer carries, and its absence', () => {
+    assert.equal(parseJoinableAttr(offerNode({ joinable: '1' })), true)
+    assert.equal(parseJoinableAttr(offerNode({ joinable: 'true' })), true)
+    assert.equal(parseJoinableAttr(offerNode({ joinable: '0' })), false)
+    assert.equal(parseJoinableAttr(offerNode({})), false)
+})
+
+test('parseReRingAttr reads re-ring on an offer, and its absence', () => {
+    assert.equal(parseReRingAttr(offerNode({ 're-ring': '1', joinable: '1' })), true)
+    assert.equal(parseReRingAttr(offerNode({ 're-ring': '0' })), false)
+    assert.equal(parseReRingAttr(offerNode({ joinable: '1' })), false)
+})
+
+test('parseGroupJidAttr reads either spelling and reports no group as null', () => {
+    const groupJid = '120363000000000000@g.us'
+
+    assert.equal(parseGroupJidAttr(offerNode({ 'group-jid': groupJid })), groupJid)
+    assert.equal(parseGroupJidAttr(offerNode({ group_jid: groupJid })), groupJid)
+    assert.equal(parseGroupJidAttr(offerNode({ 'group-jid': '' })), null)
+    // Joinable and group are independent: an ad-hoc joinable call names no group.
+    assert.equal(parseGroupJidAttr(offerNode({ joinable: '1' })), null)
+})
+
+test('an enc_rekey receipt answers the stanza id and names the call', () => {
+    const node = buildEncRekeyReceiptStanza(
+        CALLER_DEVICE_JID,
+        'STANZA',
+        'CALLID',
+        '1111111111@lid',
+        '2222222222@lid'
+    )
+
+    assert.equal(node.tag, 'receipt')
+    assert.equal(node.attrs.to, CALLER_DEVICE_JID)
+    assert.equal(node.attrs.id, 'STANZA')
+    assert.equal(node.attrs.from, '2222222222@lid')
+    const child = (node.content as BinaryNode[])[0]
+    assert.equal(child.tag, 'enc_rekey')
+    assert.deepEqual(Object.keys(child.attrs), ['call-creator', 'call-id'])
+    assert.deepEqual(child.attrs, { 'call-creator': '1111111111@lid', 'call-id': 'CALLID' })
+})
+
+test('an enc_rekey goes to the device it keys, echoing the transaction that asked for it', async () => {
+    const node = await buildEncRekeyStanza(createOfferDeps(), {
+        callId: 'CALLID',
+        callCreator: '1111111111@lid',
+        transactionId: 13,
+        peerDeviceJid: CALLER_DEVICE_JID,
+        callKey: new Uint8Array(32).fill(1)
+    })
+
+    assert.equal(node.attrs.to, CALLER_DEVICE_JID)
+    const rekey = (node.content as BinaryNode[])[0]
+    assert.equal(rekey.tag, 'enc_rekey')
+    assert.deepEqual(rekey.attrs, {
+        'call-id': 'CALLID',
+        'call-creator': '1111111111@lid',
+        'transaction-id': '13'
+    })
+    const children = rekey.content as BinaryNode[]
+    // A first message of its session carries our identity, as on the 1:1 offer.
+    assert.deepEqual(
+        children.map((child) => child.tag),
+        ['encopt', 'enc', 'device-identity']
+    )
+    assert.deepEqual(children[0].attrs, { keygen: '2' })
+    assert.deepEqual(children[1].attrs, { v: '2', type: 'pkmsg', count: '0' })
+})
+
+test('an av_upgrade is an upgrade only when it names the upgrader', () => {
+    const update = (attrs: Record<string, string>): BinaryNode => ({
+        tag: 'group_update',
+        attrs: { 'call-id': 'CID', 'call-creator': 'c:87@lid' },
+        content: [{ tag: 'av_upgrade', attrs }]
+    })
+
+    assert.deepEqual(parseGroupAvUpgrade(update({ 'av-upgrader': '184478207058035:9@lid' })), {
+        upgraderJid: '184478207058035:9@lid',
+        upgradable: false
+    })
+    assert.deepEqual(parseGroupAvUpgrade(update({ 'av-upgrader': '184478207058035:0@lid' })), {
+        upgraderJid: '184478207058035@lid',
+        upgradable: false
+    })
+    assert.deepEqual(parseGroupAvUpgrade(update({ 'av-upgradable': '1' })), {
+        upgraderJid: null,
+        upgradable: true
+    })
+    assert.equal(parseGroupAvUpgrade({ tag: 'group_update', attrs: {}, content: [] }), null)
+})
+
+test('callIdOfCallServerJid reads the call a call address names, and nothing else', () => {
+    assert.equal(callIdOfCallServerJid(toCallServerJid('00DF5A67')), '00DF5A67')
+    assert.equal(callIdOfCallServerJid('50062877036657:87@lid'), null)
+    assert.equal(callIdOfCallServerJid('@call'), null)
+    assert.equal(callIdOfCallServerJid(undefined), null)
 })

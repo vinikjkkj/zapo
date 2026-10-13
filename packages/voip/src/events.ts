@@ -1,6 +1,7 @@
 import type { WaCallMediaMessage, WaCallReaction } from '@zapo-js/voip-media'
 
 import type { CallInfo } from './call/call-state.js'
+import type { WaGroupCompositionDiff } from './call/group-participants.js'
 import type { PeerScreenShare } from './signaling/screen-share.js'
 import type { InboundVideoFrame, InboundVideoRtpPacket, PeerVideoStateChange } from './types.js'
 
@@ -14,12 +15,23 @@ export interface VoipEvents {
     readonly voip_call_incoming: (call: CallInfo) => void
     readonly voip_call_ended: (call: CallInfo) => void
     /**
-     * The peer announced a change of its own microphone state. Fires once per change; the
-     * same value is kept on `call.stateData.peerAudioMuted`.
+     * A participant announced a change of its own microphone state. Fires once per change.
+     * On a 1:1 call the same value is kept on `call.stateData.peerAudioMuted`.
      */
     readonly voip_call_peer_mute: (payload: {
         readonly call: CallInfo
         readonly muted: boolean
+        /** The device that announced it. */
+        readonly participantJid?: string
+    }) => void
+    /**
+     * A participant of a group call asked this side to mute. Nothing is applied: mute with
+     * `client.voip.setMute(callId, true)` to comply. `requestState` is raw, `'1'` to mute.
+     */
+    readonly voip_call_mute_requested: (payload: {
+        readonly call: CallInfo
+        readonly participantJid: string
+        readonly requestState: string
     }) => void
     /**
      * Decoded peer audio (16 kHz mono PCM), paced by the jitter buffer at one
@@ -31,13 +43,35 @@ export interface VoipEvents {
         readonly call: CallInfo
         readonly pcm: Float32Array
     }) => void
+    /**
+     * Decoded audio of one group-call participant, before the mix `voip_call_inbound_audio`
+     * carries. Only with the `participantAudio` option on.
+     */
+    readonly voip_call_participant_audio: (payload: {
+        readonly call: CallInfo
+        readonly participantJid: string
+        readonly pcm: Float32Array
+    }) => void
+    /**
+     * A group-call participant's media started (`receiving: true`) or stopped arriving.
+     * Fires on a change only, judged locally from the packets received.
+     */
+    readonly voip_call_participant_media: (payload: {
+        readonly call: CallInfo
+        readonly participantJid: string
+        readonly receiving: boolean
+    }) => void
+    /** `participantJid` is the device that sent the video, when known. */
     readonly voip_call_inbound_video_rtp: (payload: {
         readonly call: CallInfo
         readonly packet: InboundVideoRtpPacket
+        readonly participantJid?: string
     }) => void
+    /** `participantJid` is the device that sent the video, when known. */
     readonly voip_call_inbound_video: (payload: {
         readonly call: CallInfo
         readonly frame: InboundVideoFrame
+        readonly participantJid?: string
     }) => void
     /**
      * The peer reported a screen-share state change. Nothing is answered; a share of our
@@ -48,6 +82,8 @@ export interface VoipEvents {
     readonly voip_call_screen_share: (payload: {
         readonly call: CallInfo
         readonly share: PeerScreenShare
+        /** The device that reported it. */
+        readonly participantJid?: string
     }) => void
     /**
      * The peer announced a video state change, which is also how it upgrades a voice call
@@ -59,6 +95,25 @@ export interface VoipEvents {
     readonly voip_call_peer_video_state: (payload: {
         readonly call: CallInfo
         readonly change: PeerVideoStateChange
+        /** The device that announced it. */
+        readonly participantJid?: string
+    }) => void
+    /**
+     * A participant turned this group call into a video call; `call.mediaType` is now video.
+     * Nothing to answer: turn the camera on with `client.voip.setVideoEnabled(callId, true)`.
+     * `participantJid` is `null` when the server did not name who.
+     */
+    readonly voip_call_video_upgraded: (payload: {
+        readonly call: CallInfo
+        readonly participantJid: string | null
+    }) => void
+    /**
+     * Who joined a group call, left it or moved to another device, from a `group_update` roster
+     * or one participant's `<terminate>`. `call.groupComposition` is the composition after it.
+     */
+    readonly voip_call_participants_changed: (payload: {
+        readonly call: CallInfo
+        readonly diff: WaGroupCompositionDiff
     }) => void
     readonly voip_call_outbound_audio_finished: (call: CallInfo) => void
     /**
@@ -68,6 +123,8 @@ export interface VoipEvents {
     readonly voip_call_reaction: (payload: {
         readonly call: CallInfo
         readonly reaction: WaCallReaction
+        /** The device that sent it, when the media host can tell. */
+        readonly participantJid?: string
     }) => void
     /**
      * A remote participant raised or lowered its hand. Durable state, so this fires only

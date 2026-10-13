@@ -9,6 +9,9 @@ import {
     type InboundVideoRtpPacket,
     type MLowCompanionModelSource,
     type MLowRedOptions,
+    WA_CALL_MEDIA_FEATURE_GROUP,
+    WA_CALL_MEDIA_FEATURE_GROUP_ATTRIBUTION,
+    WA_CALL_MEDIA_FEATURE_RAW_UDP,
     type WaCallMediaEvent,
     type WaCallMediaMessage,
     WaCallMediaMessageSequencer,
@@ -27,14 +30,41 @@ export interface WaCallMediaLinkEvents {
     onRelayLost(reason: string): void
     /** A relay answered one of our legs for the first time; `rttMs` when the media measured one. */
     onRelayAnswered(name: string, rttMs?: number): void
-    onReaction(reaction: WaCallReaction): void
+    /** `senderId` names the group sender the reaction came from, when the host knows it. */
+    onReaction(reaction: WaCallReaction, senderId?: string): void
     onInboundAudio(pcm: Float32Array): void
     onInboundVideoRtp(packet: InboundVideoRtpPacket): void
     onInboundVideo(frame: InboundVideoFrame): void
     onOutboundAudioFinished(): void
     /** A plan change for a host elsewhere to apply; only a remote link emits it. */
     onPlan(message: WaCallMediaMessage): void
+    /**
+     * What the media host can apply. A local link names its own on start; a remote host older
+     * than the `host` event is reported with none once it sends anything else.
+     */
+    onHostFeatures?(features: readonly string[]): void
+    /** A media problem the call carries on through, for `voip_call_error`. */
+    onError?(error: Error): void
+    /** A group sender's media started or stopped arriving; see `WaCallMediaPlaneEvents.onSenderMedia`. */
+    onSenderMedia?(senderId: string, receiving: boolean): void
+    /**
+     * One group sender's decoded audio before the mix, a copy; local link only. Leave it out
+     * when nothing listens, or every frame is copied for nobody.
+     */
+    onSenderAudio?(senderId: string, pcm: Float32Array): void
 }
+
+/** The group sections and raw UDP legs, which a group call needs from its media host. */
+const GROUP_HOST_FEATURES: readonly string[] = [
+    WA_CALL_MEDIA_FEATURE_GROUP,
+    WA_CALL_MEDIA_FEATURE_RAW_UDP
+]
+
+/** What the plane in this process applies; its video subscriptions stay off. */
+const LOCAL_HOST_FEATURES: readonly string[] = [
+    ...GROUP_HOST_FEATURES,
+    WA_CALL_MEDIA_FEATURE_GROUP_ATTRIBUTION
+]
 
 /**
  * What a session talks to about media: the session publishes the plan, and the link
@@ -94,9 +124,12 @@ export interface WaLocalCallMediaOptions {
 export class WaLocalCallMedia implements WaCallMediaLink {
     private readonly plane: WaCallMediaPlane
     private readonly audio: WaAudioEngine
+    private readonly events: WaCallMediaLinkEvents
+    private featuresAnnounced = false
 
     constructor(options: WaLocalCallMediaOptions) {
         const { events, logger } = options
+        this.events = events
         this.audio = new WaAudioEngine({ logger: logger.child({ component: 'audio-engine' }) })
         this.plane = new WaCallMediaPlane({
             ...nodeMediaHost,
@@ -104,9 +137,9 @@ export class WaLocalCallMedia implements WaCallMediaLink {
             useOriginalRelayPort: options.useOriginalRelayPort,
             mlowCompanionModel: options.mlowCompanionModel,
             mlowRed: options.mlowRed,
-            createRawUdpLeg: options.useRawUdpTransport
-                ? (legOptions) => new WaRawUdpLeg(legOptions)
-                : undefined,
+            // Relays the plan marks raw UDP need the factory even when the rest go over WebRTC.
+            createRawUdpLeg: (legOptions) => new WaRawUdpLeg(legOptions),
+            rawUdpLegs: options.useRawUdpTransport ? 'all' : 'required',
             onActive: () => {
                 this.audio.startPlayback()
                 this.audio.startCapture()
@@ -114,9 +147,13 @@ export class WaLocalCallMedia implements WaCallMediaLink {
             },
             onRelayLost: (reason) => events.onRelayLost(reason),
             onRelayAnswered: (name, rttMs) => events.onRelayAnswered(name, rttMs),
-            onReaction: (reaction) => events.onReaction(reaction),
+            onReaction: (reaction, senderId) => events.onReaction(reaction, senderId),
             onInboundVideoRtp: (packet) => events.onInboundVideoRtp(packet),
-            onInboundVideo: (frame) => events.onInboundVideo(frame)
+            onInboundVideo: (frame) => events.onInboundVideo(frame),
+            onSenderMedia: (senderId, receiving) => events.onSenderMedia?.(senderId, receiving),
+            onSenderAudio: events.onSenderAudio
+                ? (senderId, pcm) => events.onSenderAudio?.(senderId, pcm.slice())
+                : undefined
         })
 
         this.audio.setAudioSender({
@@ -129,6 +166,10 @@ export class WaLocalCallMedia implements WaCallMediaLink {
     }
 
     start(): Promise<void> {
+        if (!this.featuresAnnounced) {
+            this.featuresAnnounced = true
+            this.events.onHostFeatures?.(LOCAL_HOST_FEATURES)
+        }
         return this.plane.start()
     }
 
@@ -186,12 +227,18 @@ export class WaLocalCallMedia implements WaCallMediaLink {
  */
 export class WaRemoteCallMedia implements WaCallMediaLink {
     private readonly events: WaCallMediaLinkEvents
+    private readonly logger: Logger | undefined
     private readonly sequencer: WaCallMediaMessageSequencer
     private active = false
     private stopped = false
+    /** What the host said it applies; `null` until it says, or until it shows it never will. */
+    private hostFeatures: readonly string[] | null = null
+    private groupPublished = false
+    private groupUnsupportedReported = false
 
-    constructor(callId: string, events: WaCallMediaLinkEvents) {
+    constructor(callId: string, events: WaCallMediaLinkEvents, logger?: Logger) {
         this.events = events
+        this.logger = logger
         this.sequencer = new WaCallMediaMessageSequencer(callId)
     }
 
@@ -202,6 +249,10 @@ export class WaRemoteCallMedia implements WaCallMediaLink {
     apply(update: WaCallMediaPlanUpdate): Promise<void> {
         if (!this.stopped) {
             this.events.onPlan(this.sequencer.next(update))
+            if (update.group) {
+                this.groupPublished = true
+                this.reportGroupUnsupported()
+            }
         }
         return Promise.resolve()
     }
@@ -238,6 +289,12 @@ export class WaRemoteCallMedia implements WaCallMediaLink {
 
     handleEvent(event: WaCallMediaEvent): void {
         if (this.stopped) return
+        if (event.type === 'host') {
+            this.recordHostFeatures(event.features)
+            return
+        }
+        /** A host that knows the event sends it before anything else. */
+        if (this.hostFeatures === null) this.recordHostFeatures([])
         switch (event.type) {
             case 'active':
                 if (this.active) return
@@ -252,7 +309,10 @@ export class WaRemoteCallMedia implements WaCallMediaLink {
                 this.events.onRelayAnswered(event.name, event.rttMs)
                 return
             case 'reaction':
-                this.events.onReaction(event.reaction)
+                this.events.onReaction(event.reaction, event.senderId)
+                return
+            case 'sender_media':
+                this.events.onSenderMedia?.(event.senderId, event.receiving)
                 return
             case 'resync':
                 this.events.onPlan(this.sequencer.snapshot())
@@ -262,6 +322,25 @@ export class WaRemoteCallMedia implements WaCallMediaLink {
 
     snapshot(): WaCallMediaMessage {
         return this.sequencer.snapshot()
+    }
+
+    private recordHostFeatures(features: readonly string[]): void {
+        this.hostFeatures = features
+        this.events.onHostFeatures?.(features)
+        this.reportGroupUnsupported()
+    }
+
+    /** Once per call: a group plan published to a host that cannot apply it. */
+    private reportGroupUnsupported(): void {
+        const features = this.hostFeatures
+        if (this.groupUnsupportedReported || !this.groupPublished || !features) return
+        const missing = GROUP_HOST_FEATURES.filter((feature) => !features.includes(feature))
+        if (missing.length === 0) return
+        this.groupUnsupportedReported = true
+        this.logger?.warn('media host cannot carry a group call', { missing, features })
+        this.events.onError?.(
+            new Error(`the media host lacks ${missing.join(', ')}, which a group call needs`)
+        )
     }
 
     /** A host older than `relay_answered` names no relay: once its media is up, all we dial count. */

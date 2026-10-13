@@ -189,3 +189,31 @@ test('buildScreenShareStanza carries the stop request under the same shape', () 
     assert.equal(payload(stanza).attrs.screenshare_state, '2')
     assert.equal(payload(stanza).attrs.version, '2')
 })
+
+/** What the native client sent to a group call: start, then stop, each with the next id. */
+test('buildScreenShareStanza numbers each start and stop with screen_share_id', () => {
+    const start = buildScreenShareStanza(
+        `${CALL_ID}@call`,
+        CALL_ID,
+        SELF_JID,
+        WA_SCREEN_SHARE_STATE.Started,
+        1
+    )
+    const stop = buildScreenShareStanza(
+        `${CALL_ID}@call`,
+        CALL_ID,
+        SELF_JID,
+        WA_SCREEN_SHARE_STATE.Stopped,
+        2
+    )
+
+    assert.deepEqual(payload(start).attrs, {
+        'call-id': CALL_ID,
+        'call-creator': SELF_JID,
+        screenshare_state: '1',
+        version: '2',
+        screen_share_id: '1'
+    })
+    assert.equal(payload(stop).attrs.screenshare_state, '2')
+    assert.equal(payload(stop).attrs.screen_share_id, '2')
+})

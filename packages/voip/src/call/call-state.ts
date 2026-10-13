@@ -10,6 +10,23 @@ import {
     type RelayData
 } from '../types.js'
 
+import type { WaGroupComposition } from './group-participants.js'
+
+/**
+ * What one remote device last announced about its media, keyed by its device jid in the form
+ * stanzas arrive from (device 0 bare). Filled on 1:1 calls too.
+ */
+export interface WaCallParticipantMedia {
+    readonly deviceJid: string
+    /** Its media sender id on a group call, see `groupSenderId`. */
+    senderId?: string
+    audioMuted?: boolean
+    video?: PeerVideoStateChange
+    screenShare?: PeerScreenShare
+    /** Whether its media is reaching us, from the media host; absent until it says. */
+    receiving?: boolean
+}
+
 export interface CallStateData {
     state: CallState
     connectedAt?: Date
@@ -45,7 +62,13 @@ export class CallInfo {
     mediaType: CallMediaType
     stateData: CallStateData
     createdAt: Date
+    /** `group-jid` of the offer: set on a group call, which is what makes it one. */
     groupJid?: string
+    /**
+     * `joinable` of the offer: others may still join, so one participant's `<terminate>` is not
+     * the end of the call; see {@link decideJoinableTerminate}. Independent of {@link groupJid}.
+     */
+    joinable: boolean
     isOffline: boolean
     callerPn?: string
     encryptionKey?: Uint8Array
@@ -73,6 +96,15 @@ export class CallInfo {
      * which only happens on a mid-call change - a call negotiated as video never does.
      */
     peerVideoState?: PeerVideoStateChange
+    /**
+     * Who is on a group call: seeded from the offer and replaced whole by every roster that
+     * folds in. Absent on a 1:1 call.
+     */
+    groupComposition?: WaGroupComposition
+    /** Per remote device, what it last announced about its media. See {@link WaCallParticipantMedia}. */
+    readonly participantMedia = new Map<string, WaCallParticipantMedia>()
+    /** Media sender id to the device jid it stands for (device 0 bare), on a group call. */
+    readonly groupSenders = new Map<string, string>()
 
     private constructor(
         init: Partial<CallInfo> & {
@@ -92,6 +124,8 @@ export class CallInfo {
         this.stateData = init.stateData
         this.createdAt = init.createdAt ?? new Date()
         this.groupJid = init.groupJid
+        this.joinable = init.joinable ?? false
+        this.groupComposition = init.groupComposition
         this.isOffline = init.isOffline ?? false
         this.callerPn = init.callerPn
         this.encryptionKey = init.encryptionKey
@@ -121,6 +155,23 @@ export class CallInfo {
                 screenSharing: false
             }
         })
+    }
+
+    /**
+     * A group call we join after its ring, from what was kept of it: no offer comes, our accept
+     * to the call is the join. It starts ringing so {@link WaCallMediaSession.acceptCall} takes it.
+     */
+    static newGroupJoin(
+        callId: string,
+        callCreator: string,
+        mediaType: CallMediaType,
+        groupJid?: string
+    ): CallInfo {
+        const call = CallInfo.newIncoming(callId, callCreator, callCreator, undefined, mediaType)
+        call.groupJid = groupJid
+        call.joinable = true
+        call.isGroupCall = true
+        return call
     }
 
     static newIncoming(
@@ -165,6 +216,25 @@ export class CallInfo {
     get isEnded(): boolean {
         return this.stateData.state === CallState.Ended
     }
+
+    /**
+     * A group call: one the manager marked as such, naming a group, or carrying a roster. A 1:1
+     * call that grows into a group offers the newcomer a roster without `group-jid`. `joinable`
+     * says nothing: WA Web marks its 1:1 offers joinable too.
+     */
+    get isGroupCall(): boolean {
+        return (
+            this.markedGroupCall ||
+            this.groupJid !== undefined ||
+            this.groupComposition !== undefined
+        )
+    }
+
+    set isGroupCall(value: boolean) {
+        this.markedGroupCall = value
+    }
+
+    private markedGroupCall = false
 
     get canAccept(): boolean {
         return this.stateData.state === CallState.IncomingRinging && !this.stateData.acceptBlocked
@@ -269,6 +339,7 @@ export class CallInfo {
                 s.handRaised = false
                 s.screenSharing = false
                 this.raisedHands.clear()
+                this.participantMedia.clear()
                 break
 
             case 'hold':
@@ -336,4 +407,70 @@ export class InvalidTransition extends Error {
         this.currentState = currentState
         this.attempted = attempted
     }
+}
+
+/** `<terminate>` reasons that hand the call to another device of this account. */
+const HANDED_OVER_REASONS: ReadonlySet<string> = new Set([
+    'accepted_elsewhere',
+    'rejected_elsewhere',
+    'device_switch'
+])
+
+/**
+ * The `<terminate>` reason the server sends when a group call is over for everybody, once its
+ * last member left; clients never send it. Any other terminate is one participant leaving.
+ */
+export const WA_GROUP_CALL_ENDED_REASON = 'group_call_ended'
+
+/** What a `<terminate>` does to the call it names. */
+export const WA_TERMINATE_DECISION = Object.freeze({
+    End: 'end',
+    /** Keep the call and let the consumer see a terminate arrived. */
+    Ignore: 'ignore',
+    /** Keep the call and report nothing. */
+    IgnoreSilently: 'ignore_silently',
+    /** Keep the call and take the sender off its composition. */
+    RemoveParticipant: 'remove_participant'
+} as const)
+
+export type WaTerminateDecision = (typeof WA_TERMINATE_DECISION)[keyof typeof WA_TERMINATE_DECISION]
+
+/**
+ * Whether a `<terminate>` ends the call. A call nobody may join always ends. On a joinable one
+ * an accept in flight is kept even against `accepted_elsewhere`, `rejected_elsewhere` and
+ * `device_switch` (the exception is joinable-only), those reasons end it elsewhere, an
+ * established group call loses only the sender unless the reason is
+ * {@link WA_GROUP_CALL_ENDED_REASON}, and a call not yet established is kept.
+ */
+export function decideJoinableTerminate(
+    call: CallInfo,
+    reason: string | undefined
+): WaTerminateDecision {
+    // 1:1 offers are joinable too; a 1:1 call keeps ending on any terminate.
+    if (!call.joinable || !call.isGroupCall || call.isEnded) return WA_TERMINATE_DECISION.End
+
+    const state = call.stateData.state
+    const terminateReason = reason ? reason : null
+
+    // Only the server sends it, once the last member left: the call is over in any state.
+    if (terminateReason === WA_GROUP_CALL_ENDED_REASON) return WA_TERMINATE_DECISION.End
+
+    if (state === CallState.Connecting && call.direction === CallDirection.Incoming) {
+        return WA_TERMINATE_DECISION.Ignore
+    }
+    if (terminateReason !== null && HANDED_OVER_REASONS.has(terminateReason)) {
+        return WA_TERMINATE_DECISION.End
+    }
+
+    // Hold has a media path, so it counts as established.
+    const established = state === CallState.Active || state === CallState.OnHold
+    if (call.isGroupCall && established && terminateReason !== WA_GROUP_CALL_ENDED_REASON) {
+        return WA_TERMINATE_DECISION.RemoveParticipant
+    }
+    if (established) return WA_TERMINATE_DECISION.End
+
+    if (terminateReason === null && call.isGroupCall && state === CallState.IncomingRinging) {
+        return WA_TERMINATE_DECISION.IgnoreSilently
+    }
+    return WA_TERMINATE_DECISION.Ignore
 }

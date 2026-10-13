@@ -11,7 +11,12 @@ import type { CallInfo } from './call/call-state.js'
 import { WaCallManager } from './call/WaCallManager.js'
 import { routeCallAck, routeCallReceipt, routeCallStanza } from './signaling/bridge.js'
 import type { WaVideoUpgradeResult } from './signaling/signaling.js'
-import type { CallManagerEvents, CallOfferOptions, EndCallReason } from './types.js'
+import type {
+    CallManagerEvents,
+    CallOfferOptions,
+    CallVideoSubscription,
+    EndCallReason
+} from './types.js'
 
 export interface WaVoipCoordinatorOptions {
     /**
@@ -77,6 +82,11 @@ export interface WaVoipCoordinatorOptions {
      * running `WaCallMediaReceiver`, whose events return through {@link WaVoipCoordinator.media}.
      */
     readonly media?: { readonly mode: 'local' | 'remote' }
+    /**
+     * Emits `voip_call_participant_audio`: each group-call participant's decoded audio apart,
+     * before the mix. Off by default, since every frame is copied for it. Local media only.
+     */
+    readonly participantAudio?: boolean
 }
 
 /** The side of `client.voip` a remote media host talks to. */
@@ -120,7 +130,8 @@ export class WaVoipCoordinator {
             useRawUdpTransport: options.useRawUdpTransport,
             mlowCompanionModel: options.mlowCompanionModel,
             mlowRed: options.mlowRed,
-            mediaMode: options.media?.mode
+            mediaMode: options.media?.mode,
+            participantAudio: options.participantAudio
         })
         this.registerIncomingHandlers(ctx)
         this.wireClientEvents(ctx)
@@ -131,6 +142,9 @@ export class WaVoipCoordinator {
      * preloaded `audioFile`). Resolves with the new call id once the offer is
      * sent; progress then arrives via `voip_call_state`. Rejects when at the
      * concurrent-call limit or if the offer fails to send.
+     *
+     * Set `options.groupJid` and `options.participants` to place a group call
+     * instead, addressed to the call itself; `peerJid` is then not read.
      */
     async startCall(options: CallOfferOptions): Promise<string> {
         return this.manager.startCall(options)
@@ -156,10 +170,31 @@ export class WaVoipCoordinator {
     /**
      * End an active or connecting call, optionally with an {@link EndCallReason}
      * (defaults to `UserEnded`). Sends the terminate stanza, then tears the
-     * call down. No-op if the call is unknown or already ended.
+     * call down. No-op if the call is unknown or already ended. On a group call
+     * this only takes us out, like {@link leaveCall}: the call ends for everybody
+     * once its last member leaves, as with the official client.
      */
     async endCall(callId: string, reason?: EndCallReason): Promise<void> {
         return this.manager.endCall(callId, reason)
+    }
+
+    /**
+     * Leave a group call the other participants stay on. The same as {@link endCall} on a
+     * group call, and the call ends for everybody once its last member leaves. No-op if the
+     * call is unknown or already ended; throws on a 1:1 call.
+     */
+    async leaveCall(callId: string): Promise<void> {
+        return this.manager.leaveCall(callId)
+    }
+
+    /**
+     * Join a group call already in progress that this side declined, let ring out or left,
+     * while it goes on. Progress arrives via `voip_call_state`, as on an accepted call. Throws
+     * when no such call is known here (only one this side was rung for), when this side is on
+     * it already, or at the concurrent-call limit.
+     */
+    async joinCall(callId: string): Promise<void> {
+        return this.manager.joinCall(callId)
     }
 
     /**
@@ -181,6 +216,15 @@ export class WaVoipCoordinator {
     }
 
     /**
+     * Ask one participant of a group call to mute, by its device jid. A request: the target
+     * decides, and a `voip_call_peer_mute` follows if it complies. Throws on an unknown
+     * `callId`, a 1:1 call or a failed send.
+     */
+    async requestParticipantMute(callId: string, participantJid: string): Promise<void> {
+        return this.manager.requestParticipantMute(callId, participantJid)
+    }
+
+    /**
      * Raise or lower the local hand on `callId` and announce it to the peer. Durable state:
      * the peer keeps seeing the hand until it is lowered. Repeating it sends nothing, an
      * inactive call is a no-op, and the peer's own hands are `voip_call_hand_raise` /
@@ -195,7 +239,8 @@ export class WaVoipCoordinator {
      * stream: the screen replaces the camera on the call's existing video stream, so
      * whatever reaches {@link feedLiveVideo} from here on is what the peer renders as the
      * share. Throws on an unknown `callId` or a failed send, and - starting a share only -
-     * on a group call or one with no video yet ({@link requestVideoUpgrade} first).
+     * on a call with no video yet ({@link requestVideoUpgrade} or {@link setVideoEnabled}
+     * first).
      */
     async setScreenShare(callId: string, sharing: boolean): Promise<void> {
         return this.manager.setScreenShare(callId, sharing)
@@ -210,11 +255,35 @@ export class WaVoipCoordinator {
     }
 
     /**
+     * Turn our camera on or off on a group call: whatever reaches {@link feedLiveVideo}
+     * afterwards goes to the call, and the others are told. A no-op on an inactive call.
+     * Throws on an unknown `callId`, a failed send, or a 1:1 call, which turns video on
+     * through {@link requestVideoUpgrade}.
+     */
+    async setVideoEnabled(callId: string, enabled: boolean): Promise<void> {
+        return this.manager.setVideoEnabled(callId, enabled)
+    }
+
+    /**
+     * Choose which participants' video a group call asks the relay for, and at what quality.
+     * `null` returns to the default: every participant with the camera on. Not applied by a
+     * media host that cannot carry it. Throws on an unknown `callId`.
+     */
+    setVideoSubscriptions(
+        callId: string,
+        subscriptions: readonly CallVideoSubscription[] | null
+    ): void {
+        this.manager.setVideoSubscriptions(callId, subscriptions)
+    }
+
+    /**
      * Ask the peer to turn an audio call into a video call and wait for the answer. Resolves
      * with one of {@link WA_VIDEO_UPGRADE_RESULT}; only `accepted` means
      * {@link feedLiveVideo} now reaches the wire. Bounded by the peer's own guard timer, so
-     * it settles in about five seconds even against a client that never answers. Throws on
-     * an unknown `callId`, an inactive call, or one that already carries video.
+     * it settles in about five seconds even against a client that never answers. On a group
+     * call the server is asked instead: `accepted` once it turns the call into a video call,
+     * with our camera on; a group call already carrying video only turns the camera on.
+     * Throws on an unknown `callId`, an inactive call, or one where we already send video.
      */
     async requestVideoUpgrade(callId: string): Promise<WaVideoUpgradeResult> {
         return this.manager.requestVideoUpgrade(callId)
@@ -386,23 +455,38 @@ export class WaVoipCoordinator {
         this.manager.on('call_ended', (call) => {
             ctx.emit('voip_call_ended', call)
         })
-        this.manager.on('call_peer_mute', (call, muted) => {
-            ctx.emit('voip_call_peer_mute', { call, muted })
+        this.manager.on('call_peer_mute', (call, muted, participantJid) => {
+            ctx.emit('voip_call_peer_mute', { call, muted, participantJid })
+        })
+        this.manager.on('call_mute_requested', (call, participantJid, requestState) => {
+            ctx.emit('voip_call_mute_requested', { call, participantJid, requestState })
         })
         this.manager.on('call_inbound_audio', (call, pcm) => {
             ctx.emit('voip_call_inbound_audio', { call, pcm })
         })
-        this.manager.on('call_inbound_video_rtp', (call, packet) => {
-            ctx.emit('voip_call_inbound_video_rtp', { call, packet })
+        this.manager.on('call_participant_audio', (call, participantJid, pcm) => {
+            ctx.emit('voip_call_participant_audio', { call, participantJid, pcm })
         })
-        this.manager.on('call_inbound_video', (call, frame) => {
-            ctx.emit('voip_call_inbound_video', { call, frame })
+        this.manager.on('call_participant_media', (call, participantJid, receiving) => {
+            ctx.emit('voip_call_participant_media', { call, participantJid, receiving })
         })
-        this.manager.on('call_screen_share', (call, share) => {
-            ctx.emit('voip_call_screen_share', { call, share })
+        this.manager.on('call_inbound_video_rtp', (call, packet, participantJid) => {
+            ctx.emit('voip_call_inbound_video_rtp', { call, packet, participantJid })
         })
-        this.manager.on('call_peer_video_state', (call, change) => {
-            ctx.emit('voip_call_peer_video_state', { call, change })
+        this.manager.on('call_inbound_video', (call, frame, participantJid) => {
+            ctx.emit('voip_call_inbound_video', { call, frame, participantJid })
+        })
+        this.manager.on('call_screen_share', (call, share, participantJid) => {
+            ctx.emit('voip_call_screen_share', { call, share, participantJid })
+        })
+        this.manager.on('call_peer_video_state', (call, change, participantJid) => {
+            ctx.emit('voip_call_peer_video_state', { call, change, participantJid })
+        })
+        this.manager.on('call_video_upgraded', (call, participantJid) => {
+            ctx.emit('voip_call_video_upgraded', { call, participantJid })
+        })
+        this.manager.on('call_participants_changed', (call, diff) => {
+            ctx.emit('voip_call_participants_changed', { call, diff })
         })
         this.manager.on('call_outbound_audio_finished', (call) => {
             ctx.emit('voip_call_outbound_audio_finished', call)
@@ -410,8 +494,8 @@ export class WaVoipCoordinator {
         this.manager.on('call_hand_raise', (call, participantJid, raised) => {
             ctx.emit('voip_call_hand_raise', { call, participantJid, raised })
         })
-        this.manager.on('call_reaction', (call, reaction) => {
-            ctx.emit('voip_call_reaction', { call, reaction })
+        this.manager.on('call_reaction', (call, reaction, participantJid) => {
+            ctx.emit('voip_call_reaction', { call, reaction, participantJid })
         })
         this.manager.on('call_media', (call, message) => {
             ctx.emit('voip_call_media', { call, message })

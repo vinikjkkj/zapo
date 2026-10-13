@@ -203,6 +203,7 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
                 const authToken = authTokenId ? authTokens.get(authTokenId) : undefined
 
                 const shared = {
+                    tokenId,
                     token: tokens.get(tokenId) || '',
                     authToken,
                     rawAuthToken: authTokenId ? rawAuthTokens.get(authTokenId) : undefined,

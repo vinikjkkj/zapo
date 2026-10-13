@@ -29,7 +29,9 @@ function mocks() {
         handleCallRaiseHand: () => void dispatched.push('raise_hand'),
         handleRelayElection: () => void dispatched.push('relay_election'),
         handleCallScreenShare: () => void dispatched.push('screen_share'),
-        handleCallVideoState: () => void dispatched.push('video')
+        handleCallVideoState: () => void dispatched.push('video'),
+        handleCallGroupUpdate: async () => void dispatched.push('group_update'),
+        handleCallEncRekey: async () => void dispatched.push('enc_rekey')
     } as unknown as WaCallManager
     return { sent, dispatched, deps, manager }
 }
@@ -67,7 +69,9 @@ test('routeCallStanza routes each call tag to its handler', async () => {
         'user_action',
         'raise_hand',
         'video',
-        'relay_election'
+        'relay_election',
+        'group_update',
+        'enc_rekey'
     ]) {
         const { dispatched, deps, manager } = mocks()
         await routeCallStanza(manager, deps, callNode(tag))
@@ -131,6 +135,31 @@ test('routeCallStanza routes both screen-share payloads to the same handler', as
         assert.equal(sent[0].attrs.class, 'call')
         assert.equal(sent[0].attrs.type, tag)
     }
+})
+
+test('screen share and video state reach the manager with the device that sent them', async () => {
+    const received: [string, string][] = []
+    const manager = {
+        handleCallScreenShare: (_node: BinaryNode, peerJid: string) =>
+            void received.push(['screen_share', peerJid]),
+        handleCallVideoState: (_node: BinaryNode, peerJid: string) =>
+            void received.push(['video', peerJid])
+    } as unknown as WaCallManager
+    const { deps } = mocks()
+    const from = (innerTag: string, sender: string): BinaryNode => ({
+        ...callNode(innerTag),
+        attrs: { from: sender, id: 'STANZA5' }
+    })
+
+    await routeCallStanza(manager, deps, from('video', '184478207058035:9@lid'))
+    await routeCallStanza(manager, deps, from('screen_share', '184478207058035:9@lid'))
+    await routeCallStanza(manager, deps, from('screen', '5511:0@lid'))
+
+    assert.deepEqual(received, [
+        ['video', '184478207058035:9@lid'],
+        ['screen_share', '184478207058035:9@lid'],
+        ['screen_share', '5511@lid']
+    ])
 })
 
 test('routeCallStanza acks a video state stanza with type=video', async () => {

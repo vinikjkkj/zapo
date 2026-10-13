@@ -1388,3 +1388,31 @@ test('a relay reachable over IPv4 and IPv6 is announced once, by its IPv4 addres
         [['gru1c01', new Uint8Array([10, 0, 0, 1, 0x0d, 0x96])]]
     )
 })
+
+test('an offer the server refuses ends the call with setup_failed instead of ringing forever', async () => {
+    const { deps, stores, sent } = createMockDeps()
+    const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
+    const ended: CallInfo[] = []
+    manager.on('call_ended', (call) => ended.push(call))
+    const callId = await manager.startCall({ peerJid: '2222222222@lid' })
+    assert.equal(manager.getCall(callId)?.stateData.state, CallState.Ringing)
+
+    await manager.handleCallAck({
+        tag: 'ack',
+        attrs: { class: 'call', type: 'offer', 'call-id': callId, id: 'OFFERMSGID', error: '400' }
+    })
+
+    assert.equal(manager.getCall(callId), null)
+    assert.equal(ended.length, 1)
+    assert.equal(ended[0].stateData.endReason, EndCallReason.SetupFailed)
+    const [terminate] = findByInnerTag(sent, 'terminate')
+    assert.equal(terminate.attrs.to, '2222222222@lid')
+    assert.deepEqual((terminate.content as BinaryNode[])[0].attrs, {
+        'call-id': callId,
+        'call-creator': '1111111111@lid',
+        reason: 'setup_failed'
+    })
+
+    // The slot is free again.
+    await manager.startCall({ peerJid: '3333333333@lid' })
+})

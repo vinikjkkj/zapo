@@ -89,29 +89,29 @@ export function parseScreenShareNode(node: BinaryNode): PeerScreenShare | null {
  * of ours. A request: the peer's handler refuses one in a group call, or before the call
  * is up.
  *
- * Four attributes wide and no more - no codec, no geometry, measured on the wire. The
- * version is not a parameter but a claim about the layout this package produces, see
- * {@link WA_SCREEN_SHARE_SEND_VERSION}. Nothing here waits for a reply.
+ * No codec and no geometry, measured on the wire. The version is not a parameter but a
+ * claim about the layout this package produces, see {@link WA_SCREEN_SHARE_SEND_VERSION}.
+ * `screenShareId` is the sender's count of the starts and stops it sent on the call, from 1.
+ * Nothing here waits for a reply.
  */
 export function buildScreenShareStanza(
     peerDeviceJid: string,
     callId: string,
     callCreator: string,
-    screenShareState: number
+    screenShareState: number,
+    screenShareId?: number
 ): BinaryNode {
+    const attrs: Record<string, string> = {
+        'call-id': callId,
+        'call-creator': callCreator,
+        screenshare_state: String(screenShareState),
+        version: String(WA_SCREEN_SHARE_SEND_VERSION)
+    }
+    if (screenShareId !== undefined) attrs.screen_share_id = String(screenShareId)
+
     return {
         tag: 'call',
         attrs: { to: peerDeviceJid, id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'screen_share',
-                attrs: {
-                    'call-id': callId,
-                    'call-creator': callCreator,
-                    screenshare_state: String(screenShareState),
-                    version: String(WA_SCREEN_SHARE_SEND_VERSION)
-                }
-            }
-        ]
+        content: [{ tag: 'screen_share', attrs }]
     }
 }

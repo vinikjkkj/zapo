@@ -83,10 +83,17 @@ export async function routeCallStanza(
         // `screen_share` negotiates the share; `screen` adds the surface geometry.
         case 'screen_share':
         case 'screen':
-            manager.handleCallScreenShare(node)
+            manager.handleCallScreenShare(node, normalizedPeerJid)
             break
         case 'video':
-            manager.handleCallVideoState(node)
+            manager.handleCallVideoState(node, normalizedPeerJid)
+            break
+        case 'group_update':
+            await manager.handleCallGroupUpdate(node)
+            break
+        // A group offer carries no key: it arrives here or not at all.
+        case 'enc_rekey':
+            await manager.handleCallEncRekey(node, normalizedPeerJid)
             break
         case 'relay_election':
             manager.handleRelayElection(node)

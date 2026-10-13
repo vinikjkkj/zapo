@@ -184,8 +184,8 @@ test('starting a share announces it with one stanza', async (t) => {
 
     await harness.session.setScreenShare(true)
 
-    // Transcribed from a capture of the reference client sharing: one
-    // self-closed node, these four attributes, and nothing beside it.
+    // Transcribed from captures of the reference clients sharing: one
+    // self-closed node, these five attributes, and nothing beside it.
     assert.equal(harness.sent.length, 1)
     assert.equal(harness.sent[0].attrs.to, PEER_JID)
     assert.deepEqual(payload(harness.sent[0]), {
@@ -194,7 +194,8 @@ test('starting a share announces it with one stanza', async (t) => {
             'call-id': ID,
             'call-creator': PEER_JID,
             screenshare_state: '1',
-            version: '2'
+            version: '2',
+            screen_share_id: '1'
         }
     })
 
@@ -257,14 +258,27 @@ test('a share on a call with no video is refused and announces nothing', async (
     assert.equal(harness.call.stateData.screenSharing, false)
 })
 
-/** The peer's own handler refuses a share in a group call outright. */
-test('a share on a group call is refused and announces nothing', async (t) => {
+/** A group call shares like any other, announced to the call itself. */
+test('a share on a group call goes to the call itself', async (t) => {
     const harness = createHarness()
     t.after(() => harness.session.cleanup())
     activate(harness.call)
     harness.call.groupJid = '120363000000000000@g.us'
 
-    await assert.rejects(() => harness.session.setScreenShare(true), /group call/)
+    await harness.session.setScreenShare(true)
+
+    assert.equal(harness.sent.length, 1)
+    assert.equal(harness.sent[0].attrs.to, `${ID}@call`)
+    assert.equal(harness.call.stateData.screenSharing, true)
+})
+
+test('a share on a group call with our camera off is refused, as on a voice call', async (t) => {
+    const harness = createHarness(CallMediaType.Audio)
+    t.after(() => harness.session.cleanup())
+    activate(harness.call)
+    harness.call.groupJid = '120363000000000000@g.us'
+
+    await assert.rejects(() => harness.session.setScreenShare(true), /no video/)
 
     assert.deepEqual(harness.sent, [])
     assert.equal(harness.call.stateData.screenSharing, false)
