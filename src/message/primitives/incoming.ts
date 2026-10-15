@@ -334,21 +334,28 @@ function shouldEmitIncomingMessage(message: proto.IMessage): boolean {
     if (!pickDirectSenderKeyDistributionPayload(message)) {
         return true
     }
+
     const messageRecord = message as Record<string, unknown>
+
     for (const field in messageRecord) {
         if (
             field === 'senderKeyDistributionMessage' ||
             field === 'fastRatchetKeySenderKeyDistributionMessage' ||
+            field === 'messageContextInfo' ||
             field === '$$unknownFieldCount'
         ) {
             continue
         }
+
         const value = messageRecord[field]
+
         if (value === null || value === undefined) {
             continue
         }
+
         return true
     }
+
     return false
 }
 
@@ -619,6 +626,7 @@ export async function handleIncomingMessageAck(
     if (Array.isArray(nodeContent) && nodeContent.length > 0) {
         const senderJid = node.attrs.participant ?? node.attrs.from
         let hasSuccessfulDecrypt = false
+        let hasApplicationMessage = false
         let firstDecryptFailure: DecryptEncNodeResult | null = null
         let encCount = 0
         let firstEncType: string | undefined
@@ -705,8 +713,14 @@ export async function handleIncomingMessageAck(
                 default:
                     continue
             }
-            if (result.success) hasSuccessfulDecrypt = true
-            else if (!firstDecryptFailure) firstDecryptFailure = result
+            if (result.success) {
+                hasSuccessfulDecrypt = true
+                if (result.encType === 'skmsg') {
+                    hasApplicationMessage = true
+                }
+            } else if (!firstDecryptFailure) {
+                firstDecryptFailure = result
+            }
         }
 
         if (encCount > 1 && firstEncType === 'skmsg') {
@@ -717,7 +731,7 @@ export async function handleIncomingMessageAck(
                 encCount
             })
         }
-        if (encCount > 0 && !hasSuccessfulDecrypt && firstDecryptFailure) {
+        if (encCount > 0 && !hasApplicationMessage && firstDecryptFailure) {
             await sendRetryReceiptForDecryptFailure(
                 node,
                 options,
