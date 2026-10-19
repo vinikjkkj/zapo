@@ -381,6 +381,12 @@ export interface WaSendReceiptInput {
     readonly from?: string
     readonly t?: string
     readonly peerParticipantPn?: string
+    /**
+     * Every id this receipt acknowledges, INCLUDING {@link id}. The `<list>`
+     * child is built from this minus its first element, since that one is
+     * already carried by the stanza's `id` attribute. Pass only the remainder
+     * and the first of it is silently dropped.
+     */
     readonly listIds?: readonly string[]
     readonly content?: readonly BinaryNode[]
 }
