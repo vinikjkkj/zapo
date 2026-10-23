@@ -135,6 +135,29 @@ test('resolveButtonAddonKind classifies list/interactive incl. documentWithCapti
         }),
         'order_details'
     )
+    assert.equal(
+        resolveButtonAddonKind({
+            interactiveMessage: {
+                nativeFlowMessage: {
+                    buttons: [{ name: 'form_message', buttonParamsJson: '{}' }]
+                }
+            }
+        }),
+        'form_message'
+    )
+    assert.equal(
+        resolveButtonAddonKind({
+            interactiveMessage: {
+                nativeFlowMessage: {
+                    buttons: [
+                        { name: 'cta_url', buttonParamsJson: '{}' },
+                        { name: 'form_message', buttonParamsJson: '{}' }
+                    ]
+                }
+            }
+        }),
+        'interactive'
+    )
     assert.equal(resolveButtonAddonKind({ interactiveMessage: {} }), null)
     assert.equal(resolveButtonAddonKind({ conversation: 'hi' }), null)
     assert.equal(

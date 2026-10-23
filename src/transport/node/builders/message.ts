@@ -190,7 +190,7 @@ export function buildButtonAddonNode(kind: WaButtonAddonKind): BinaryNode {
         }
     }
 
-    const nativeFlowName = kind === 'payment_info' || kind === 'order_details' ? kind : 'mixed'
+    const nativeFlowName = kind === 'interactive' ? 'mixed' : kind
     const nativeFlowAttrs: Record<string, string> =
         nativeFlowName === 'mixed' ? { v: '9', name: 'mixed' } : { name: nativeFlowName }
 

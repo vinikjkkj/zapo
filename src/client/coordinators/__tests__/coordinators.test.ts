@@ -155,6 +155,9 @@ function createMessageDispatchCoordinator(
             content: WaSendMessageContent
         ) => Promise<{ readonly message: Proto.IMessage }>
         readonly senderKeyManager?: unknown
+        readonly messageClient?: unknown
+        readonly retryTracker?: unknown
+        readonly fanoutResolver?: unknown
         readonly signalStore?: unknown
         readonly identityStore?: unknown
         readonly deviceListStore?: unknown
@@ -169,10 +172,10 @@ function createMessageDispatchCoordinator(
     return new WaMessageDispatchCoordinator({
         logger: createNoopLogger(),
         emitMessageSend: overrides?.emitMessageSend,
-        messageClient: {} as never,
-        retryTracker: {} as never,
+        messageClient: (overrides?.messageClient ?? {}) as never,
+        retryTracker: (overrides?.retryTracker ?? {}) as never,
         sessionResolver: {} as never,
-        fanoutResolver: {} as never,
+        fanoutResolver: (overrides?.fanoutResolver ?? {}) as never,
         groupMetadataCache,
         appStateSyncKeyProtocol: {} as never,
         buildMessageContent: overrides?.buildMessageContent ?? (async () => ({ message: {} })),
@@ -361,6 +364,52 @@ test('message dispatch keeps the user messageContextInfo on a quoted typed text 
     assert.equal(decoded.extendedTextMessage?.contextInfo?.expiration, 60)
     assert.equal(decoded.messageContextInfo?.messageAssociation?.parentMessageKey?.id, 'PARENT')
     assert.equal(decoded.messageContextInfo?.messageSecret?.byteLength, 32)
+})
+
+test('message dispatch publishes a form_message flow with a bare native_flow name', async () => {
+    let published: BinaryNode | undefined
+    const stop = new Error('stop after publish')
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+        meJid: '5511000000000@s.whatsapp.net',
+        buildMessageContent: async () => ({
+            message: {
+                interactiveMessage: {
+                    nativeFlowMessage: {
+                        buttons: [{ name: 'form_message', buttonParamsJson: '{}' }]
+                    }
+                }
+            }
+        }),
+        signalStore: { getRegistrationInfo: async () => null },
+        fanoutResolver: { resolveGroupParticipantDeviceJids: async () => [] },
+        retryTracker: {
+            track: async (_meta: unknown, publish: () => Promise<unknown>) => publish()
+        },
+        messageClient: {
+            publishNode: async (node: BinaryNode) => {
+                published = node
+                throw stop
+            }
+        },
+        senderKeyManager: {
+            prepareGroupEncryption: async () => ({
+                distributionMessage: {},
+                ciphertext: { ciphertext: new Uint8Array(1) },
+                keyId: 1
+            })
+        }
+    })
+
+    await assert.rejects(
+        () => coordinator.sendMessage('120363000000000001@g.us', { text: 'x' } as never, {}),
+        stop
+    )
+
+    assert.equal(published?.attrs.type, 'text')
+    const biz = (published?.content as BinaryNode[]).find((child) => child.tag === 'biz')
+    const interactive = (biz?.content as BinaryNode[])[0]
+    assert.deepEqual(interactive.attrs, { type: 'native_flow', v: '1' })
+    assert.deepEqual((interactive.content as BinaryNode[])[0].attrs, { name: 'form_message' })
 })
 
 test('outgoing secret sender prefers meLid and recedes to meJid when lid is malformed', () => {

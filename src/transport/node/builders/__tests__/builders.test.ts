@@ -810,6 +810,16 @@ test('message builders create fanout nodes and validate participant requirements
     assert.equal(reviewInteractive.content[0].attrs.name, 'order_details')
     assert.equal(reviewInteractive.content[0].attrs.v, undefined)
 
+    const formAddon = buildButtonAddonNode('form_message')
+    if (!Array.isArray(formAddon.content)) throw new Error('expected biz children')
+    const formInteractive = formAddon.content[0]
+    assert.equal(formInteractive.attrs.type, 'native_flow')
+    assert.equal(formInteractive.attrs.v, '1')
+    if (!Array.isArray(formInteractive.content)) {
+        throw new Error('expected native_flow child')
+    }
+    assert.deepEqual(formInteractive.content[0].attrs, { name: 'form_message' })
+
     const fanoutWithAddon = buildDirectMessageFanoutNode({
         to: '5511@s.whatsapp.net',
         type: 'text',
