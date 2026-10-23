@@ -7,7 +7,8 @@ import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
 import { buildMediaMessageContent, type WaMediaMessageOptions } from '@client/messaging/messages'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
-import { proto } from '@proto'
+import type { WaSendMessageContent } from '@message/types'
+import { proto, type Proto } from '@proto'
 import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
 import type { ServerClock } from '@util/clock'
 
@@ -826,4 +827,167 @@ test('buildMediaMessageContent applies server-clock skew when caller omits times
         { to: chatJid }
     )
     assert.equal(keep.message.keepInChatMessage?.timestampMs, fixedMs)
+})
+
+const ASSOCIATION_CHAT = '551122222222@s.whatsapp.net'
+
+const USER_MESSAGE_CONTEXT_INFO: Proto.IMessageContextInfo = {
+    messageAssociation: {
+        associationType: proto.MessageAssociation.AssociationType.MEDIA_ALBUM,
+        parentMessageKey: { remoteJid: ASSOCIATION_CHAT, fromMe: true, id: 'PARENT' }
+    }
+}
+
+const TYPED_MESSAGE_CASES: ReadonlyArray<{
+    readonly name: string
+    readonly content: WaSendMessageContent
+    readonly field: keyof Proto.IMessage
+    readonly ownKeys: readonly string[]
+}> = [
+    {
+        name: 'text',
+        content: { type: 'text', text: 'hi' },
+        field: 'extendedTextMessage',
+        ownKeys: ['extendedTextMessage']
+    },
+    {
+        name: 'reaction',
+        content: {
+            type: 'reaction',
+            emoji: 'x',
+            target: { remoteJid: ASSOCIATION_CHAT, id: 'S1', fromMe: true }
+        },
+        field: 'reactionMessage',
+        ownKeys: ['reactionMessage']
+    },
+    {
+        name: 'revoke',
+        content: {
+            type: 'revoke',
+            target: { remoteJid: ASSOCIATION_CHAT, id: 'S1', fromMe: true }
+        },
+        field: 'protocolMessage',
+        ownKeys: ['protocolMessage']
+    },
+    {
+        name: 'pin',
+        content: {
+            type: 'pin',
+            target: { remoteJid: ASSOCIATION_CHAT, id: 'S1', fromMe: true }
+        },
+        field: 'pinInChatMessage',
+        ownKeys: ['pinInChatMessage', 'messageContextInfo']
+    },
+    {
+        name: 'keep',
+        content: {
+            type: 'keep',
+            target: { remoteJid: ASSOCIATION_CHAT, id: 'S1', fromMe: true }
+        },
+        field: 'keepInChatMessage',
+        ownKeys: ['keepInChatMessage']
+    },
+    {
+        name: 'poll',
+        content: { type: 'poll', name: 'p', options: ['a', 'b'], selectableCount: 2 },
+        field: 'pollCreationMessage',
+        ownKeys: ['pollCreationMessage']
+    },
+    {
+        name: 'poll-vote',
+        content: {
+            type: 'poll-vote',
+            poll: {
+                id: 'POLL',
+                fromMe: false,
+                authorJid: '551100000000@s.whatsapp.net',
+                messageSecret: new Uint8Array(32).fill(7)
+            },
+            selectedOptionNames: ['a']
+        },
+        field: 'pollUpdateMessage',
+        ownKeys: ['pollUpdateMessage']
+    },
+    {
+        name: 'event',
+        content: { type: 'event', name: 'e', startTime: 1_700_000_000 },
+        field: 'eventMessage',
+        ownKeys: ['eventMessage']
+    },
+    {
+        name: 'event-response',
+        content: {
+            type: 'event-response',
+            event: {
+                id: 'EVENT',
+                fromMe: false,
+                authorJid: '551100000000@s.whatsapp.net',
+                messageSecret: new Uint8Array(32).fill(9)
+            },
+            response: 'going'
+        },
+        field: 'encEventResponseMessage',
+        ownKeys: ['encEventResponseMessage']
+    }
+]
+
+const TYPED_MESSAGE_BUILD_CONTEXT = {
+    to: ASSOCIATION_CHAT,
+    outgoingStanzaId: 'OUT',
+    meJid: '551199999999@s.whatsapp.net'
+}
+
+for (const { name, content, field, ownKeys } of TYPED_MESSAGE_CASES) {
+    test(`buildMediaMessageContent sends the user messageContextInfo next to a ${name} message`, async () => {
+        const plain = await buildMediaMessageContent(
+            BUILD_OPTIONS,
+            content,
+            TYPED_MESSAGE_BUILD_CONTEXT
+        )
+        const withInfo = await buildMediaMessageContent(
+            BUILD_OPTIONS,
+            { ...(content as object), messageContextInfo: USER_MESSAGE_CONTEXT_INFO },
+            TYPED_MESSAGE_BUILD_CONTEXT
+        )
+
+        assert.deepEqual(Object.keys(plain.message), ownKeys)
+        assert.deepEqual(
+            withInfo.message.messageContextInfo?.messageAssociation,
+            USER_MESSAGE_CONTEXT_INFO.messageAssociation
+        )
+        assert.deepEqual(
+            Object.keys(withInfo.message[field] as object).sort(),
+            Object.keys(plain.message[field] as object).sort()
+        )
+        assert.equal('messageContextInfo' in (withInfo.message[field] as object), false)
+    })
+}
+
+test('buildMediaMessageContent lets the builder messageContextInfo win field by field', async () => {
+    const built = await buildMediaMessageContent(
+        BUILD_OPTIONS,
+        {
+            type: 'pin',
+            target: { remoteJid: ASSOCIATION_CHAT, id: 'S1', fromMe: true },
+            messageContextInfo: { ...USER_MESSAGE_CONTEXT_INFO, messageAddOnDurationInSecs: 5 }
+        },
+        { to: ASSOCIATION_CHAT }
+    )
+
+    assert.equal(built.message.messageContextInfo?.messageAddOnDurationInSecs, 86_400)
+    assert.deepEqual(
+        built.message.messageContextInfo?.messageAssociation,
+        USER_MESSAGE_CONTEXT_INFO.messageAssociation
+    )
+})
+
+test('buildMediaMessageContent leaves a raw proto message and its messageContextInfo untouched', async () => {
+    const raw: Proto.IMessage = {
+        conversation: 'hi',
+        messageContextInfo: USER_MESSAGE_CONTEXT_INFO
+    }
+
+    const built = await buildMediaMessageContent(BUILD_OPTIONS, raw)
+
+    assert.equal(built.message, raw)
 })

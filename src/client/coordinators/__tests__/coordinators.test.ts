@@ -13,6 +13,7 @@ import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDisp
 import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import { createStreamControlHandler } from '@client/coordinators/WaStreamControlCoordinator'
 import { createGroupMetadataCache } from '@client/messaging/group-metadata'
+import { buildMediaMessageContent, type WaMediaMessageOptions } from '@client/messaging/messages'
 import type {
     WaAppStateMutationEvent,
     WaGroupEvent,
@@ -23,6 +24,9 @@ import type {
 import { createNoopLogger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { getContextInfo } from '@message/context-info'
+import { unpadPkcs7 } from '@message/encode/padding'
+import type { WaSendMessageContent } from '@message/types'
+import { proto, type Proto } from '@proto'
 import {
     WA_APP_STATE_COLLECTION_STATES,
     WA_CONNECTION_REASONS,
@@ -147,6 +151,13 @@ function createMessageDispatchCoordinator(
         readonly emitMessageSend?: (event: WaOutgoingMessageEvent) => void
         readonly threadStore?: WaThreadStore
         readonly chatMetadataStore?: WaChatMetadataMemoryStore
+        readonly buildMessageContent?: (
+            content: WaSendMessageContent
+        ) => Promise<{ readonly message: Proto.IMessage }>
+        readonly senderKeyManager?: unknown
+        readonly signalStore?: unknown
+        readonly identityStore?: unknown
+        readonly deviceListStore?: unknown
     }
 ): WaMessageDispatchCoordinator {
     const groupMetadataCache = createGroupMetadataCache({
@@ -164,13 +175,13 @@ function createMessageDispatchCoordinator(
         fanoutResolver: {} as never,
         groupMetadataCache,
         appStateSyncKeyProtocol: {} as never,
-        buildMessageContent: async () => ({ message: {} }),
-        senderKeyManager: {} as never,
+        buildMessageContent: overrides?.buildMessageContent ?? (async () => ({ message: {} })),
+        senderKeyManager: (overrides?.senderKeyManager ?? {}) as never,
         signalProtocol: {} as never,
-        signalStore: {} as never,
+        signalStore: (overrides?.signalStore ?? {}) as never,
         sessionStore: {} as never,
-        identityStore: {} as never,
-        deviceListStore: {} as never,
+        identityStore: (overrides?.identityStore ?? {}) as never,
+        deviceListStore: (overrides?.deviceListStore ?? {}) as never,
         threadStore: overrides?.threadStore ?? createStubThreadStore(),
         chatMetadataStore: overrides?.chatMetadataStore ?? new WaChatMetadataMemoryStore(60_000),
         signalDeviceSync: (overrides?.signalDeviceSync ?? {
@@ -240,6 +251,116 @@ test('message dispatch emits message_send with the outbound proto and destinatio
     assert.equal(events.length, 1)
     assert.equal(events[0]?.to, '5511999999999@s.whatsapp.net')
     assert.ok(events[0]?.message)
+})
+
+test('message dispatch keeps a user messageAssociation next to the injected secret and icdc', async () => {
+    const messageAssociation: Proto.IMessageAssociation = {
+        associationType: proto.MessageAssociation.AssociationType.MEDIA_ALBUM,
+        parentMessageKey: {
+            remoteJid: '120363000000000000@g.us',
+            fromMe: true,
+            id: 'ALBUM-PARENT'
+        }
+    }
+    let sentPlaintext: Uint8Array | undefined
+    const stop = new Error('stop after encode')
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+        meJid: '5511000000000@s.whatsapp.net',
+        buildMessageContent: async () => ({
+            message: { messageContextInfo: { messageAssociation }, imageMessage: { caption: 'c' } }
+        }),
+        signalStore: { getRegistrationInfo: async () => null },
+        deviceListStore: {
+            getUserDevicesBatch: async () => [
+                { deviceJids: ['5511000000000:0@s.whatsapp.net'], updatedAtMs: Date.now() }
+            ]
+        },
+        identityStore: { getRemoteIdentities: async () => [new Uint8Array(32).fill(7)] },
+        senderKeyManager: {
+            prepareGroupEncryption: async (
+                _groupJid: string,
+                _sender: unknown,
+                plaintext: Uint8Array
+            ) => {
+                sentPlaintext = plaintext
+                throw stop
+            }
+        }
+    })
+
+    await assert.rejects(
+        () =>
+            coordinator.sendMessage(
+                '120363000000000001@g.us',
+                { type: 'image', media: new Uint8Array(1) },
+                { expirationSeconds: 60 }
+            ),
+        stop
+    )
+
+    const decoded = proto.Message.decode(unpadPkcs7(sentPlaintext!))
+    const context = decoded.messageContextInfo
+    assert.equal(
+        context?.messageAssociation?.associationType,
+        proto.MessageAssociation.AssociationType.MEDIA_ALBUM
+    )
+    assert.equal(context?.messageAssociation?.parentMessageKey?.id, 'ALBUM-PARENT')
+    assert.equal(context?.messageSecret?.byteLength, 32)
+    assert.ok(context?.deviceListMetadata?.senderKeyHash?.byteLength)
+    assert.equal(decoded.imageMessage?.contextInfo?.expiration, 60)
+})
+
+test('message dispatch keeps the user messageContextInfo on a quoted typed text send', async () => {
+    const messageAssociation: Proto.IMessageAssociation = {
+        associationType: proto.MessageAssociation.AssociationType.MEDIA_ALBUM,
+        parentMessageKey: { remoteJid: '120363000000000001@g.us', fromMe: true, id: 'PARENT' }
+    }
+    let sentPlaintext: Uint8Array | undefined
+    const stop = new Error('stop after encode')
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+        meJid: '5511000000000@s.whatsapp.net',
+        buildMessageContent: (content) =>
+            buildMediaMessageContent(
+                { logger: createNoopLogger() } as unknown as WaMediaMessageOptions,
+                content
+            ),
+        signalStore: { getRegistrationInfo: async () => null },
+        senderKeyManager: {
+            prepareGroupEncryption: async (
+                _groupJid: string,
+                _sender: unknown,
+                plaintext: Uint8Array
+            ) => {
+                sentPlaintext = plaintext
+                throw stop
+            }
+        }
+    })
+
+    await assert.rejects(
+        () =>
+            coordinator.sendMessage(
+                '120363000000000001@g.us',
+                { type: 'text', text: 'hi', messageContextInfo: { messageAssociation } },
+                {
+                    expirationSeconds: 60,
+                    quote: {
+                        remoteJid: '120363000000000001@g.us',
+                        id: 'QUOTED',
+                        fromMe: false,
+                        participant: '5511888888888@s.whatsapp.net'
+                    }
+                }
+            ),
+        stop
+    )
+
+    const decoded = proto.Message.decode(unpadPkcs7(sentPlaintext!))
+    assert.equal(decoded.extendedTextMessage?.text, 'hi')
+    assert.equal(decoded.extendedTextMessage?.contextInfo?.stanzaId, 'QUOTED')
+    assert.equal(decoded.extendedTextMessage?.contextInfo?.expiration, 60)
+    assert.equal(decoded.messageContextInfo?.messageAssociation?.parentMessageKey?.id, 'PARENT')
+    assert.equal(decoded.messageContextInfo?.messageSecret?.byteLength, 32)
 })
 
 test('outgoing secret sender prefers meLid and recedes to meJid when lid is malformed', () => {

@@ -10,7 +10,8 @@ import type {
     WaSendPollVoteMessage,
     WaSendReactionMessage,
     WaSendRevokeMessage,
-    WaSendTextMessage
+    WaSendTextMessage,
+    WaSendTypedMessage
 } from '@message/types'
 import { proto, type Proto } from '@proto'
 import {
@@ -171,6 +172,21 @@ export function isSendEventResponseMessage(
         content.type === 'event-response' &&
         'event' in content &&
         'response' in content
+    )
+}
+
+export function isSendTypedMessage(content: unknown): content is WaSendTypedMessage {
+    return (
+        isSendTextMessage(content) ||
+        isSendReactionMessage(content) ||
+        isSendRevokeMessage(content) ||
+        isSendPinMessage(content) ||
+        isSendKeepMessage(content) ||
+        isSendPollMessage(content) ||
+        isSendPollVoteMessage(content) ||
+        isSendEventMessage(content) ||
+        isSendEventResponseMessage(content) ||
+        isSendMediaMessage(content)
     )
 }
 

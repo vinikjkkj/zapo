@@ -164,6 +164,7 @@ export function pickIncomingEphemeralSettingTimestamp(
 
 function pickContextInfoTarget(message: Proto.IMessage): ContextInfoCarrier | null {
     for (const key of Object.keys(message)) {
+        if (key === 'messageContextInfo') continue
         const value = (message as Record<string, unknown>)[key]
         if (
             value &&

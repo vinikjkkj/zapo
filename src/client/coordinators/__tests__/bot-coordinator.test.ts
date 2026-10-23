@@ -196,10 +196,7 @@ test('bot coordinator sendPrompt direct path accepts custom capabilities overrid
         ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async (content) => ({
-            message:
-                typeof content === 'string'
-                    ? { conversation: content }
-                    : (content as Proto.IMessage)
+            message: typeof content === 'string' ? { conversation: content } : content
         }),
         sendMessage: async (_to, content) => {
             captured = content as Proto.IMessage
@@ -222,10 +219,7 @@ test('bot coordinator sendPrompt mention path wraps text in botInvokeMessage wit
         ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async (content) => ({
-            message:
-                typeof content === 'string'
-                    ? { conversation: content }
-                    : (content as Proto.IMessage)
+            message: typeof content === 'string' ? { conversation: content } : content
         }),
         sendMessage: async (to, content) => {
             sends.push({ to, content: content as Proto.IMessage })
@@ -271,10 +265,7 @@ test('bot coordinator sendPrompt mention path resolves Meta AI PN jid to FBID', 
         ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async (content) => ({
-            message:
-                typeof content === 'string'
-                    ? { conversation: content }
-                    : (content as Proto.IMessage)
+            message: typeof content === 'string' ? { conversation: content } : content
         }),
         sendMessage: async (_to, content) => {
             sends.push({ content: content as Proto.IMessage })
@@ -294,10 +285,7 @@ test('bot coordinator sendPrompt mention path throws when bot jid cannot be reso
         ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async (content) => ({
-            message:
-                typeof content === 'string'
-                    ? { conversation: content }
-                    : (content as Proto.IMessage)
+            message: typeof content === 'string' ? { conversation: content } : content
         }),
         sendMessage: noopSendMessage
     })

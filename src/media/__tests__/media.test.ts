@@ -7,7 +7,11 @@ import { Readable } from 'node:stream'
 import test from 'node:test'
 
 import { parseWebpAnimation, runMediaProcessor } from '@client/media'
-import { buildMediaMessageContent, getMediaConn } from '@client/messaging/messages'
+import {
+    buildMediaMessageContent,
+    getMediaConn,
+    type WaMediaMessageOptions
+} from '@client/messaging/messages'
 import { createNoopLogger, type Logger } from '@infra/log/types'
 import {
     MEDIA_UPLOAD_PATHS,
@@ -20,7 +24,9 @@ import {
 import { WaMediaCrypto } from '@media/crypto/WaMediaCrypto'
 import { parseMediaConnResponse } from '@media/transfer/conn'
 import { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
+import { proto, type Proto } from '@proto'
 import type { BinaryNode } from '@transport/types'
+import { readAllBytes } from '@util/bytes'
 import type { ServerClock } from '@util/clock'
 
 const localServerClock: ServerClock = {
@@ -652,6 +658,88 @@ test('media message builder fills only missing probe fields', async () => {
     assert.equal(message.videoMessage?.seconds, 15)
     assert.equal(message.videoMessage?.width, 999)
     assert.equal(message.videoMessage?.height, 240)
+})
+
+function createMessageContextInfoBuildOptions(): WaMediaMessageOptions {
+    return {
+        logger: createNoopLogger(),
+        mediaTransfer: {
+            uploadStream: async (request: { readonly body: Uint8Array | Readable }) => {
+                if (!(request.body instanceof Uint8Array)) await readAllBytes(request.body)
+                return { status: 200 } as Response
+            },
+            readResponseBytes: async () =>
+                new TextEncoder().encode(
+                    JSON.stringify({
+                        url: 'https://mmg.whatsapp.net/mms/image/ok',
+                        direct_path: '/mms/image/ok'
+                    })
+                )
+        } as never,
+        queryWithContext: async () => buildMediaConnNode('auth-token', '120'),
+        getMediaConnCache: () => null,
+        setMediaConnCache: () => undefined,
+        serverClock: localServerClock
+    }
+}
+
+const ALBUM_ASSOCIATION: Proto.IMessageAssociation = {
+    associationType: proto.MessageAssociation.AssociationType.MEDIA_ALBUM,
+    parentMessageKey: { remoteJid: '123@lid', fromMe: true, id: 'PARENT' }
+}
+
+test('media message builder sends messageContextInfo next to the image message', async () => {
+    const { message } = await buildMediaMessageContent(createMessageContextInfoBuildOptions(), {
+        type: 'image',
+        media: new Uint8Array([1, 2, 3]),
+        mimetype: 'image/jpeg',
+        caption: 'hi',
+        messageContextInfo: { messageAssociation: ALBUM_ASSOCIATION }
+    })
+
+    assert.equal(message.imageMessage?.caption, 'hi')
+    assert.equal('messageContextInfo' in (message.imageMessage ?? {}), false)
+    assert.deepEqual(message.messageContextInfo?.messageAssociation, ALBUM_ASSOCIATION)
+})
+
+test('media message builder sends messageContextInfo next to the video message', async () => {
+    const { message } = await buildMediaMessageContent(createMessageContextInfoBuildOptions(), {
+        type: 'video',
+        media: new Uint8Array([1, 2, 3]),
+        mimetype: 'video/mp4',
+        messageContextInfo: { messageAssociation: ALBUM_ASSOCIATION }
+    })
+
+    assert.ok(message.videoMessage)
+    assert.equal('messageContextInfo' in (message.videoMessage ?? {}), false)
+    assert.deepEqual(message.messageContextInfo?.messageAssociation, ALBUM_ASSOCIATION)
+})
+
+test('media message builder adds no top-level keys without messageContextInfo', async () => {
+    const { message } = await buildMediaMessageContent(createMessageContextInfoBuildOptions(), {
+        type: 'image',
+        media: new Uint8Array([1, 2, 3]),
+        mimetype: 'image/jpeg'
+    })
+
+    assert.deepEqual(Object.keys(message), ['imageMessage'])
+})
+
+test('media message builder accepts messageContextInfo on a sticker pack', async () => {
+    const { message } = await buildMediaMessageContent(createMessageContextInfoBuildOptions(), {
+        type: 'sticker-pack',
+        stickerPackId: 'pack',
+        name: 'Pack',
+        publisher: 'Me',
+        stickers: [{ media: new Uint8Array([1, 2, 3]), fileName: 'a.webp', emojis: ['x'] }],
+        trayIcon: { media: new Uint8Array([4, 5, 6]), fileName: 'tray.png' },
+        coverThumbnail: new Uint8Array([7, 8, 9]),
+        messageContextInfo: { messageAssociation: ALBUM_ASSOCIATION }
+    })
+
+    assert.equal(message.stickerPackMessage?.stickerPackId, 'pack')
+    assert.equal('messageContextInfo' in (message.stickerPackMessage ?? {}), false)
+    assert.deepEqual(message.messageContextInfo?.messageAssociation, ALBUM_ASSOCIATION)
 })
 
 test('media message builder reuses streamed media across processor steps', async () => {

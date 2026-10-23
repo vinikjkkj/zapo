@@ -40,13 +40,13 @@ import {
     isSendEventMessage,
     isSendEventResponseMessage,
     isSendKeepMessage,
-    isSendMediaMessage,
     isSendPinMessage,
     isSendPollMessage,
     isSendPollVoteMessage,
     isSendReactionMessage,
     isSendRevokeMessage,
     isSendTextMessage,
+    isSendTypedMessage,
     resolveMessageTarget
 } from '@message/encode/content'
 import {
@@ -70,7 +70,8 @@ import type {
     WaSendReactionMessage,
     WaSendRevokeMessage,
     WaSendStickerPackMessage,
-    WaSendTextMessage
+    WaSendTextMessage,
+    WaSendTypedMessage
 } from '@message/types'
 import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
@@ -382,6 +383,38 @@ export async function buildMediaMessageContent(
     if (typeof content === 'string') {
         return { message: { conversation: content } }
     }
+    if (isSendTypedMessage(content)) {
+        return withMessageContextInfo(
+            await buildTypedMessageContent(options, content, ctx),
+            content.messageContextInfo
+        )
+    }
+    if (!content || typeof content !== 'object') {
+        throw new Error('invalid message content')
+    }
+    return { message: content }
+}
+
+/** Adds the caller's `messageContextInfo` under the built one: fields the builder set win. */
+function withMessageContextInfo(
+    built: WaMessageBuildResult,
+    messageContextInfo: Proto.IMessageContextInfo | undefined
+): WaMessageBuildResult {
+    if (!messageContextInfo) return built
+    return {
+        ...built,
+        message: {
+            ...built.message,
+            messageContextInfo: { ...messageContextInfo, ...built.message.messageContextInfo }
+        }
+    }
+}
+
+async function buildTypedMessageContent(
+    options: WaMediaMessageOptions,
+    content: WaSendTypedMessage,
+    ctx?: WaBuildMessageContext
+): Promise<WaMessageBuildResult> {
     if (isSendTextMessage(content)) {
         if (options.linkPreviewResolver) {
             try {
@@ -421,13 +454,7 @@ export async function buildMediaMessageContent(
     if (isSendEventResponseMessage(content)) {
         return { message: await buildEventResponseMessage(content, options.serverClock, ctx) }
     }
-    if (isSendMediaMessage(content)) {
-        return buildMediaMessage(options, content)
-    }
-    if (!content || typeof content !== 'object') {
-        throw new Error('invalid message content')
-    }
-    return { message: content }
+    return buildMediaMessage(options, content)
 }
 
 export async function getMediaConn(
@@ -589,7 +616,8 @@ async function buildMediaMessage(
                     key !== 'type' &&
                     key !== 'media' &&
                     key !== 'fileLength' &&
-                    key !== 'mimetype'
+                    key !== 'mimetype' &&
+                    key !== 'messageContextInfo'
                 ) {
                     result[key] = (c as unknown as Record<string, unknown>)[key]
                 }

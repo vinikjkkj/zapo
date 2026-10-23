@@ -289,3 +289,20 @@ test('buildMediaMessageContent uses resolver output when it returns a preview', 
     assert.equal(result.message.extendedTextMessage?.title, 'Resolved')
     assert.equal(result.message.extendedTextMessage?.matchedText, 'https://example.com')
 })
+
+test('buildMediaMessageContent keeps the user messageContextInfo on a resolved link preview', async () => {
+    const messageContextInfo = { messageAddOnDurationInSecs: 5 }
+    const result = await buildMediaMessageContent(
+        makeBuildOptions(async () => ({
+            resolved: {
+                matchedText: 'https://example.com',
+                title: 'Resolved',
+                previewType: proto.Message.ExtendedTextMessage.PreviewType.NONE
+            },
+            thumbnailFields: {}
+        })),
+        { type: 'text', text: 'see https://example.com', messageContextInfo }
+    )
+    assert.equal(result.message.extendedTextMessage?.title, 'Resolved')
+    assert.deepEqual(result.message.messageContextInfo, messageContextInfo)
+})
