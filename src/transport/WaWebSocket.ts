@@ -22,6 +22,7 @@ interface PendingSocket {
 }
 
 type SocketRuntime = 'browser' | 'node'
+type CloseWaiter = (info: SocketCloseInfo) => void
 const WS_OPTIONAL_MODULE = 'ws'
 
 function asOptionalNodeWsConstructor(loaded: unknown): RawWebSocketConstructor | null {
@@ -102,7 +103,9 @@ function resolveSocketRuntime(): SocketRuntime {
 /**
  * Thin wrapper around a `RawWebSocket` (or Node `ws` constructor) used by
  * {@link WaComms}. Iterates the configured URL list on failure and applies a
- * connect/idle timeout.
+ * connect/idle timeout. Message, error and close events are forwarded only
+ * while their socket is the current one; once `close()` is called, messages
+ * from that socket are dropped.
  */
 export class WaWebSocket {
     private readonly config: Readonly<
@@ -116,8 +119,9 @@ export class WaWebSocket {
     private readonly socketRuntime: SocketRuntime
     private readonly connectingSockets: Set<RawWebSocket>
     private handlers: WaSocketHandlers
+    private readonly closeWaiters: Map<RawWebSocket, CloseWaiter[]>
     private socket: RawWebSocket | null
-    private closeWaiter: ((info: SocketCloseInfo) => void) | null
+    private socketClosing: boolean
     private nodeWsCtorPromise: Promise<RawWebSocketConstructor> | null
 
     public constructor(config: WaSocketConfig, logger: Logger = new ConsoleLogger('info')) {
@@ -132,8 +136,9 @@ export class WaWebSocket {
         this.socketRuntime = resolveSocketRuntime()
         this.connectingSockets = new Set<RawWebSocket>()
         this.handlers = {}
+        this.closeWaiters = new Map()
         this.socket = null
-        this.closeWaiter = null
+        this.socketClosing = false
         this.nodeWsCtorPromise = null
     }
 
@@ -194,38 +199,39 @@ export class WaWebSocket {
             }
         }
 
+        const alreadyClosing = this.socketClosing
+        this.socketClosing = true
         return new Promise<SocketCloseInfo>((resolve) => {
-            const timer = setTimeout(() => {
-                if (this.closeWaiter) {
-                    this.closeWaiter = null
-                    if (this.socket === socket) {
-                        this.socket = null
-                    }
-                    resolve({
-                        code,
-                        reason,
-                        wasClean: false
-                    })
-                }
-            }, this.config.timeoutIntervalMs)
-
-            this.closeWaiter = (info) => {
+            const waiter: CloseWaiter = (info) => {
                 clearTimeout(timer)
+                this.removeCloseWaiter(socket, waiter)
                 if (this.socket === socket) {
                     this.socket = null
                 }
                 resolve(info)
             }
+            const timer = setTimeout(() => {
+                waiter({
+                    code,
+                    reason,
+                    wasClean: false
+                })
+            }, this.config.timeoutIntervalMs)
+
+            const waiters = this.closeWaiters.get(socket)
+            if (waiters) {
+                waiters.push(waiter)
+            } else {
+                this.closeWaiters.set(socket, [waiter])
+            }
+            if (alreadyClosing) {
+                return
+            }
 
             try {
                 socket.close(code, reason)
             } catch (error) {
-                clearTimeout(timer)
-                this.closeWaiter = null
-                if (this.socket === socket) {
-                    this.socket = null
-                }
-                resolve({
+                this.settleCloseWaiters(socket, {
                     code,
                     reason,
                     wasClean: false
@@ -346,21 +352,33 @@ export class WaWebSocket {
 
     private bindRuntimeHandlers(socket: RawWebSocket): void {
         socket.onmessage = (event) => {
-            void this.handleMessage(event.data)
+            if (!this.isDeliverable(socket)) {
+                this.logger.trace('socket message ignored: stale or closing socket')
+                return
+            }
+            void this.handleMessage(socket, event.data)
         }
         socket.onerror = (event) => {
-            this.handleRuntimeError(event)
+            this.handleRuntimeError(socket, event)
         }
         socket.onclose = (event) => {
             this.handleRuntimeClose(socket, event)
         }
     }
 
-    private async handleMessage(data: unknown): Promise<void> {
+    private isDeliverable(socket: RawWebSocket): boolean {
+        return this.socket === socket && !this.socketClosing
+    }
+
+    private async handleMessage(socket: RawWebSocket, data: unknown): Promise<void> {
         try {
             const payload = await this.normalizePayload(data)
             if (!payload) {
                 this.logger.trace('socket message ignored: unsupported payload shape')
+                return
+            }
+            if (!this.isDeliverable(socket)) {
+                this.logger.trace('socket message ignored: stale or closing socket')
                 return
             }
             await this.handlers.onMessage?.(payload)
@@ -472,6 +490,7 @@ export class WaWebSocket {
     private activatePendingSocket(entry: PendingSocket, message: string): SocketOpenInfo {
         const info = { openedAt: Date.now() }
         this.socket = entry.socket
+        this.socketClosing = false
         this.bindRuntimeHandlers(entry.socket)
         this.logger.info(message, { url: entry.url })
         void this.handlers.onOpen?.(info)
@@ -486,28 +505,60 @@ export class WaWebSocket {
         }
     }
 
-    private handleRuntimeError(event: WebSocketEventLike): void {
+    private handleRuntimeError(socket: RawWebSocket, event: WebSocketEventLike): void {
         void event
+        if (this.socket !== socket) {
+            this.logger.trace('socket runtime error ignored: stale socket')
+            return
+        }
         this.logger.warn('socket runtime error event')
         void this.handlers.onError?.(new Error('websocket runtime error'))
     }
 
     private handleRuntimeClose(socket: RawWebSocket, event: WebSocketEventLike): void {
         const info = this.toCloseInfo(event)
+        if (this.socket !== socket) {
+            this.logger.debug('stale socket closed', {
+                code: info.code,
+                reason: info.reason,
+                wasClean: info.wasClean
+            })
+            this.settleCloseWaiters(socket, info)
+            return
+        }
         this.logger.info('socket runtime closed', {
             code: info.code,
             reason: info.reason,
             wasClean: info.wasClean
         })
-        if (this.socket === socket) {
-            this.socket = null
+        this.socket = null
+        this.settleCloseWaiters(socket, info)
+        void this.handlers.onClose?.(info)
+    }
+
+    private settleCloseWaiters(socket: RawWebSocket, info: SocketCloseInfo): void {
+        const waiters = this.closeWaiters.get(socket)
+        if (!waiters) {
+            return
         }
-        const waiter = this.closeWaiter
-        this.closeWaiter = null
-        if (waiter) {
+        this.closeWaiters.delete(socket)
+        for (const waiter of waiters) {
             waiter(info)
         }
-        void this.handlers.onClose?.(info)
+    }
+
+    private removeCloseWaiter(socket: RawWebSocket, waiter: CloseWaiter): void {
+        const waiters = this.closeWaiters.get(socket)
+        if (!waiters) {
+            return
+        }
+        const index = waiters.indexOf(waiter)
+        if (index !== -1) {
+            waiters.splice(index, 1)
+        }
+        if (waiters.length === 0) {
+            this.closeWaiters.delete(socket)
+        }
     }
 
     private closeSocketSafe(socket: RawWebSocket, code: number, reason: string): void {

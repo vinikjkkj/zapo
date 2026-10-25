@@ -52,7 +52,8 @@ export class WaComms {
     private pendingFramesOverflowClosing: boolean
     private resumeInFlight: boolean
     private resumeHandshakeFailures: number
-    private usedResumeHandshake: boolean
+    /** Identifies the current connection attempt; bumped on every reset and on each new noise session. */
+    private connectionGeneration: number
     private noiseSession: WaNoiseSession | null
     private lastServerStaticKey: Uint8Array | null
     private lastInboundAtMs: number
@@ -121,7 +122,7 @@ export class WaComms {
         this.pendingFramesOverflowClosing = false
         this.resumeInFlight = false
         this.resumeHandshakeFailures = 0
-        this.usedResumeHandshake = false
+        this.connectionGeneration = 0
         this.noiseSession = null
         this.lastServerStaticKey = null
         this.lastInboundAtMs = 0
@@ -233,6 +234,10 @@ export class WaComms {
             this.logger.debug('comms resume skipped: comms stopped or retry disabled')
             return
         }
+        if (this.resumeInFlight) {
+            this.logger.debug('comms resume skipped: already in flight')
+            return
+        }
         this.logger.debug('comms close socket and resume requested')
         this.resetConnectionState({
             started: true,
@@ -243,6 +248,10 @@ export class WaComms {
             resetResumeHandshakeFailures: false
         })
         await this.socket.close(1000, 'resume_socket')
+        if (!this.resumeInFlight) {
+            this.logger.debug('comms resume cancelled while closing socket')
+            return
+        }
         this.resumeInFlight = false
         void this.openSocket(true)
     }
@@ -261,10 +270,14 @@ export class WaComms {
     }
 
     public async sendFrame(payload: Uint8Array): Promise<void> {
-        if (!this.noiseSession) {
+        const session = this.noiseSession
+        if (!session) {
             throw new Error('noise session not ready')
         }
-        const wire = await this.noiseSession.encryptFrame(payload)
+        const wire = await session.encryptFrame(payload)
+        if (session !== this.noiseSession) {
+            throw new Error('noise session replaced during send')
+        }
         await this.socket.send(wire)
     }
 
@@ -362,21 +375,46 @@ export class WaComms {
 
     private onSocketMessage(payload: Uint8Array): void {
         this.lastInboundAtMs = Date.now()
+        const session = this.noiseSession
         this.frameProcessingQueue = this.frameProcessingQueue.then(
-            () => this.processSocketPayload(payload),
-            () => this.processSocketPayload(payload)
+            () => this.processSocketPayload(session, payload),
+            () => this.processSocketPayload(session, payload)
         )
     }
 
-    private async processSocketPayload(payload: Uint8Array): Promise<void> {
-        if (!this.noiseSession) {
-            this.logger.warn('received socket payload before noise session init')
+    /** `session` is the one current when the payload arrived; a payload never feeds a later session. */
+    private async processSocketPayload(
+        session: WaNoiseSession | null,
+        payload: Uint8Array
+    ): Promise<void> {
+        if (session !== this.noiseSession) {
+            this.logger.trace('socket payload dropped: noise session replaced', {
+                byteLength: payload.byteLength
+            })
+            return
+        }
+        if (!session) {
+            const context = {
+                byteLength: payload.byteLength,
+                started: this.started,
+                preventRetry: this.preventRetry,
+                resumeInFlight: this.resumeInFlight
+            }
+            if (!this.started || this.preventRetry || this.resumeInFlight) {
+                this.logger.debug('socket payload dropped: comms is tearing down', context)
+            } else {
+                this.logger.warn('socket payload dropped: no active noise session', context)
+            }
             return
         }
         try {
-            const frames = await this.noiseSession.pushWireChunk(payload)
+            const frames = await session.pushWireChunk(payload)
             this.routeDecodedFrames(frames)
         } catch (error) {
+            if (session !== this.noiseSession) {
+                this.logger.trace('noise decode failure ignored: noise session replaced')
+                return
+            }
             const normalized = toError(error)
             this.logger.error('failed to decode noise frame', { message: normalized.message })
             if (!this.started || this.preventRetry || this.resumeInFlight) {
@@ -414,13 +452,25 @@ export class WaComms {
 
     private async onSocketOpened(): Promise<void> {
         this.logger.debug('comms socket opened, starting noise session')
-        const noiseConfig = this.buildNoiseConfigForAttempt()
-        const session = new WaNoiseSession(async (wire) => this.socket.send(wire), this.logger)
+        const { noiseConfig, usedResumeHandshake } = this.buildNoiseConfigForAttempt()
+        const generation = ++this.connectionGeneration
+        const session = new WaNoiseSession((wire) => {
+            if (generation !== this.connectionGeneration) {
+                return Promise.reject(new Error('noise session replaced'))
+            }
+            return this.socket.send(wire)
+        }, this.logger)
         this.noiseSession = session
         try {
             await session.start(noiseConfig)
         } catch (error) {
-            if (this.usedResumeHandshake) {
+            if (generation !== this.connectionGeneration) {
+                this.logger.debug('noise handshake of a replaced session ended', {
+                    message: toError(error).message
+                })
+                return
+            }
+            if (usedResumeHandshake) {
                 this.resumeHandshakeFailures += 1
                 this.logger.warn(
                     'noise resume handshake failed, next attempt may fallback to full',
@@ -434,6 +484,10 @@ export class WaComms {
             throw error
         }
         const buffered = await session.pushWireChunk(EMPTY_BYTES)
+        if (generation !== this.connectionGeneration) {
+            this.logger.debug('noise session replaced before it was established')
+            return
+        }
         this.routeDecodedFrames(buffered)
         this.resumeHandshakeFailures = 0
         this.lastServerStaticKey = session.getServerStaticKey()
@@ -529,6 +583,10 @@ export class WaComms {
             .enqueue(() => this.onDecodedFrame(frame))
             .catch((error) => {
                 if (error instanceof BoundedTaskQueueFullError) {
+                    if (this.resumeInFlight) {
+                        this.logger.trace('frame handler queue is full, resume already in flight')
+                        return
+                    }
                     this.logger.warn(
                         'frame handler queue is full, resuming socket to preserve bounds',
                         {
@@ -593,24 +651,28 @@ export class WaComms {
         return out
     }
 
-    private buildNoiseConfigForAttempt(): WaCommsConfig['noise'] {
+    private buildNoiseConfigForAttempt(): {
+        readonly noiseConfig: WaCommsConfig['noise']
+        readonly usedResumeHandshake: boolean
+    } {
         const hasServerStaticKey = this.config.noise.serverStaticKey?.byteLength === 32
         if (
             hasServerStaticKey &&
             this.resumeHandshakeFailures < WA_DEFAULTS.NOISE_RESUME_FAILURES_BEFORE_FULL_HANDSHAKE
         ) {
-            this.usedResumeHandshake = true
-            return this.config.noise
+            return { noiseConfig: this.config.noise, usedResumeHandshake: true }
         }
         if (hasServerStaticKey) {
             this.logger.info('noise resume temporarily disabled after previous failure(s)', {
                 failures: this.resumeHandshakeFailures
             })
         }
-        this.usedResumeHandshake = false
         return {
-            ...this.config.noise,
-            serverStaticKey: undefined
+            noiseConfig: {
+                ...this.config.noise,
+                serverStaticKey: undefined
+            },
+            usedResumeHandshake: false
         }
     }
 
@@ -632,7 +694,10 @@ export class WaComms {
         if (options.resetResumeHandshakeFailures !== false) {
             this.resumeHandshakeFailures = 0
         }
+        const discardedSession = this.noiseSession
         this.noiseSession = null
+        this.connectionGeneration += 1
+        discardedSession?.onSocketClosed(new Error('comms connection state reset'))
         this.lastInboundAtMs = 0
         this.clearPendingFrames()
         this.pendingFramesOverflowClosing = false

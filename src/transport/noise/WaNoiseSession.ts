@@ -453,8 +453,12 @@ export class WaNoiseSession {
                 reject(this.closedError)
                 return
             }
+            const waiter = (frame: Uint8Array): void => {
+                clearTimeout(timeout)
+                resolve(frame)
+            }
             const timeout = setTimeout(() => {
-                if (this.handshakeWaiter === resolve) {
+                if (this.handshakeWaiter === waiter) {
                     this.handshakeWaiter = null
                     this.handshakeRejecter = null
                 }
@@ -465,10 +469,7 @@ export class WaNoiseSession {
                 )
             }, this.handshakeFrameTimeoutMs)
             timeout.unref?.()
-            this.handshakeWaiter = (frame) => {
-                clearTimeout(timeout)
-                resolve(frame)
-            }
+            this.handshakeWaiter = waiter
             this.handshakeRejecter = (error) => {
                 clearTimeout(timeout)
                 reject(error)
