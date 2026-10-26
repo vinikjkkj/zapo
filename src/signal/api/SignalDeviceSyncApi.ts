@@ -66,8 +66,8 @@ export interface SignalLidSyncResult {
     readonly lidJid: string | null
     readonly exists: boolean
     /**
-     * `true` when the server rejected the number as malformed (a `<user>` without a
-     * usable `jid` holding `<contact type='invalid'>`) - distinct from a
+     * `true` when the server rejected the number as malformed (`<contact
+     * type='invalid'>`, usually in a `<user>` with no `jid`) - distinct from a
      * well-formed number that simply has no WhatsApp account (`exists: false`,
      * `invalid: false`).
      */
@@ -583,9 +583,7 @@ export class SignalDeviceSyncApi {
                     jid: inputJid,
                     phoneJid: phoneJid ?? inputJid,
                     lidJid,
-                    ...(resolvedJid === null
-                        ? { status: 'invalid' as const }
-                        : this.resolveLidSyncOutcome(contactNode, inputJid, lidJid, lidError))
+                    ...this.resolveLidSyncOutcome(contactNode, inputJid, lidJid, lidError)
                 })
             }
             if (matched) {

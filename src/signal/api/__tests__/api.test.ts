@@ -1846,12 +1846,22 @@ test('signal lid sync falls back to the protocol error for an error entry withou
 
 const LID_SYNC_NO_JID_PHONE = '999999999999999@s.whatsapp.net'
 
-function lidSyncNoJidInvalidUser(echo: string | undefined): BinaryNode {
+function lidSyncNoJidUser(type: string | undefined, echo: string | undefined): BinaryNode {
     return {
         tag: WA_NODE_TAGS.USER,
         attrs: {},
-        content: [{ tag: WA_NODE_TAGS.CONTACT, attrs: { type: 'invalid' }, content: echo }]
+        content: [
+            {
+                tag: WA_NODE_TAGS.CONTACT,
+                attrs: type === undefined ? {} : { type },
+                content: echo
+            }
+        ]
     }
+}
+
+function lidSyncNoJidInvalidUser(echo: string | undefined): BinaryNode {
+    return lidSyncNoJidUser('invalid', echo)
 }
 
 test('signal lid sync flags a number as invalid when the user node carries no jid', async () => {
@@ -1950,3 +1960,20 @@ test('signal lid sync ignores a user node with no jid and no decodable contact e
     assert.equal(entry.invalid, false)
     assert.ok(debugs.includes('signal lid sync skipping user node with invalid jid'))
 })
+
+for (const { type, status, exists } of [
+    { type: 'out', status: 'out', exists: false },
+    { type: 'in', status: 'in', exists: true },
+    { type: undefined, status: 'unanswered', exists: false }
+] as const) {
+    test(`signal lid sync decides by contact type ${type ?? 'missing'} when the user node carries no jid`, async () => {
+        const response = lidSyncUsync([lidSyncNoJidUser(type, '+999999999999999')])
+
+        const [entry] = await lidSyncApi(response).queryLidsByPhoneJids([LID_SYNC_NO_JID_PHONE])
+
+        assert.equal(entry.queriedJid, LID_SYNC_NO_JID_PHONE)
+        assert.equal(entry.status, status)
+        assert.equal(entry.exists, exists)
+        assert.equal(entry.invalid, false)
+    })
+}
