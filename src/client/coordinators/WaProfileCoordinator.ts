@@ -211,7 +211,11 @@ export interface WaProfileCoordinator {
      * @throws when `pin` is not exactly 4 digits, before any round-trip.
      */
     readonly setUsernameKey: (pin: string) => Promise<boolean>
-    /** Resolves LIDs for a list of phone numbers (handles normalization). */
+    /**
+     * Resolves LIDs for a list of phone numbers (handles normalization). Check
+     * `status`: `'out'` means no WhatsApp account, `'unanswered'` or `'error'` mean
+     * the server gave no verdict (see `error` for the reason).
+     */
     readonly getLidsByPhoneNumbers: (
         phoneNumbers: readonly string[]
     ) => Promise<readonly SignalLidSyncResult[]>

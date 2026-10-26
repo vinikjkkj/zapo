@@ -13,7 +13,7 @@ import {
     SIGNAL_REGISTRATION_ID_LENGTH,
     SIGNAL_SIGNATURE_LENGTH
 } from '@signal/api/constants'
-import { SignalDeviceSyncApi } from '@signal/api/SignalDeviceSyncApi'
+import { SignalDeviceSyncApi, type SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 import { SignalDigestSyncApi } from '@signal/api/SignalDigestSyncApi'
 import { SignalIdentitySyncApi } from '@signal/api/SignalIdentitySyncApi'
 import { SignalMissingPreKeysSyncApi } from '@signal/api/SignalMissingPreKeysSyncApi'
@@ -104,14 +104,16 @@ test('signal lid sync skips a malformed user node instead of failing the batch',
             phoneJid: '000000000000000@s.whatsapp.net',
             lidJid: null,
             exists: false,
-            invalid: false
+            invalid: false,
+            status: 'unanswered'
         },
         {
             queriedJid: '5511999999999@s.whatsapp.net',
             phoneJid: '5511999999999@s.whatsapp.net',
             lidJid: '123456789@lid',
             exists: true,
-            invalid: false
+            invalid: false,
+            status: 'in'
         }
     ])
     assert.ok(debugs.includes('signal lid sync skipping user node with invalid jid'))
@@ -157,7 +159,8 @@ test('signal lid sync flags a server-rejected number as invalid, recovered from 
             phoneJid: '173010275315715@s.whatsapp.net',
             lidJid: null,
             exists: false,
-            invalid: true
+            invalid: true,
+            status: 'invalid'
         }
     ])
 })
@@ -315,14 +318,16 @@ test('signal lid sync exposes the server-corrected number (BR 9th digit) via the
             phoneJid: '5511982905991@s.whatsapp.net',
             lidJid: '53979165777985@lid',
             exists: true,
-            invalid: false
+            invalid: false,
+            status: 'in'
         },
         {
             queriedJid: '5511982905991@s.whatsapp.net',
             phoneJid: '5511982905991@s.whatsapp.net',
             lidJid: '53979165777985@lid',
             exists: true,
-            invalid: false
+            invalid: false,
+            status: 'in'
         }
     ])
 })
@@ -794,14 +799,16 @@ test('signal device sync api resolves lids by phone jids via usync and returns e
             phoneJid: '5511999999999@s.whatsapp.net',
             lidJid: '123456789@lid',
             exists: true,
-            invalid: false
+            invalid: false,
+            status: 'in'
         },
         {
             queriedJid: '5511888888888@s.whatsapp.net',
             phoneJid: '5511888888888@s.whatsapp.net',
             lidJid: null,
             exists: false,
-            invalid: false
+            invalid: false,
+            status: 'unanswered'
         }
     ])
 
@@ -878,7 +885,8 @@ test('signal device sync api marks exists=false when contact type is out', async
             phoneJid: '5511888888888@s.whatsapp.net',
             lidJid: null,
             exists: false,
-            invalid: false
+            invalid: false,
+            status: 'out'
         }
     ])
 })
@@ -941,7 +949,9 @@ test('signal device sync api handles lid node user error and preserves contact e
             phoneJid: '5511999999999@s.whatsapp.net',
             lidJid: null,
             exists: true,
-            invalid: false
+            invalid: false,
+            status: 'in',
+            error: { code: '404', text: 'not-found' }
         }
     ])
     assert.equal(warnings.length, 1)
@@ -1007,7 +1017,9 @@ test('signal device sync api forces exists=false when contact node has error', a
             phoneJid: '5511999999999@s.whatsapp.net',
             lidJid: '123456789@lid',
             exists: false,
-            invalid: false
+            invalid: false,
+            status: 'error',
+            error: { code: '500', text: 'lookup-failed' }
         }
     ])
     assert.equal(warnings.length, 1)
@@ -1062,7 +1074,8 @@ test('signal device sync api maps user response by pn_jid when jid differs', asy
             phoneJid: '5511999999999@s.whatsapp.net',
             lidJid: '123456789@lid',
             exists: true,
-            invalid: false
+            invalid: false,
+            status: 'in'
         }
     ])
 })
@@ -1598,4 +1611,342 @@ test('signal rotate key api uploads signed prekeys and maps error codes', async 
         () => missingRegistrationApi.rotateSignedPreKey(),
         /requires registration info/
     )
+})
+
+const LID_SYNC_PHONE = '5511999999999@s.whatsapp.net'
+
+function lidSyncUsync(users: readonly BinaryNode[], protocolErrors: readonly BinaryNode[] = []) {
+    return iqResult([
+        {
+            tag: WA_NODE_TAGS.USYNC,
+            attrs: {},
+            content: [
+                ...(protocolErrors.length > 0
+                    ? [{ tag: 'result', attrs: {}, content: protocolErrors }]
+                    : []),
+                { tag: WA_NODE_TAGS.LIST, attrs: {}, content: users }
+            ]
+        }
+    ])
+}
+
+function lidSyncApi(response: BinaryNode): SignalDeviceSyncApi {
+    return new SignalDeviceSyncApi({ logger: createNoopLogger(), query: async () => response })
+}
+
+const LID_SYNC_STATUS_CASES: ReadonlyArray<{
+    readonly name: string
+    readonly users: readonly BinaryNode[]
+    readonly expected: Omit<SignalLidSyncResult, 'queriedJid' | 'phoneJid'>
+}> = [
+    {
+        name: 'in',
+        users: [
+            {
+                tag: WA_NODE_TAGS.USER,
+                attrs: { jid: LID_SYNC_PHONE },
+                content: [
+                    { tag: WA_NODE_TAGS.CONTACT, attrs: { type: 'in' } },
+                    { tag: WA_NODE_TAGS.LID, attrs: { val: '123456789@lid' } }
+                ]
+            }
+        ],
+        expected: { lidJid: '123456789@lid', exists: true, invalid: false, status: 'in' }
+    },
+    {
+        name: 'out',
+        users: [
+            {
+                tag: WA_NODE_TAGS.USER,
+                attrs: { jid: LID_SYNC_PHONE },
+                content: [{ tag: WA_NODE_TAGS.CONTACT, attrs: { type: 'out' } }]
+            }
+        ],
+        expected: { lidJid: null, exists: false, invalid: false, status: 'out' }
+    },
+    {
+        name: 'invalid',
+        users: [
+            {
+                tag: WA_NODE_TAGS.USER,
+                attrs: { jid: 'undefined' },
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.CONTACT,
+                        attrs: { type: 'invalid' },
+                        content: '+5511999999999'
+                    }
+                ]
+            }
+        ],
+        expected: { lidJid: null, exists: false, invalid: true, status: 'invalid' }
+    },
+    {
+        name: 'error from the contact node',
+        users: [
+            {
+                tag: WA_NODE_TAGS.USER,
+                attrs: { jid: LID_SYNC_PHONE },
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.CONTACT,
+                        attrs: {},
+                        content: [
+                            {
+                                tag: WA_NODE_TAGS.ERROR,
+                                attrs: { code: '500', text: 'lookup-failed' }
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        expected: {
+            lidJid: null,
+            exists: false,
+            invalid: false,
+            status: 'error',
+            error: { code: '500', text: 'lookup-failed' }
+        }
+    },
+    {
+        name: 'error from the lid node',
+        users: [
+            {
+                tag: WA_NODE_TAGS.USER,
+                attrs: { jid: LID_SYNC_PHONE },
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.LID,
+                        attrs: {},
+                        content: [
+                            {
+                                tag: WA_NODE_TAGS.ERROR,
+                                attrs: { code: '404', text: 'not-found' }
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        expected: {
+            lidJid: null,
+            exists: false,
+            invalid: false,
+            status: 'error',
+            error: { code: '404', text: 'not-found' }
+        }
+    },
+    {
+        name: 'unanswered for a user node without contact or lid',
+        users: [{ tag: WA_NODE_TAGS.USER, attrs: { jid: LID_SYNC_PHONE } }],
+        expected: { lidJid: null, exists: false, invalid: false, status: 'unanswered' }
+    },
+    {
+        name: 'unanswered for a number missing from the response',
+        users: [],
+        expected: { lidJid: null, exists: false, invalid: false, status: 'unanswered' }
+    }
+]
+
+for (const { name, users, expected } of LID_SYNC_STATUS_CASES) {
+    test(`signal lid sync reports status ${name}`, async () => {
+        const result = await lidSyncApi(lidSyncUsync(users)).queryLidsByPhoneJids([LID_SYNC_PHONE])
+
+        assert.deepEqual(result, [
+            { queriedJid: LID_SYNC_PHONE, phoneJid: LID_SYNC_PHONE, ...expected }
+        ])
+    })
+}
+
+test('signal lid sync attaches the usync protocol error to unanswered and error entries only', async () => {
+    const answered = '5511888888888@s.whatsapp.net'
+    const withOwnError = '5511777777777@s.whatsapp.net'
+    const response = lidSyncUsync(
+        [
+            {
+                tag: WA_NODE_TAGS.USER,
+                attrs: { jid: answered },
+                content: [
+                    { tag: WA_NODE_TAGS.CONTACT, attrs: { type: 'in' } },
+                    { tag: WA_NODE_TAGS.LID, attrs: { val: '123456789@lid' } }
+                ]
+            },
+            {
+                tag: WA_NODE_TAGS.USER,
+                attrs: { jid: withOwnError },
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.CONTACT,
+                        attrs: {},
+                        content: [{ tag: WA_NODE_TAGS.ERROR, attrs: { code: '500' } }]
+                    }
+                ]
+            }
+        ],
+        [
+            {
+                tag: WA_NODE_TAGS.CONTACT,
+                attrs: {},
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.ERROR,
+                        attrs: { code: '429', text: 'rate-overlimit', backoff: '30' }
+                    }
+                ]
+            }
+        ]
+    )
+
+    const result = await lidSyncApi(response).queryLidsByPhoneJids([
+        answered,
+        withOwnError,
+        LID_SYNC_PHONE
+    ])
+
+    assert.deepEqual(
+        result.map((entry) => [entry.status, entry.exists, entry.error]),
+        [
+            ['in', true, undefined],
+            ['error', false, { code: '500' }],
+            ['unanswered', false, { code: '429', text: 'rate-overlimit', backoffSeconds: 30 }]
+        ]
+    )
+})
+
+test('signal lid sync falls back to the protocol error for an error entry without code or text', async () => {
+    const response = lidSyncUsync(
+        [
+            {
+                tag: WA_NODE_TAGS.USER,
+                attrs: { jid: LID_SYNC_PHONE },
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.LID,
+                        attrs: {},
+                        content: [{ tag: WA_NODE_TAGS.ERROR, attrs: {} }]
+                    }
+                ]
+            }
+        ],
+        [
+            {
+                tag: WA_NODE_TAGS.LID,
+                attrs: {},
+                content: [{ tag: WA_NODE_TAGS.ERROR, attrs: { code: '503', backoff: '5' } }]
+            }
+        ]
+    )
+
+    const [entry] = await lidSyncApi(response).queryLidsByPhoneJids([LID_SYNC_PHONE])
+
+    assert.equal(entry.status, 'error')
+    assert.deepEqual(entry.error, { code: '503', backoffSeconds: 5 })
+})
+
+const LID_SYNC_NO_JID_PHONE = '999999999999999@s.whatsapp.net'
+
+function lidSyncNoJidInvalidUser(echo: string | undefined): BinaryNode {
+    return {
+        tag: WA_NODE_TAGS.USER,
+        attrs: {},
+        content: [{ tag: WA_NODE_TAGS.CONTACT, attrs: { type: 'invalid' }, content: echo }]
+    }
+}
+
+test('signal lid sync flags a number as invalid when the user node carries no jid', async () => {
+    const response: BinaryNode = {
+        tag: WA_NODE_TAGS.IQ,
+        attrs: { from: 's.whatsapp.net', type: WA_IQ_TYPES.RESULT, id: 'lid-sync-1' },
+        content: [
+            {
+                tag: WA_NODE_TAGS.USYNC,
+                attrs: {
+                    sid: 'sid-1',
+                    index: '0',
+                    last: 'true',
+                    mode: 'query',
+                    context: 'interactive'
+                },
+                content: [
+                    {
+                        tag: 'result',
+                        attrs: {},
+                        content: [
+                            { tag: WA_NODE_TAGS.LID, attrs: {} },
+                            { tag: WA_NODE_TAGS.CONTACT, attrs: {} }
+                        ]
+                    },
+                    {
+                        tag: WA_NODE_TAGS.LIST,
+                        attrs: {},
+                        content: [lidSyncNoJidInvalidUser('+999999999999999')]
+                    }
+                ]
+            }
+        ]
+    }
+
+    const result = await lidSyncApi(response).queryLidsByPhoneJids([LID_SYNC_NO_JID_PHONE])
+
+    assert.deepEqual(result, [
+        {
+            queriedJid: LID_SYNC_NO_JID_PHONE,
+            phoneJid: LID_SYNC_NO_JID_PHONE,
+            lidJid: null,
+            exists: false,
+            invalid: true,
+            status: 'invalid'
+        }
+    ])
+})
+
+test('signal lid sync keeps each status in a batch mixing a resolved number and one without jid', async () => {
+    const response = lidSyncUsync([
+        {
+            tag: WA_NODE_TAGS.USER,
+            attrs: { jid: LID_SYNC_PHONE },
+            content: [
+                { tag: WA_NODE_TAGS.CONTACT, attrs: { type: 'in' } },
+                { tag: WA_NODE_TAGS.LID, attrs: { val: '123456789@lid' } }
+            ]
+        },
+        lidSyncNoJidInvalidUser('+999999999999999')
+    ])
+
+    const result = await lidSyncApi(response).queryLidsByPhoneJids([
+        LID_SYNC_PHONE,
+        LID_SYNC_NO_JID_PHONE
+    ])
+
+    assert.deepEqual(
+        result.map((entry) => [entry.queriedJid, entry.status, entry.exists, entry.invalid]),
+        [
+            [LID_SYNC_PHONE, 'in', true, false],
+            [LID_SYNC_NO_JID_PHONE, 'invalid', false, true]
+        ]
+    )
+})
+
+test('signal lid sync ignores a user node with no jid and no decodable contact echo', async () => {
+    const debugs: string[] = []
+    const api = new SignalDeviceSyncApi({
+        logger: {
+            ...createNoopLogger(),
+            debug: (message) => {
+                debugs.push(message)
+            }
+        },
+        query: async () =>
+            lidSyncUsync([
+                lidSyncNoJidInvalidUser(undefined),
+                lidSyncNoJidInvalidUser('+000000000000001')
+            ])
+    })
+
+    const [entry] = await api.queryLidsByPhoneJids([LID_SYNC_NO_JID_PHONE])
+
+    assert.equal(entry.status, 'unanswered')
+    assert.equal(entry.invalid, false)
+    assert.ok(debugs.includes('signal lid sync skipping user node with invalid jid'))
 })

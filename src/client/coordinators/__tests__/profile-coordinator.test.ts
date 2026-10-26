@@ -1217,7 +1217,17 @@ test('profile coordinator resolves lids by phone numbers', async () => {
                     phoneJid: '5511999999999@s.whatsapp.net',
                     lidJid: '1234@lid',
                     exists: true,
-                    invalid: false
+                    invalid: false,
+                    status: 'in'
+                },
+                {
+                    queriedJid: '5511888888888@s.whatsapp.net',
+                    phoneJid: '5511888888888@s.whatsapp.net',
+                    lidJid: null,
+                    exists: false,
+                    invalid: false,
+                    status: 'unanswered',
+                    error: { code: '429', backoffSeconds: 30 }
                 }
             ]
         }
@@ -1231,7 +1241,17 @@ test('profile coordinator resolves lids by phone numbers', async () => {
             phoneJid: '5511999999999@s.whatsapp.net',
             lidJid: '1234@lid',
             exists: true,
-            invalid: false
+            invalid: false,
+            status: 'in'
+        },
+        {
+            queriedJid: '5511888888888@s.whatsapp.net',
+            phoneJid: '5511888888888@s.whatsapp.net',
+            lidJid: null,
+            exists: false,
+            invalid: false,
+            status: 'unanswered',
+            error: { code: '429', backoffSeconds: 30 }
         }
     ])
     assert.equal(portCalls.length, 1)

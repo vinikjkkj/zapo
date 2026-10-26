@@ -14,7 +14,8 @@ import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import {
     buildUsyncIq,
     iterateUsyncUsers,
-    parseUsyncResultEnvelope
+    parseUsyncResultEnvelope,
+    type WaUsyncProtocolError
 } from '@transport/node/builders/usync'
 import { findNodeChild, getNodeChildrenByTag, getNodeTextContent } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
@@ -35,6 +36,24 @@ interface SignalDeviceSyncApiOptions {
     readonly generateSid?: WaUsyncSidGenerator
 }
 
+/** Outcome of a LID sync lookup for one phone number. */
+export type SignalLidSyncStatus = 'in' | 'out' | 'invalid' | 'error' | 'unanswered'
+
+/** Server error behind an `error` or `unanswered` lookup. */
+export interface SignalLidSyncError {
+    readonly code?: string
+    readonly text?: string
+    readonly backoffSeconds?: number
+}
+
+interface ParsedLidSyncEntry {
+    readonly jid: string
+    readonly lidJid: string | null
+    readonly phoneJid: string | null
+    readonly status: SignalLidSyncStatus
+    readonly error?: SignalLidSyncError
+}
+
 export interface SignalLidSyncResult {
     /**
      * The phone jid the caller queried (normalized), so results can be correlated
@@ -47,12 +66,19 @@ export interface SignalLidSyncResult {
     readonly lidJid: string | null
     readonly exists: boolean
     /**
-     * `true` when the server rejected the number as malformed (`<user
-     * jid='undefined'>` with `<contact type='invalid'>`) - distinct from a
+     * `true` when the server rejected the number as malformed (a `<user>` without a
+     * usable `jid` holding `<contact type='invalid'>`) - distinct from a
      * well-formed number that simply has no WhatsApp account (`exists: false`,
      * `invalid: false`).
      */
     readonly invalid: boolean
+    /**
+     * Why `exists` is what it is: `'out'` means the number has no WhatsApp account,
+     * while `'error'` and `'unanswered'` mean the server did not give a verdict.
+     */
+    readonly status: SignalLidSyncStatus
+    /** Server error that explains an `error` or `unanswered` status, when one was reported. */
+    readonly error?: SignalLidSyncError
 }
 
 /** Both addressing forms of a 1:1 user, as far as they could be resolved. */
@@ -65,6 +91,19 @@ export interface SignalUserJidPair {
      * from the queried number (e.g. BR 9th digit added).
      */
     readonly pnJid: string | null
+}
+
+function toLidSyncError(errorNode: BinaryNode): SignalLidSyncError {
+    const { code, text } = errorNode.attrs
+    return { ...(code !== undefined ? { code } : {}), ...(text !== undefined ? { text } : {}) }
+}
+
+function toLidSyncProtocolError(error: WaUsyncProtocolError): SignalLidSyncError {
+    return {
+        ...(error.code !== null ? { code: String(error.code) } : {}),
+        ...(error.text !== null ? { text: error.text } : {}),
+        ...(error.backoffSeconds !== null ? { backoffSeconds: error.backoffSeconds } : {})
+    }
 }
 
 /**
@@ -209,25 +248,32 @@ export class SignalDeviceSyncApi {
             timeoutMs
         })
         const response = await this.query(request, timeoutMs)
-        const parsed = this.parseLidSyncResponse(response, normalizedPhoneJids)
-        const parsedByPhoneJid = new Map<string, Omit<SignalLidSyncResult, 'queriedJid'>>()
-        for (let index = 0; index < parsed.length; index += 1) {
-            const entry = parsed[index]
-            parsedByPhoneJid.set(entry.jid, {
-                phoneJid: entry.phoneJid ?? entry.jid,
-                lidJid: entry.lidJid,
-                exists: entry.exists,
-                invalid: entry.invalid
-            })
+        const { entries, protocolError } = this.parseLidSyncResponse(response, normalizedPhoneJids)
+        const entryByPhoneJid = new Map<string, ParsedLidSyncEntry>()
+        for (let index = 0; index < entries.length; index += 1) {
+            entryByPhoneJid.set(entries[index].jid, entries[index])
         }
         const result = new Array<SignalLidSyncResult>(normalizedPhoneJids.length)
         let found = 0
         for (let index = 0; index < normalizedPhoneJids.length; index += 1) {
             const queriedJid = normalizedPhoneJids[index]
-            const hit = parsedByPhoneJid.get(queriedJid)
-            const resolved: SignalLidSyncResult = hit
-                ? { queriedJid, ...hit }
-                : { queriedJid, phoneJid: queriedJid, lidJid: null, exists: false, invalid: false }
+            const hit = entryByPhoneJid.get(queriedJid)
+            const status = hit?.status ?? 'unanswered'
+            const ownError = hit?.error?.code !== undefined || hit?.error?.text !== undefined
+            const error = ownError
+                ? hit?.error
+                : status === 'unanswered' || status === 'error'
+                  ? protocolError
+                  : undefined
+            const resolved: SignalLidSyncResult = {
+                queriedJid,
+                phoneJid: hit?.phoneJid ?? queriedJid,
+                lidJid: hit?.lidJid ?? null,
+                exists: status === 'in',
+                invalid: status === 'invalid',
+                status,
+                ...(error ? { error } : {})
+            }
             if (resolved.exists) {
                 found += 1
             }
@@ -481,40 +527,29 @@ export class SignalDeviceSyncApi {
     private parseLidSyncResponse(
         node: BinaryNode,
         requestedUsers: readonly string[]
-    ): readonly {
-        readonly jid: string
-        readonly lidJid: string | null
-        readonly phoneJid: string | null
-        readonly exists: boolean
-        readonly invalid: boolean
-    }[] {
+    ): {
+        readonly entries: readonly ParsedLidSyncEntry[]
+        readonly protocolError: SignalLidSyncError | undefined
+    } {
         assertIqResult(node, 'signal lid sync')
-        logUsyncProtocolErrors(parseUsyncResultEnvelope(node), this.logger, 'signal.lidSync')
+        const envelope = parseUsyncResultEnvelope(node)
+        logUsyncProtocolErrors(envelope, this.logger, 'signal.lidSync')
         const userNodes = iterateUsyncUsers(node)
         if (!userNodes) {
             throw new Error('signal lid sync response missing usync envelope')
         }
 
         const requestedSet = new Set(requestedUsers)
-        const parsed: {
-            readonly jid: string
-            readonly lidJid: string | null
-            readonly phoneJid: string | null
-            readonly exists: boolean
-            readonly invalid: boolean
-        }[] = []
+        const parsed: ParsedLidSyncEntry[] = []
         const lidUserErrors: {
-            readonly jid: string
+            readonly jid: string | undefined
             readonly code: string | undefined
             readonly text: string | undefined
         }[] = []
         for (let index = 0; index < userNodes.length; index += 1) {
             const userNode = userNodes[index]
             const rawUserJid = userNode.attrs.jid
-            if (!rawUserJid) {
-                continue
-            }
-            const resolvedJid = this.tryNormalizeUserJid(rawUserJid)
+            const resolvedJid = rawUserJid ? this.tryNormalizeUserJid(rawUserJid) : null
             const pnJid = userNode.attrs.pn_jid
                 ? this.tryNormalizeUserJid(userNode.attrs.pn_jid)
                 : null
@@ -529,6 +564,7 @@ export class SignalDeviceSyncApi {
                     text: lidErrorNode.attrs.text
                 })
             }
+            const lidError = lidErrorNode ? toLidSyncError(lidErrorNode) : undefined
             const lidJid =
                 !lidErrorNode && lidNode?.attrs.val
                     ? this.tryNormalizeUserJid(lidNode.attrs.val)
@@ -543,15 +579,13 @@ export class SignalDeviceSyncApi {
                     continue
                 }
                 matched = true
-                const invalid = resolvedJid === null || contactNode.attrs.type === 'invalid'
                 parsed.push({
                     jid: inputJid,
                     phoneJid: phoneJid ?? inputJid,
                     lidJid,
-                    exists:
-                        !invalid &&
-                        this.parseLidSyncContactExists(contactNode, inputJid, lidJid !== null),
-                    invalid
+                    ...(resolvedJid === null
+                        ? { status: 'invalid' as const }
+                        : this.resolveLidSyncOutcome(contactNode, inputJid, lidJid, lidError))
                 })
             }
             if (matched) {
@@ -581,8 +615,7 @@ export class SignalDeviceSyncApi {
                 jid: requestedKey,
                 phoneJid: phoneJid ?? requestedKey,
                 lidJid,
-                exists: this.parseLidSyncContactExists(contactNode, requestedKey, lidJid !== null),
-                invalid: false
+                ...this.resolveLidSyncOutcome(contactNode, requestedKey, lidJid, lidError)
             })
         }
         if (lidUserErrors.length > 0) {
@@ -592,14 +625,19 @@ export class SignalDeviceSyncApi {
                 sample: lidUserErrors.slice(0, 3)
             })
         }
-        return parsed
+        const protocolError =
+            envelope.errors[WA_NODE_TAGS.CONTACT] ?? envelope.errors[WA_NODE_TAGS.LID]
+        return {
+            entries: parsed,
+            protocolError: protocolError ? toLidSyncProtocolError(protocolError) : undefined
+        }
     }
 
     /**
      * Recovers the queried phone JID from a `<contact>` echo. Each `<contact>` in a
      * usync response echoes the `+<number>` we sent (base64 text content), so it maps
      * a response node back to the exact input - even when the server corrected the
-     * `<user jid>` or rejected it as `jid='undefined'`. Returns `null` when there is
+     * `<user jid>` or rejected it with no `jid` at all. Returns `null` when there is
      * no decodable phone echo.
      */
     private recoverContactJid(contactNode: BinaryNode): string | null {
@@ -614,13 +652,22 @@ export class SignalDeviceSyncApi {
         }
     }
 
-    private parseLidSyncContactExists(
+    /**
+     * Classifies one lookup from its `<contact>`; a `<lid>` error only decides the
+     * outcome when the contact gives no verdict, and rides along on `'in'`.
+     */
+    private resolveLidSyncOutcome(
         contactNode: BinaryNode | undefined,
         userJid: string,
-        defaultExists: boolean
-    ): boolean {
+        lidJid: string | null,
+        lidError: SignalLidSyncError | undefined
+    ): Pick<ParsedLidSyncEntry, 'status' | 'error'> {
         if (!contactNode) {
-            return defaultExists
+            if (lidJid !== null) return { status: 'in' }
+            return lidError ? { status: 'error', error: lidError } : { status: 'unanswered' }
+        }
+        if (contactNode.attrs.type === 'invalid') {
+            return { status: 'invalid' }
         }
         const errorNode = findNodeChild(contactNode, WA_NODE_TAGS.ERROR)
         if (errorNode) {
@@ -629,9 +676,15 @@ export class SignalDeviceSyncApi {
                 code: errorNode.attrs.code,
                 text: errorNode.attrs.text
             })
-            return false
+            return { status: 'error', error: toLidSyncError(errorNode) }
         }
-        return contactNode.attrs.type === 'in'
+        if (contactNode.attrs.type === 'in') {
+            return lidError ? { status: 'in', error: lidError } : { status: 'in' }
+        }
+        if (contactNode.attrs.type === 'out') {
+            return { status: 'out' }
+        }
+        return lidError ? { status: 'error', error: lidError } : { status: 'unanswered' }
     }
 
     private parseUserDeviceJids(
@@ -706,7 +759,7 @@ export class SignalDeviceSyncApi {
 
     /**
      * Canonicalizes a user jid, returning `null` instead of throwing when the input
-     * is not a valid jid (for example the literal `'undefined'` the server returns
+     * is not a valid jid (for example the literal `'undefined'` older servers returned
      * for an invalid contact). Lets a single malformed response node be skipped
      * without discarding the rest of the batch.
      */
