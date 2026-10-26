@@ -338,6 +338,11 @@ export interface WaHistorySyncOptions {
      * burn bandwidth).
      */
     readonly enabled?: boolean
+    /**
+     * When `true`, request a full history download from the primary device on
+     * pairing instead of just recent messages. Takes precedence over the
+     * top-level `requireFullSync`; has no effect on an already-paired session.
+     */
     readonly requireFullSync?: boolean
     /**
      * Whether to download and process the group-history bundle a member may

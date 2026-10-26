@@ -618,7 +618,7 @@ export function buildWaClientDependencies(input: {
             deviceOsDisplayName: options.deviceOsDisplayName,
             deviceOsVersion: options.deviceOsVersion,
             devicePlatform: options.devicePlatform,
-            requireFullSync: options.requireFullSync,
+            requireFullSync: options.history?.requireFullSync ?? options.requireFullSync,
             version: options.version,
             dangerous: options.dangerous,
             mobileTransport: options.mobileTransport

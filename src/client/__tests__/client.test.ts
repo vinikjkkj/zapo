@@ -10,7 +10,11 @@ import { WaClient } from '@client/WaClient'
 import { buildWaClientDependencies, resolveWaClientBase } from '@client/WaClientFactory'
 import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
+import { WaAuthMemoryStore } from '@store/memory/auth.store'
+import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
 import { WaPrivacyTokenMemoryStore } from '@store/memory/privacy-token.store'
+import { WaSignalMemoryStore } from '@store/memory/signal.store'
+import { buildRegistrationPayload } from '@transport/noise/WaClientPayload'
 import type { BinaryNode } from '@transport/types'
 
 test('parseDirtyBits filters invalid entries and preserves protocols', () => {
@@ -808,6 +812,82 @@ test('buildWaClientDependencies wires trusted contact token AB prop overrides', 
     assert.equal(config.numBuckets, 2)
     assert.equal(config.senderDurationS, 120)
     assert.equal(config.senderNumBuckets, 4)
+})
+
+async function pairingDeviceProps(
+    options: Pick<WaClientOptions, 'requireFullSync' | 'history'>
+): Promise<proto.IDeviceProps> {
+    const sessionStore = {
+        auth: new WaAuthMemoryStore(),
+        signal: new WaSignalMemoryStore(),
+        preKey: new WaPreKeyMemoryStore(),
+        senderKey: {} as never,
+        appState: {} as never,
+        messages: {} as never,
+        threads: {} as never,
+        contacts: {} as never,
+        retry: {} as never,
+        groupMetadata: {} as never,
+        deviceList: {} as never,
+        privacyToken: {} as never
+    }
+    const base = resolveWaClientBase(
+        {
+            ...options,
+            store: { session: () => sessionStore },
+            sessionId: 'session'
+        } as unknown as WaClientOptions,
+        createNoopLogger()
+    )
+    const runtime = {
+        sendNode: async (_node: BinaryNode) => undefined,
+        query: async (_node: BinaryNode) =>
+            ({ tag: 'iq', attrs: { type: 'result' } }) as BinaryNode,
+        queryWithContext: async (_context: string, _node: BinaryNode) =>
+            ({ tag: 'iq', attrs: { type: 'result' } }) as BinaryNode,
+        syncAppState: async () => undefined,
+        syncAppStateWithOptions: async () => ({ collections: [] }) as never,
+        emitEvent: (() => undefined) as never,
+        handleIncomingMessageEvent: async () => undefined,
+        handleError: (_error: Error) => undefined,
+        handleIncomingFrame: async (_frame: Uint8Array) => undefined,
+        clearStoredState: async () => undefined,
+        resumeIncomingEvents: () => undefined,
+        subscribeProtocolMessage: () => () => undefined,
+        hasEventListener: () => false,
+        persistContact: () => undefined
+    }
+    const { authClient } = buildWaClientDependencies({ base, runtime })
+    await authClient.loadOrCreateCredentials()
+    const config = await authClient.buildCommsConfig({ url: 'wss://web.whatsapp.com/ws/chat' })
+    const registration = config.noise.registrationPayloadConfig
+    assert.ok(registration)
+    const payload = proto.ClientPayload.decode(buildRegistrationPayload(registration))
+    return proto.DeviceProps.decode(payload.devicePairingData!.deviceProps!)
+}
+
+test('pairing requests a full history sync when history.requireFullSync is set', async () => {
+    const deviceProps = await pairingDeviceProps({ history: { requireFullSync: true } })
+    assert.equal(deviceProps.requireFullSync, true)
+})
+
+test('history.requireFullSync overrides the top-level requireFullSync in both directions', async () => {
+    const optedOut = await pairingDeviceProps({
+        requireFullSync: true,
+        history: { requireFullSync: false }
+    })
+    assert.equal(optedOut.requireFullSync, false)
+
+    const optedIn = await pairingDeviceProps({
+        requireFullSync: false,
+        history: { requireFullSync: true }
+    })
+    assert.equal(optedIn.requireFullSync, true)
+})
+
+test('pairing falls back to the top-level requireFullSync when history sets none', async () => {
+    const deviceProps = await pairingDeviceProps({ requireFullSync: true, history: {} })
+    assert.equal(deviceProps.requireFullSync, true)
 })
 
 test('default option resolution: autoDecrypt on, history on, markOnlineOnConnect off', () => {
