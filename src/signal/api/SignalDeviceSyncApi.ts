@@ -77,7 +77,10 @@ export interface SignalLidSyncResult {
      * while `'error'` and `'unanswered'` mean the server did not give a verdict.
      */
     readonly status: SignalLidSyncStatus
-    /** Server error that explains an `error` or `unanswered` status, when one was reported. */
+    /**
+     * Server error behind an `error` or `unanswered` status, or the one a `<lid>` node
+     * reported on an `in` result, when one was reported.
+     */
     readonly error?: SignalLidSyncError
 }
 
