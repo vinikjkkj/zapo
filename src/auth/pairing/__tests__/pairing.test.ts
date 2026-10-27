@@ -11,7 +11,7 @@ import { WaPairingFlow } from '@auth/pairing/WaPairingFlow'
 import { WaQrFlow } from '@auth/pairing/WaQrFlow'
 import type { WaAuthCredentials } from '@auth/types'
 import { randomBytesAsync, X25519 } from '@crypto'
-import { createNoopLogger } from '@infra/log/types'
+import { createNoopLogger, type Logger } from '@infra/log/types'
 import type { BinaryNode } from '@transport/types'
 
 test('pairing code crypto creates valid companion hello payload', async () => {
@@ -180,7 +180,14 @@ test('pair-success rejects an oversized device-identity payload', async () => {
     )
 })
 
-async function setupLinkCode(options: { readonly failRearm?: boolean } = {}) {
+async function setupLinkCode(
+    options: {
+        /** Runs before each `companion_hello` reply (1-based); a rejection fails that IQ. */
+        readonly beforeHelloReply?: (index: number) => Promise<void> | undefined
+        readonly onRefresh?: () => void
+        readonly logger?: Logger
+    } = {}
+) {
     const [noiseKeyPair, identityKeyPair, signedPreKeyPair, primaryIdentity, advSecretKey] =
         await Promise.all([
             X25519.generateKeyPair(),
@@ -204,7 +211,7 @@ async function setupLinkCode(options: { readonly failRearm?: boolean } = {}) {
     const finishes: BinaryNode[] = []
     const refreshes: boolean[] = []
     const flow = new WaPairingFlow({
-        logger: createNoopLogger(),
+        logger: options.logger ?? createNoopLogger(),
         auth: {
             getCredentials: () => credentials,
             updateCredentials: async (next) => {
@@ -220,9 +227,8 @@ async function setupLinkCode(options: { readonly failRearm?: boolean } = {}) {
                     return { tag: 'iq', attrs: { type: 'result' } }
                 }
                 hellos.push(node)
-                if (options.failRearm && hellos.length > 1) {
-                    throw new Error('rate-overlimit')
-                }
+                const index = hellos.length
+                await options.beforeHelloReply?.(index)
                 return {
                     tag: 'iq',
                     attrs: { type: 'result' },
@@ -234,7 +240,7 @@ async function setupLinkCode(options: { readonly failRearm?: boolean } = {}) {
                                 {
                                     tag: 'link_code_pairing_ref',
                                     attrs: {},
-                                    content: `ref-${hellos.length}`
+                                    content: `ref-${index}`
                                 }
                             ]
                         }
@@ -248,6 +254,7 @@ async function setupLinkCode(options: { readonly failRearm?: boolean } = {}) {
             emitPairingCode: () => undefined,
             emitPairingRefresh: (forceManual) => {
                 refreshes.push(forceManual)
+                options.onRefresh?.()
             },
             emitPaired: () => undefined
         }
@@ -329,13 +336,70 @@ test('pair-device on a new connection registers the pending pairing code again',
 })
 
 test('a failed re-registration drops the pairing code and asks for a manual refresh', async () => {
-    const ctx = await setupLinkCode({ failRearm: true })
+    const ctx = await setupLinkCode({
+        beforeHelloReply: (index) =>
+            index > 1 ? Promise.reject(new Error('rate-overlimit')) : undefined
+    })
     await ctx.flow.requestPairingCode('5511999999999')
     await ctx.flow.handleIncomingIqSet(ctx.pairDevice)
     await waitUntil(() => ctx.refreshes.length === 1)
 
     assert.deepEqual(ctx.refreshes, [true])
     assert.equal(ctx.flow.hasPairingSession(), false)
+})
+
+test('a re-registration outliving its connection cannot drop the newer one', async () => {
+    let failStale!: (error: Error) => void
+    let releaseLatest!: () => void
+    const ctx = await setupLinkCode({
+        beforeHelloReply: (index) => {
+            if (index === 2) {
+                return new Promise<void>((_, reject) => {
+                    failStale = reject
+                })
+            }
+            if (index === 3) {
+                return new Promise<void>((resolve) => {
+                    releaseLatest = resolve
+                })
+            }
+            return undefined
+        }
+    })
+    const code = await ctx.flow.requestPairingCode('5511999999999')
+    await ctx.flow.handleIncomingIqSet(ctx.pairDevice)
+    await waitUntil(() => ctx.hellos.length === 2)
+    await ctx.flow.handleIncomingIqSet(ctx.pairDevice)
+    await waitUntil(() => ctx.hellos.length === 3)
+
+    failStale(new Error('companion hello timed out'))
+    releaseLatest()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    assert.deepEqual(ctx.refreshes, [])
+    await ctx.flow.handleLinkCodeNotification(await ctx.primaryHello('ref-3', code, ctx.hellos[2]))
+    assert.equal(ctx.finishes.length, 1)
+})
+
+test('a throwing pairing refresh listener does not escape the re-registration', async () => {
+    const warnings: string[] = []
+    const ctx = await setupLinkCode({
+        logger: {
+            ...createNoopLogger(),
+            warn: (message) => {
+                warnings.push(message)
+            }
+        },
+        beforeHelloReply: (index) =>
+            index > 1 ? Promise.reject(new Error('rate-overlimit')) : undefined,
+        onRefresh: () => {
+            throw new Error('listener failed')
+        }
+    })
+    await ctx.flow.requestPairingCode('5511999999999')
+    await ctx.flow.handleIncomingIqSet(ctx.pairDevice)
+
+    await waitUntil(() => warnings.includes('pairing code re-registration failed unexpectedly'))
 })
 
 test('qr flow emits rotating QR values and can be refreshed', async (t) => {

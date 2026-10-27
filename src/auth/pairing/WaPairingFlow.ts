@@ -81,6 +81,7 @@ const PAIR_SUCCESS_DEVICE_IDENTITY_MAX_BYTES = 500
 export class WaPairingFlow {
     private readonly opts: WaPairingFlowOptions
     private pairingSession: ActivePairingSession | null
+    private rearmGeneration = 0
     private pairSuccessInFlight = false
 
     public constructor(options: WaPairingFlowOptions) {
@@ -237,7 +238,12 @@ export class WaPairingFlow {
         this.opts.logger.debug('pair-device refs updated', { refsCount: refs.length })
         // The server sends pair-device once per connection: a pending code belongs to an older one.
         if (this.pairingSession) {
-            void this.rearmPairingCode(this.pairingSession)
+            const generation = ++this.rearmGeneration
+            void this.rearmPairingCode(this.pairingSession, generation).catch((error) => {
+                this.opts.logger.warn('pairing code re-registration failed unexpectedly', {
+                    message: toError(error).message
+                })
+            })
         }
     }
 
@@ -576,15 +582,22 @@ export class WaPairingFlow {
      * `companion_hello`, so a code requested on a dropped connection is dead.
      * Registers the same code again, without a push, like WA Web's code refresh.
      * The ADV secret is not rotated: the QR just emitted for this connection carries it.
+     * Only the latest pair-device may settle the session, since an older attempt can
+     * outlive its dropped connection until the IQ times out.
      */
-    private async rearmPairingCode(previous: ActivePairingSession): Promise<void> {
+    private async rearmPairingCode(
+        previous: ActivePairingSession,
+        generation: number
+    ): Promise<void> {
+        const isCurrent = (): boolean =>
+            this.pairingSession === previous && this.rearmGeneration === generation
         try {
             const session = await this.sendCompanionHello(
                 previous.phoneJid,
                 false,
                 previous.pairingCode
             )
-            if (this.pairingSession !== previous) {
+            if (!isCurrent()) {
                 this.opts.logger.debug('pairing code re-registration superseded')
                 return
             }
@@ -594,7 +607,7 @@ export class WaPairingFlow {
             })
         } catch (error) {
             const message = toError(error).message
-            if (this.pairingSession !== previous) {
+            if (!isCurrent()) {
                 this.opts.logger.debug('superseded pairing code re-registration failed', {
                     message
                 })
