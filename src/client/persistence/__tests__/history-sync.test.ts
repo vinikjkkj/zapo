@@ -22,6 +22,7 @@ import { proto, type Proto } from '@proto'
 import type { WaStoredContactRecord } from '@store/contracts/contact.store'
 import type { WaStoredMessageRecord } from '@store/contracts/message.store'
 import type { WaStoredThreadRecord } from '@store/contracts/thread.store'
+import { delay } from '@util/async'
 import { toBytesView } from '@util/bytes'
 import { longToNumber } from '@util/primitives'
 import { readProtoVarint } from '@util/protoscan'
@@ -980,6 +981,20 @@ async function settleMacrotasks(): Promise<void> {
     }
 }
 
+async function waitFor(
+    predicate: () => boolean,
+    message: string,
+    timeoutMs = 5_000
+): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    while (!predicate()) {
+        if (Date.now() > deadline) {
+            throw new Error(message)
+        }
+        await delay(1)
+    }
+}
+
 function createGate(): { readonly promise: Promise<void>; readonly open: () => void } {
     let open: () => void = () => undefined
     const promise = new Promise<void>((resolve) => {
@@ -1226,6 +1241,7 @@ test('history sink pauses the stream while an item is pending', async () => {
         )
     )
 
+    await waitFor(() => run.items.length > 0, 'the first item never reached the sink')
     await settleMacrotasks()
     assert.deepEqual(run.items.map(describeItem), [`message:${chat}:B1`])
     assert.deepEqual(run.commits, [])
@@ -1268,6 +1284,7 @@ test('history sink commit gets the chunk event and the receipt waits for it', as
         )
     )
 
+    await waitFor(() => run.commits.length > 0, 'the chunk never reached commit')
     await settleMacrotasks()
     assert.equal(run.commits.length, 1)
     assert.deepEqual(run.capture.events, [], 'no chunk event before the commit resolves')
