@@ -519,3 +519,61 @@ test('WaComms closeSocketAndResume is a no-op while a resume is already in fligh
     await flush()
     assert.equal(sockets.length, 2)
 })
+
+function reconnectLogs(records: readonly RecordedLog[]): RecordedLog[] {
+    return records.filter((record) => record.message === 'socket closed, scheduling reconnect')
+}
+
+test('WaComms hands a server close to the restart hold instead of scheduling a reconnect', async (t) => {
+    stubInstantHandshake(t)
+    const { comms, sockets, records, connect } = await createCommsHarness(t)
+    comms.startComms(() => undefined)
+    const socket = await connect(0)
+    await comms.waitForConnection()
+    let held = 0
+    comms.holdForServerRestart(() => {
+        held += 1
+    })
+
+    socket.serverClose()
+    await flush()
+
+    assert.equal(held, 1)
+    assert.deepEqual(reconnectLogs(records), [])
+    assert.equal(sockets.length, 1)
+    assert.equal(comms.getCommsState().connected, false)
+})
+
+test('WaComms schedules a reconnect on a server close when nothing holds it', async (t) => {
+    stubInstantHandshake(t)
+    const { comms, records, connect } = await createCommsHarness(t)
+    comms.startComms(() => undefined)
+    const socket = await connect(0)
+    await comms.waitForConnection()
+
+    socket.serverClose()
+    await flush()
+
+    assert.equal(reconnectLogs(records).length, 1)
+})
+
+test('WaComms drops the restart hold on a resume', async (t) => {
+    stubInstantHandshake(t)
+    const { comms, records, connect } = await createCommsHarness(t)
+    comms.startComms(() => undefined)
+    await connect(0)
+    await comms.waitForConnection()
+    let held = 0
+    comms.holdForServerRestart(() => {
+        held += 1
+    })
+
+    await comms.closeSocketAndResume()
+    const second = await connect(1)
+    await comms.waitForConnection()
+    second.serverClose()
+    await flush()
+
+    assert.equal(held, 0)
+    assert.equal(reconnectLogs(records).length, 1)
+})

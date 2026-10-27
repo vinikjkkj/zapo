@@ -43,7 +43,7 @@ test('pairing code finish validates wrapped primary payload size', async () => {
 
 const PRIMARY_JID = '5511999999999@s.whatsapp.net'
 
-async function setupPairSuccess() {
+async function setupPairSuccess(logger: Logger = createNoopLogger()) {
     const [companionIdentity, primaryIdentity, noiseKeyPair, advSecretKey] = await Promise.all([
         X25519.generateKeyPair(),
         X25519.generateKeyPair(),
@@ -63,7 +63,7 @@ async function setupPairSuccess() {
     }
     const sent: BinaryNode[] = []
     const flow = new WaPairingFlow({
-        logger: createNoopLogger(),
+        logger,
         auth: {
             getCredentials: () => credentials,
             updateCredentials: async (next) => {
@@ -142,6 +142,29 @@ test('pair-success signs the identity, seeds the primary key and resets the logi
     assert.equal(credentials.meLid, '111222333@lid')
     assert.equal(credentials.platform, 'android')
     assert.equal(credentials.loginCounter, 0)
+})
+
+test('pair-success logs the ADV account and device types without key material', async () => {
+    const records: { readonly message: string; readonly context?: Record<string, unknown> }[] = []
+    const logger: Logger = {
+        ...createNoopLogger(),
+        child: () => logger,
+        debug: (message, context) => {
+            records.push({ message, context })
+        }
+    }
+    const ctx = await setupPairSuccess(logger)
+
+    await ctx.flow.handleIncomingIqSet(ctx.buildIq(ctx.deviceIdentityBytes))
+
+    const entry = records.find((record) => record.message === 'pair-success adv identity')
+    assert.ok(entry)
+    assert.deepEqual(entry.context, {
+        envelopeAccountType: null,
+        accountType: null,
+        deviceType: null,
+        keyIndex: 3
+    })
 })
 
 test('pair-success answers not-authorized when the HMAC does not match', async () => {

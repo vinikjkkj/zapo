@@ -330,7 +330,13 @@ export class WaPairingFlow {
             await this.sendPairSuccessValidationError(iqNode)
             throw new Error('pair-success account signature validation failed')
         }
-        const { signedIdentity, keyIndex, responseIdentityBytes } = built
+        const { signedIdentity, keyIndex, responseIdentityBytes, advDeviceIdentity } = built
+        this.opts.logger.debug('pair-success adv identity', {
+            envelopeAccountType: wrappedIdentity.accountType ?? null,
+            accountType: advDeviceIdentity.accountType ?? null,
+            deviceType: advDeviceIdentity.deviceType ?? null,
+            keyIndex: advDeviceIdentity.keyIndex ?? null
+        })
         const nextCredentials: WaAuthCredentials = {
             ...credentials,
             signedIdentity,
@@ -381,6 +387,7 @@ export class WaPairingFlow {
         readonly signedIdentity: ReturnType<typeof proto.ADVSignedDeviceIdentity.decode>
         readonly keyIndex: number
         readonly responseIdentityBytes: Uint8Array
+        readonly advDeviceIdentity: ReturnType<typeof proto.ADVDeviceIdentity.decode>
     } | null> {
         const signedIdentity = proto.ADVSignedDeviceIdentity.decode(wrappedDetails)
         const details = decodeProtoBytes(signedIdentity.details, 'ADVSignedDeviceIdentity.details')
@@ -426,7 +433,8 @@ export class WaPairingFlow {
         return {
             signedIdentity,
             keyIndex: advDeviceIdentity.keyIndex ?? 0,
-            responseIdentityBytes
+            responseIdentityBytes,
+            advDeviceIdentity
         }
     }
 

@@ -4,6 +4,7 @@ import type { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTa
 import type { WaClientOptions } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import type { WaMediaConn } from '@media/types'
+import { WA_DEFAULTS } from '@protocol/constants'
 import type { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
 import type { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import type { WaNodeTransport } from '@transport/node/WaNodeTransport'
@@ -37,7 +38,7 @@ export class WaConnectionManager {
     private mediaConnCache: WaMediaConn | null
     private connectPromise: Promise<void> | null
     private pairingReconnectPromise: Promise<void> | null
-    private pairingReconnectTimeout: ReturnType<typeof setTimeout> | null
+    private pairRestartTimer: ReturnType<typeof setTimeout> | null
     private frameHandler: ((frame: Uint8Array) => Promise<void>) | null
     private pendingComms: WaComms | null
     private lifecycleGeneration: number
@@ -58,7 +59,7 @@ export class WaConnectionManager {
         this.mediaConnCache = null
         this.connectPromise = null
         this.pairingReconnectPromise = null
-        this.pairingReconnectTimeout = null
+        this.pairRestartTimer = null
         this.frameHandler = null
         this.pendingComms = null
         this.lifecycleGeneration = 0
@@ -85,27 +86,42 @@ export class WaConnectionManager {
         return this.connectPromise
     }
 
-    public scheduleReconnectAfterPairing(): void {
-        this.logger.debug('wa client scheduling reconnect after pairing')
-        if (this.pairingReconnectTimeout) {
-            clearTimeout(this.pairingReconnectTimeout)
+    /**
+     * Starts the post-pairing restart window: the server ends the unregistered connection
+     * itself (`stream:error` 515, as WA Web waits for), so the socket stays open until that
+     * signal, a server close, or the fallback timer, whichever comes first.
+     */
+    public awaitServerRestartAfterPairing(): void {
+        const comms = this.comms
+        if (!comms) {
+            this.logger.trace('pairing restart wait skipped: no active comms')
+            return
         }
-        this.pairingReconnectTimeout = setTimeout(() => {
-            this.pairingReconnectTimeout = null
-            void this.reconnectAsRegisteredAfterPairing().catch((error) => {
-                if (this.isLifecycleSupersededError(error)) {
-                    this.logger.trace('pairing reconnect canceled by newer lifecycle')
-                    return
-                }
-                this.logger.warn('failed to reconnect after pairing', {
-                    meJid: this.authClient.getCurrentCredentials()?.meJid,
-                    message: toError(error).message
-                })
-            })
-        }, 0)
+        this.clearPairRestartTimer()
+        this.logger.debug('wa client waiting for server restart after pairing', {
+            fallbackMs: WA_DEFAULTS.PAIRING_RESTART_WAIT_MS
+        })
+        this.pairRestartTimer = setTimeout(
+            () => this.startPairRestart('fallback_timeout'),
+            WA_DEFAULTS.PAIRING_RESTART_WAIT_MS
+        )
+        comms.holdForServerRestart(() => this.startPairRestart('socket_closed'))
+    }
+
+    /**
+     * Claims a `stream:error` 515 for the post-pairing restart. Returns `true` while the
+     * window is open or its restart is running, so the generic force-login path must skip it.
+     */
+    public handleServerRestartRequest(): boolean {
+        if (this.pairRestartTimer) {
+            this.startPairRestart('stream_error_515')
+            return true
+        }
+        return this.pairingReconnectPromise !== null
     }
 
     public async disconnect(): Promise<void> {
+        this.clearPairRestartTimer()
         const lifecycleGeneration = this.nextLifecycleGeneration()
         this.invalidatePendingComms('failed to stop pending comms during disconnect')
         await this.runLifecycleOperation(async () => {
@@ -202,6 +218,32 @@ export class WaConnectionManager {
         this.logger.info('wa client connected')
     }
 
+    private startPairRestart(trigger: string): void {
+        if (!this.pairRestartTimer) {
+            return
+        }
+        this.clearPairRestartTimer()
+        this.logger.debug('wa client restarting after pairing', { trigger })
+        void this.reconnectAsRegisteredAfterPairing().catch((error) => {
+            if (this.isLifecycleSupersededError(error)) {
+                this.logger.trace('pairing reconnect canceled by newer lifecycle')
+                return
+            }
+            this.logger.warn('failed to reconnect after pairing', {
+                meJid: this.authClient.getCurrentCredentials()?.meJid,
+                message: toError(error).message
+            })
+        })
+    }
+
+    private clearPairRestartTimer(): void {
+        if (!this.pairRestartTimer) {
+            return
+        }
+        clearTimeout(this.pairRestartTimer)
+        this.pairRestartTimer = null
+    }
+
     private async reconnectAsRegisteredAfterPairing(): Promise<void> {
         if (this.pairingReconnectPromise) {
             this.logger.trace('pairing reconnect already in-flight')
@@ -260,10 +302,7 @@ export class WaConnectionManager {
         }
 
         this.logger.debug('wa client disconnect start')
-        if (this.pairingReconnectTimeout) {
-            clearTimeout(this.pairingReconnectTimeout)
-            this.pairingReconnectTimeout = null
-        }
+        this.clearPairRestartTimer()
         this.keepAlive.stop()
         this.nodeOrchestrator.clearPending(new Error('client disconnected'))
         this.clockSkewMs = null

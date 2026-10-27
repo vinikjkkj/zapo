@@ -689,6 +689,9 @@ export class FakeWaServer {
                         timeoutMs: 15_000
                     }
                 )
+            },
+            waitForPairSuccessAck: async (pairSuccessIqId) => {
+                await session.expectIq({ id: pairSuccessIqId }, { timeoutMs: 15_000 })
             }
         })
         await driver.run()

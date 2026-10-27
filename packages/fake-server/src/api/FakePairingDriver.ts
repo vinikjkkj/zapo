@@ -11,6 +11,10 @@ import {
     buildPairSuccessIq,
     mintPairingRefs
 } from '../protocol/auth/pair-device'
+import { buildStreamErrorCode } from '../protocol/stream/stream-error'
+
+/** `stream:error` code the server sends once the companion has signed its identity. */
+const FORCE_LOGIN_CODE = 515
 
 export interface FakePairingDriverOptions {
     readonly deviceJid: string
@@ -28,6 +32,7 @@ export interface CompanionPairingMaterial {
 export interface FakePairingDriverDeps {
     readonly pipeline: WaFakeConnectionPipeline
     readonly waitForPairDeviceAck?: (pairDeviceIqId: string) => Promise<void>
+    readonly waitForPairSuccessAck?: (pairSuccessIqId: string) => Promise<void>
     readonly companionMaterialResolver: () => Promise<CompanionPairingMaterial>
 }
 
@@ -58,13 +63,18 @@ export class FakePairingDriver {
             companionDeviceId: this.options.companionDeviceId ?? 1
         })
 
-        await this.deps.pipeline.sendStanza(
-            buildPairSuccessIq({
-                deviceJid: this.options.deviceJid,
-                deviceLid: this.options.deviceLid,
-                platform: this.options.platform ?? 'IOS',
-                deviceIdentityBytes
-            })
-        )
+        const pairSuccessIq = buildPairSuccessIq({
+            deviceJid: this.options.deviceJid,
+            deviceLid: this.options.deviceLid,
+            platform: this.options.platform ?? 'IOS',
+            deviceIdentityBytes
+        })
+        const waitForSign = this.deps.waitForPairSuccessAck?.(pairSuccessIq.attrs.id)
+        await this.deps.pipeline.sendStanza(pairSuccessIq)
+        if (waitForSign) {
+            void waitForSign
+                .then(() => this.deps.pipeline.sendStanza(buildStreamErrorCode(FORCE_LOGIN_CODE)))
+                .catch(() => undefined)
+        }
     }
 }

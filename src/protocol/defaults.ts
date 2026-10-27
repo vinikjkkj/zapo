@@ -44,6 +44,12 @@ export const WA_DEFAULTS = Object.freeze({
     MESSAGE_ACK_TIMEOUT_MS: 10_000,
     MESSAGE_MAX_ATTEMPTS: 3,
     MESSAGE_RETRY_DELAY_MS: 750,
+    /**
+     * How long a freshly paired companion waits for the server to restart the
+     * connection (`stream:error` 515 or a socket close) before restarting by itself.
+     * Matches the IQ timeout, the longest the client waits on a server reply elsewhere.
+     */
+    PAIRING_RESTART_WAIT_MS: 15_000,
     PAIRING_CODE_MAX_AGE_SECONDS: 180,
     PAIRING_CODE_MAX_PRIMARY_HELLOS: 3,
     QR_INITIAL_TTL_MS: 60_000,

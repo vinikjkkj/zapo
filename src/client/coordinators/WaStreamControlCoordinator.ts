@@ -21,6 +21,8 @@ interface WaStreamControlCoordinatorOptions {
     ) => Promise<void>
     readonly clearStoredCredentials: () => Promise<void>
     readonly connect: (reason: WaConnectionOpenReason) => Promise<void>
+    /** Returns `true` when a pairing restart already owns the force-login `stream:error`. */
+    readonly handlePairingRestart: () => boolean
 }
 
 export interface WaStreamControlHandler {
@@ -37,7 +39,8 @@ export function createStreamControlHandler(
         clearMediaConnCache,
         disconnect,
         clearStoredCredentials,
-        connect
+        connect,
+        handlePairingRestart
     } = options
 
     let lifecyclePromise: Promise<void> | null = null
@@ -139,6 +142,13 @@ export function createStreamControlHandler(
                     logger.info('received xmlstreamend stanza')
                     return
                 case 'stream_error_code':
+                    if (
+                        result.code === WA_STREAM_SIGNALING.FORCE_LOGIN_CODE &&
+                        handlePairingRestart()
+                    ) {
+                        logger.info('stream:error force login claimed by the pairing restart')
+                        return
+                    }
                     logger.warn('received stream:error with code', { code: result.code })
                     if (result.code >= 500 && result.code < 600) {
                         if (result.code === WA_STREAM_SIGNALING.FORCE_LOGIN_CODE) {

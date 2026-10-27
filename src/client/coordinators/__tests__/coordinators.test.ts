@@ -823,7 +823,8 @@ test('stream control handler runs force-login and resume flows', async () => {
         connect: async (reason) => {
             calls.push('connect')
             connectCalls.push(reason)
-        }
+        },
+        handlePairingRestart: () => false
     })
 
     await handler.handleStreamControlResult({
@@ -852,6 +853,60 @@ test('stream control handler runs force-login and resume flows', async () => {
     assert.deepEqual(calls, ['clear_pending', 'clear_media', 'resume'])
     assert.deepEqual(disconnectCalls, [])
     assert.deepEqual(connectCalls, [])
+})
+
+test('stream control handler leaves the force-login stream error to a pairing restart that claims it', async () => {
+    const calls: string[] = []
+    let claim = true
+    const handler = createStreamControlHandler({
+        logger: createNoopLogger(),
+        getComms: () =>
+            ({
+                stopComms: async () => {
+                    calls.push('stopComms')
+                },
+                closeSocketAndResume: async () => {
+                    calls.push('resume')
+                }
+            }) as never,
+        clearPendingQueries: () => {
+            calls.push('clear_pending')
+        },
+        clearMediaConnCache: () => {
+            calls.push('clear_media')
+        },
+        disconnect: async () => {
+            calls.push('disconnect')
+        },
+        clearStoredCredentials: async () => {
+            calls.push('clear_credentials')
+        },
+        connect: async () => {
+            calls.push('connect')
+        },
+        handlePairingRestart: () => {
+            calls.push('pairing_restart')
+            return claim
+        }
+    })
+
+    await handler.handleStreamControlResult({
+        kind: 'stream_error_code',
+        code: WA_STREAM_SIGNALING.FORCE_LOGIN_CODE
+    })
+    assert.deepEqual(calls, ['pairing_restart'])
+
+    calls.length = 0
+    await handler.handleStreamControlResult({ kind: 'stream_error_code', code: 500 })
+    assert.deepEqual(calls, ['clear_pending', 'clear_media', 'resume'])
+
+    calls.length = 0
+    claim = false
+    await handler.handleStreamControlResult({
+        kind: 'stream_error_code',
+        code: WA_STREAM_SIGNALING.FORCE_LOGIN_CODE
+    })
+    assert.deepEqual(calls, ['pairing_restart', 'stopComms', 'disconnect', 'connect'])
 })
 
 test('stream control handler handles force-logout, replaced and device-removed flows', async () => {
@@ -891,7 +946,8 @@ test('stream control handler handles force-logout, replaced and device-removed f
         connect: async (reason) => {
             calls.push('connect')
             connectCalls.push(reason)
-        }
+        },
+        handlePairingRestart: () => false
     })
 
     await handler.handleStreamControlResult({

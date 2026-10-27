@@ -475,7 +475,7 @@ export function buildWaClientDependencies(input: {
     let connectionManager: WaConnectionManager | null = null
     let passiveTasks: WaPassiveTasksCoordinator | null = null
     let mediaConnCacheFallback: WaMediaConn | null = null
-    let scheduleReconnectAfterPairing: () => void = () => undefined
+    let awaitServerRestartAfterPairing: () => void = () => undefined
 
     const serverClock = createServerClock(() => connectionManager?.getClockSkewMs() ?? null)
 
@@ -640,7 +640,7 @@ export function buildWaClientDependencies(input: {
                     runtime.emitEvent('auth_pairing_required', { forceManual }),
                 onPaired: (credentials) => {
                     runtime.emitEvent('auth_paired', { credentials })
-                    scheduleReconnectAfterPairing()
+                    awaitServerRestartAfterPairing()
                 },
                 onError: (error) => runtime.handleError(error),
                 onPasskeyRequired: (hasSigner) =>
@@ -1003,7 +1003,7 @@ export function buildWaClientDependencies(input: {
     if (mediaConnCacheFallback !== null) {
         connectionManager.setMediaConnCache(mediaConnCacheFallback)
     }
-    scheduleReconnectAfterPairing = () => connectionManager?.scheduleReconnectAfterPairing()
+    awaitServerRestartAfterPairing = () => connectionManager?.awaitServerRestartAfterPairing()
 
     const disconnectWithClientSideEffects = async (
         reason: WaDisconnectReason,
@@ -1052,7 +1052,8 @@ export function buildWaClientDependencies(input: {
         },
         disconnect: disconnectWithClientSideEffects,
         clearStoredCredentials: clearStoredCredentialsWithClientSideEffects,
-        connect: connectWithClientSideEffects
+        connect: connectWithClientSideEffects,
+        handlePairingRestart: () => connectionManager?.handleServerRestartRequest() ?? false
     })
 
     const incomingMessageAckOptions: Parameters<typeof handleIncomingMessageAck>[1] = {

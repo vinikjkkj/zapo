@@ -52,6 +52,7 @@ export class WaComms {
     private pendingFramesOverflowClosing: boolean
     private resumeInFlight: boolean
     private resumeHandshakeFailures: number
+    private serverRestartHold: (() => void) | null
     /** Identifies the current connection attempt; bumped on every reset and on each new noise session. */
     private connectionGeneration: number
     private noiseSession: WaNoiseSession | null
@@ -122,6 +123,7 @@ export class WaComms {
         this.pendingFramesOverflowClosing = false
         this.resumeInFlight = false
         this.resumeHandshakeFailures = 0
+        this.serverRestartHold = null
         this.connectionGeneration = 0
         this.noiseSession = null
         this.lastServerStaticKey = null
@@ -227,6 +229,14 @@ export class WaComms {
             rejectWaitersError: new Error('comms stopped')
         })
         await this.socket.close(1000, 'stop_comms')
+    }
+
+    /**
+     * Hands the next socket close to `onClosed` instead of scheduling a reconnect, so the
+     * caller can restart with new credentials. Dropped by any stop, resume or prevent-retry.
+     */
+    public holdForServerRestart(onClosed: () => void): void {
+        this.serverRestartHold = onClosed
     }
 
     public async closeSocketAndResume(): Promise<void> {
@@ -362,6 +372,16 @@ export class WaComms {
         }
         if (this.resumeInFlight) {
             this.logger.trace('comms socket close while resume in-flight')
+            return
+        }
+        const onServerRestart = this.serverRestartHold
+        if (onServerRestart) {
+            this.serverRestartHold = null
+            this.logger.debug('comms socket closed by server while held for restart', {
+                code: info.code,
+                reason: info.reason
+            })
+            onServerRestart()
             return
         }
         this.scheduleReconnect()
@@ -691,6 +711,7 @@ export class WaComms {
         this.handlingRequests = options.handlingRequests
         this.preventRetry = options.preventRetry
         this.resumeInFlight = options.resumeInFlight
+        this.serverRestartHold = null
         if (options.resetResumeHandshakeFailures !== false) {
             this.resumeHandshakeFailures = 0
         }
