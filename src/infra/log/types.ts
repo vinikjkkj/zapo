@@ -32,7 +32,8 @@ export interface Logger {
 
 function noop(): void {}
 
-export function createNoopLogger(level: LogLevel = 'trace'): Logger {
+/** Reports `error` by default so work gated on a lower level, like trace XML, stays off. */
+export function createNoopLogger(level: LogLevel = 'error'): Logger {
     const logger: Logger = {
         level,
         trace: noop,

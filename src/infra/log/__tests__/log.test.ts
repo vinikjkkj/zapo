@@ -134,6 +134,10 @@ test('pino logger child falls back to manual binding when underlying lacks child
     assert.deepEqual(captured[1], [{ session: 'abc', foo: 1 }, 'extra'])
 })
 
+test('noop logger reports the quietest level so trace-gated work stays off', () => {
+    assert.equal(createNoopLogger().level, 'error')
+})
+
 test('noop logger child returns itself and stays silent', () => {
     const noop = createNoopLogger()
     const child = noop.child({ session: 'x' })
