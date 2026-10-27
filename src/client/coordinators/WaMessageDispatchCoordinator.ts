@@ -1,5 +1,6 @@
 import type { WaAppStateSyncKey } from '@appstate/types'
 import type { WaAuthCredentials } from '@auth/types'
+import type { WaSyncSignalSessionOptions } from '@client/coordinators/WaMessageCoordinator'
 import type { DeviceFanoutResolver } from '@client/messaging/fanout'
 import type { GroupMetadataCache } from '@client/messaging/group-metadata'
 import type { AppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
@@ -729,10 +730,16 @@ export class WaMessageDispatchCoordinator {
         return pair.pnJid ?? undefined
     }
 
-    public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {
+    public async syncSignalSession(
+        jid: string,
+        { force = false, reasonIdentity = false }: WaSyncSignalSessionOptions = {}
+    ): Promise<void> {
         const address = parseSignalAddressFromJid(jid)
         if (address.server === WA_DEFAULTS.GROUP_SERVER) {
             throw new Error('syncSignalSession supports only direct chats')
+        }
+        if (force || reasonIdentity) {
+            await this.deps.sessionStore.deleteSession(address)
         }
         await this.deps.sessionResolver.ensureSession(address, jid, undefined, reasonIdentity)
     }

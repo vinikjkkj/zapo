@@ -192,3 +192,97 @@ test('requestMediaReupload rejects newsletters and messages without media', () =
         /no downloadable media/
     )
 })
+
+function createSyncSessionCoordinator(options: { readonly reissueFails?: boolean } = {}) {
+    const dispatched: { readonly jid: string; readonly options: unknown }[] = []
+    const reissued: string[] = []
+    const coordinator = new WaMessageCoordinator({
+        messageDispatch: {
+            syncSignalSession: async (jid: string, syncOptions?: unknown) => {
+                dispatched.push({ jid, options: syncOptions })
+            }
+        } as never,
+        mediaTransfer: {} as never,
+        mediaRetry: {} as never,
+        mediaUploadOptions: {} as never,
+        logger: createNoopLogger(),
+        messageStore: {} as never,
+        messageSecretStore: {} as never,
+        trustedContactToken: {
+            reissueOnIdentityChange: async (jid: string) => {
+                reissued.push(jid)
+                if (options.reissueFails) throw new Error('reissue failed')
+            }
+        } as never,
+        emitAddon: () => undefined,
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
+        peerDataOperation: createFakePdo().requester,
+        isGroupHistorySendEnabled: () => true,
+        getAbPropNumber: () => 100
+    })
+    return { coordinator, dispatched, reissued }
+}
+
+const SYNC_JID = '5511999999999@s.whatsapp.net'
+
+test('syncSignalSession without options ensures only and does not reissue the tc token', async () => {
+    const { coordinator, dispatched, reissued } = createSyncSessionCoordinator()
+
+    await coordinator.syncSignalSession(SYNC_JID)
+
+    assert.deepEqual(dispatched, [{ jid: SYNC_JID, options: {} }])
+    assert.deepEqual(reissued, [])
+})
+
+test('syncSignalSession force does not reissue the tc token', async () => {
+    const { coordinator, dispatched, reissued } = createSyncSessionCoordinator()
+
+    await coordinator.syncSignalSession(SYNC_JID, { force: true })
+
+    assert.deepEqual(dispatched, [{ jid: SYNC_JID, options: { force: true } }])
+    assert.deepEqual(reissued, [])
+})
+
+test('syncSignalSession reasonIdentity reissues the tc token', async () => {
+    const { coordinator, dispatched, reissued } = createSyncSessionCoordinator()
+
+    await coordinator.syncSignalSession(SYNC_JID, { reasonIdentity: true })
+
+    assert.deepEqual(dispatched, [{ jid: SYNC_JID, options: { reasonIdentity: true } }])
+    assert.deepEqual(reissued, [SYNC_JID])
+})
+
+test('syncSignalSession(jid, true) behaves like reasonIdentity', async () => {
+    const { coordinator, dispatched, reissued } = createSyncSessionCoordinator()
+
+    await coordinator.syncSignalSession(SYNC_JID, true)
+
+    assert.deepEqual(dispatched, [{ jid: SYNC_JID, options: { reasonIdentity: true } }])
+    assert.deepEqual(reissued, [SYNC_JID])
+})
+
+test('syncSignalSession(jid, false) behaves like no options', async () => {
+    const { coordinator, dispatched, reissued } = createSyncSessionCoordinator()
+
+    await coordinator.syncSignalSession(SYNC_JID, false)
+
+    assert.deepEqual(dispatched, [{ jid: SYNC_JID, options: { reasonIdentity: false } }])
+    assert.deepEqual(reissued, [])
+})
+
+test('syncSignalSession with force and reasonIdentity takes the identity path', async () => {
+    const { coordinator, dispatched, reissued } = createSyncSessionCoordinator()
+
+    await coordinator.syncSignalSession(SYNC_JID, { force: true, reasonIdentity: true })
+
+    assert.deepEqual(dispatched, [
+        { jid: SYNC_JID, options: { force: true, reasonIdentity: true } }
+    ])
+    assert.deepEqual(reissued, [SYNC_JID])
+})
+
+test('syncSignalSession does not fail when the tc token reissue fails', async () => {
+    const { coordinator } = createSyncSessionCoordinator({ reissueFails: true })
+
+    await coordinator.syncSignalSession(SYNC_JID, { reasonIdentity: true })
+})

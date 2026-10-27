@@ -20,6 +20,7 @@ export type {
     WaMessageCoordinator,
     WaShareGroupHistoryInput,
     WaShareGroupHistoryResult,
+    WaSyncSignalSessionOptions,
     WaUploadMediaOptions,
     WaUploadMediaType
 } from '@client/coordinators/WaMessageCoordinator'

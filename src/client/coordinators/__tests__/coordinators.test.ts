@@ -21,6 +21,7 @@ import type {
     WaOfflineThreadMetadataEvent,
     WaOutgoingMessageEvent
 } from '@client/types'
+import { toSerializedPubKey } from '@crypto/core/keys'
 import { createNoopLogger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { getContextInfo } from '@message/context-info'
@@ -31,14 +32,29 @@ import {
     WA_APP_STATE_COLLECTION_STATES,
     WA_CONNECTION_REASONS,
     WA_DISCONNECT_REASONS,
+    WA_IQ_TYPES,
+    WA_NODE_TAGS,
     WA_STREAM_SIGNALING
 } from '@protocol/constants'
+import { parseSignalAddressFromJid } from '@protocol/jid'
+import {
+    SIGNAL_KEY_DATA_LENGTH,
+    SIGNAL_KEY_ID_LENGTH,
+    SIGNAL_REGISTRATION_ID_LENGTH,
+    SIGNAL_SIGNATURE_LENGTH
+} from '@signal/api/constants'
+import { SignalSessionSyncApi } from '@signal/api/SignalSessionSyncApi'
+import { createSignalSessionResolver } from '@signal/session/resolver'
+import type { SignalAddress, SignalSessionRecord } from '@signal/types'
 import type { WaStoredThreadRecord, WaThreadStore } from '@store/contracts/thread.store'
 import { WaChatMetadataMemoryStore } from '@store/memory/chat-metadata.store'
 import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
+import { WaIdentityMemoryStore } from '@store/memory/identity.store'
 import { WaMessageMemoryStore } from '@store/memory/message.store'
+import { WaSessionMemoryStore } from '@store/memory/session.store'
 import type { BinaryNode } from '@transport/types'
 import { delay } from '@util/async'
+import { intToBytes } from '@util/bytes'
 import type { ServerClock } from '@util/clock'
 
 function createStubThreadStore(
@@ -161,6 +177,8 @@ function createMessageDispatchCoordinator(
         readonly signalStore?: unknown
         readonly identityStore?: unknown
         readonly deviceListStore?: unknown
+        readonly sessionResolver?: unknown
+        readonly sessionStore?: unknown
     }
 ): WaMessageDispatchCoordinator {
     const groupMetadataCache = createGroupMetadataCache({
@@ -174,7 +192,7 @@ function createMessageDispatchCoordinator(
         emitMessageSend: overrides?.emitMessageSend,
         messageClient: (overrides?.messageClient ?? {}) as never,
         retryTracker: (overrides?.retryTracker ?? {}) as never,
-        sessionResolver: {} as never,
+        sessionResolver: (overrides?.sessionResolver ?? {}) as never,
         fanoutResolver: (overrides?.fanoutResolver ?? {}) as never,
         groupMetadataCache,
         appStateSyncKeyProtocol: {} as never,
@@ -182,7 +200,7 @@ function createMessageDispatchCoordinator(
         senderKeyManager: (overrides?.senderKeyManager ?? {}) as never,
         signalProtocol: {} as never,
         signalStore: (overrides?.signalStore ?? {}) as never,
-        sessionStore: {} as never,
+        sessionStore: (overrides?.sessionStore ?? {}) as never,
         identityStore: (overrides?.identityStore ?? {}) as never,
         deviceListStore: (overrides?.deviceListStore ?? {}) as never,
         threadStore: overrides?.threadStore ?? createStubThreadStore(),
@@ -2401,4 +2419,217 @@ test('incoming node coordinator emits the offline thread manifest alongside the 
         { jid: '120363078720039631@g.us', timestampSeconds: 1_784_595_546 }
     ])
     assert.equal(notifications.length, 1)
+})
+
+const SYNC_SESSION_JID = '5511999999999@s.whatsapp.net'
+
+function createSyncSessionHarness() {
+    const address = parseSignalAddressFromJid(SYNC_SESSION_JID)
+    const oldIdentity = toSerializedPubKey(new Uint8Array(SIGNAL_KEY_DATA_LENGTH).fill(1))
+    const serverIdentity = new Uint8Array(SIGNAL_KEY_DATA_LENGTH).fill(1)
+    const oldSession = { remote: { pubKey: oldIdentity } } as unknown as SignalSessionRecord
+    const calls: string[] = []
+    const requests: BinaryNode[] = []
+    const sessions = new WaSessionMemoryStore()
+    const identities = new WaIdentityMemoryStore()
+    const state = { failFetch: false }
+
+    const sessionStore = Object.assign(Object.create(sessions) as WaSessionMemoryStore, {
+        deleteSession: async (target: SignalAddress) => {
+            calls.push('delete')
+            await sessions.deleteSession(target)
+        }
+    })
+    const signalSessionSync = new SignalSessionSyncApi({
+        logger: createNoopLogger(),
+        query: async (node) => {
+            calls.push('fetch')
+            requests.push(node)
+            const userContent: BinaryNode[] = state.failFetch
+                ? [{ tag: WA_NODE_TAGS.ERROR, attrs: { code: '500', text: 'boom' } }]
+                : [
+                      {
+                          tag: WA_NODE_TAGS.REGISTRATION,
+                          attrs: {},
+                          content: intToBytes(SIGNAL_REGISTRATION_ID_LENGTH, 7)
+                      },
+                      { tag: WA_NODE_TAGS.IDENTITY, attrs: {}, content: serverIdentity },
+                      {
+                          tag: WA_NODE_TAGS.SKEY,
+                          attrs: {},
+                          content: [
+                              {
+                                  tag: WA_NODE_TAGS.ID,
+                                  attrs: {},
+                                  content: intToBytes(SIGNAL_KEY_ID_LENGTH, 8)
+                              },
+                              {
+                                  tag: WA_NODE_TAGS.VALUE,
+                                  attrs: {},
+                                  content: new Uint8Array(SIGNAL_KEY_DATA_LENGTH).fill(2)
+                              },
+                              {
+                                  tag: WA_NODE_TAGS.SIGNATURE,
+                                  attrs: {},
+                                  content: new Uint8Array(SIGNAL_SIGNATURE_LENGTH).fill(3)
+                              }
+                          ]
+                      }
+                  ]
+            return {
+                tag: WA_NODE_TAGS.IQ,
+                attrs: { type: WA_IQ_TYPES.RESULT },
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.LIST,
+                        attrs: {},
+                        content: [
+                            {
+                                tag: WA_NODE_TAGS.USER,
+                                attrs: { jid: SYNC_SESSION_JID },
+                                content: userContent
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    })
+    const sessionResolver = createSignalSessionResolver({
+        signalProtocol: {
+            establishOutgoingSession: async (target: SignalAddress) => {
+                calls.push('establish')
+                const session = {
+                    remote: { pubKey: toSerializedPubKey(serverIdentity) }
+                } as unknown as SignalSessionRecord
+                await identities.setRemoteIdentity(target, session.remote.pubKey)
+                await sessions.setSession(target, session)
+                return session
+            }
+        } as never,
+        sessionStore,
+        identityStore: identities,
+        signalIdentitySync: {
+            syncIdentityKeys: async () => {
+                calls.push('identity-sync')
+            }
+        } as never,
+        signalSessionSync,
+        logger: createNoopLogger()
+    })
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+        sessionResolver,
+        sessionStore
+    })
+
+    return {
+        address,
+        oldIdentity,
+        oldSession,
+        calls,
+        sessions,
+        identities,
+        state,
+        coordinator,
+        async seed(): Promise<void> {
+            await sessions.setSession(address, oldSession)
+            await identities.setRemoteIdentity(address, oldIdentity)
+        },
+        requestedUsers(): readonly Record<string, string>[] {
+            return requests.flatMap((request) =>
+                ((request.content as BinaryNode[])[0].content as BinaryNode[]).map(
+                    (user) => user.attrs
+                )
+            )
+        }
+    }
+}
+
+test('syncSignalSession with only a jid keeps an existing session and fetches nothing', async () => {
+    const harness = createSyncSessionHarness()
+    await harness.seed()
+
+    await harness.coordinator.syncSignalSession(SYNC_SESSION_JID)
+
+    assert.deepEqual(harness.calls, [])
+    assert.equal(await harness.sessions.getSession(harness.address), harness.oldSession)
+})
+
+test('syncSignalSession with no session fetches a bundle without a reason', async () => {
+    const harness = createSyncSessionHarness()
+
+    await harness.coordinator.syncSignalSession(SYNC_SESSION_JID)
+
+    assert.deepEqual(harness.calls, ['fetch', 'establish'])
+    assert.deepEqual(harness.requestedUsers(), [{ jid: SYNC_SESSION_JID }])
+    assert.ok(await harness.sessions.getSession(harness.address))
+})
+
+test('syncSignalSession force drops the session, then fetches without a reason', async () => {
+    const harness = createSyncSessionHarness()
+    await harness.seed()
+
+    await harness.coordinator.syncSignalSession(SYNC_SESSION_JID, { force: true })
+
+    assert.deepEqual(harness.calls, ['delete', 'fetch', 'establish'])
+    assert.deepEqual(harness.requestedUsers(), [{ jid: SYNC_SESSION_JID }])
+    const session = await harness.sessions.getSession(harness.address)
+    assert.ok(session)
+    assert.notEqual(session, harness.oldSession)
+    assert.deepEqual(
+        await harness.identities.getRemoteIdentity(harness.address),
+        harness.oldIdentity
+    )
+})
+
+test('syncSignalSession reasonIdentity drops the session, syncs the identity and fetches with reason identity', async () => {
+    const harness = createSyncSessionHarness()
+    await harness.seed()
+
+    await harness.coordinator.syncSignalSession(SYNC_SESSION_JID, { reasonIdentity: true })
+
+    assert.deepEqual(harness.calls, ['delete', 'identity-sync', 'fetch', 'establish'])
+    assert.deepEqual(harness.requestedUsers(), [{ jid: SYNC_SESSION_JID, reason: 'identity' }])
+    const session = await harness.sessions.getSession(harness.address)
+    assert.ok(session)
+    assert.notEqual(session, harness.oldSession)
+})
+
+test('syncSignalSession with force and reasonIdentity takes the identity path', async () => {
+    const harness = createSyncSessionHarness()
+    await harness.seed()
+
+    await harness.coordinator.syncSignalSession(SYNC_SESSION_JID, {
+        force: true,
+        reasonIdentity: true
+    })
+
+    assert.deepEqual(harness.calls, ['delete', 'identity-sync', 'fetch', 'establish'])
+    assert.deepEqual(harness.requestedUsers(), [{ jid: SYNC_SESSION_JID, reason: 'identity' }])
+})
+
+test('syncSignalSession force propagates a failed fetch after the session was dropped', async () => {
+    const harness = createSyncSessionHarness()
+    await harness.seed()
+    harness.state.failFetch = true
+
+    await assert.rejects(
+        harness.coordinator.syncSignalSession(SYNC_SESSION_JID, { force: true }),
+        /key bundle user error/
+    )
+
+    assert.deepEqual(harness.calls, ['delete', 'fetch'])
+    assert.equal(await harness.sessions.hasSession(harness.address), false)
+})
+
+test('syncSignalSession rejects group jids before touching the session', async () => {
+    const harness = createSyncSessionHarness()
+    await harness.seed()
+
+    await assert.rejects(
+        harness.coordinator.syncSignalSession('120363000000000001@g.us', { force: true }),
+        /supports only direct chats/
+    )
+
+    assert.deepEqual(harness.calls, [])
 })

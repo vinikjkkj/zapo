@@ -177,6 +177,14 @@ export interface WaRequestHistorySyncInput {
     readonly count?: number
 }
 
+/** Options for {@link WaMessageCoordinator.syncSignalSession}. */
+export interface WaSyncSignalSessionOptions {
+    /** Drops the session, keeping the identity, and fetches a fresh one. */
+    readonly force?: boolean
+    /** The identity changed: drops the session and fetches with `reason="identity"`. */
+    readonly reasonIdentity?: boolean
+}
+
 export interface WaReachoutTimelock {
     readonly isActive: boolean
     readonly enforcementType: string | null
@@ -564,13 +572,23 @@ export class WaMessageCoordinator {
     }
 
     /**
-     * Force-refreshes the Signal session(s) for `jid`. Set `reasonIdentity` to
-     * `true` when the trigger was an identity change – this also queues a
-     * trusted-contact-token reissue.
+     * Syncs the Signal session of the device `jid` resolves to (a user JID is
+     * device 0). With no options it only ensures a session exists. `force`
+     * rebuilds it, keeping the identity. `reasonIdentity` rebuilds it as an
+     * identity change and reissues the trusted-contact token; it wins over
+     * `force`. Throws for group JIDs and when the key-bundle fetch fails, in
+     * which case the old session is already gone.
      */
-    public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {
-        await this.messageDispatch.syncSignalSession(jid, reasonIdentity)
-        if (reasonIdentity) {
+    public syncSignalSession(jid: string, options?: WaSyncSignalSessionOptions): Promise<void>
+    /** @deprecated Pass `{ reasonIdentity: true }` instead. */
+    public syncSignalSession(jid: string, reasonIdentity: boolean): Promise<void>
+    public async syncSignalSession(
+        jid: string,
+        options: boolean | WaSyncSignalSessionOptions = {}
+    ): Promise<void> {
+        const normalized = typeof options === 'boolean' ? { reasonIdentity: options } : options
+        await this.messageDispatch.syncSignalSession(jid, normalized)
+        if (normalized.reasonIdentity) {
             this.trustedContactToken.reissueOnIdentityChange(jid).catch((err) =>
                 this.logger.warn('tc token reissue on identity change failed', {
                     jid,
