@@ -161,11 +161,12 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      * History-sync behavior. By default chunks pushed via
      * `historySyncNotification` (both the initial bootstrap and the
      * on-demand backfill triggered by `message.requestHistorySync`) are
-     * downloaded and emitted as `history_sync_chunk` events. Set
-     * `enabled: false` to drop them; `requireFullSync: true` asks the
-     * primary device for a full history download instead of just recent;
-     * `groupBundles: true` opts into the group-history bundle a member may
-     * share after somebody joins a group.
+     * downloaded, written to the stores and emitted as `history_sync_chunk`
+     * events. `sink` streams the decoded content to your own callback, with
+     * or without stores. Set `enabled: false` to drop the chunks;
+     * `requireFullSync: true` asks the primary device for a full history
+     * download instead of just recent; `groupBundles: true` opts into the
+     * group-history bundle a member may share after somebody joins a group.
      */
     readonly history?: WaHistorySyncOptions
     /**
@@ -333,11 +334,17 @@ export interface WaHistorySyncOptions {
      * Whether to process the `historySyncNotification` protocol messages
      * that WhatsApp pushes on first connect (initial bootstrap) and via
      * `message.requestHistorySync` (on-demand). On by default - set to
-     * `false` to drop the chunks silently (useful when you do not persist
-     * mailbox/threads/contacts and the conversation download would just
-     * burn bandwidth).
+     * `false` to drop the chunks silently (and skip `sink`): the primary is
+     * still acked, but nothing is downloaded or delivered.
      */
     readonly enabled?: boolean
+    /**
+     * Receives every field of the decoded history as it streams, awaited per item,
+     * even with every store off; it alone receives the `INITIAL_STATUS_V3` chunk,
+     * which is otherwise only acked and never emits `history_sync_chunk`. A slow
+     * sink pauses the download: the media timeout ends at the headers.
+     */
+    readonly sink?: WaHistorySyncSink
     /**
      * When `true`, request a full history download from the primary device on
      * pairing instead of just recent messages. Takes precedence over the
@@ -1321,9 +1328,58 @@ export interface WaGroupEvent extends WaIncomingBaseEvent {
     readonly details?: Readonly<Record<string, unknown>>
 }
 
-export interface WaHistorySyncChunkEvent {
+/** Identifies one history-sync chunk; chunks can be processed concurrently. */
+export interface WaHistorySyncChunkRef {
+    /** Id of the protocol message that carried the notification. */
+    readonly id: string
     /** Numeric value of `proto.Message.HistorySyncType` (`RECENT`, `ON_DEMAND`, …). */
     readonly syncType: number
+}
+
+type WaHistorySyncElement<T> = T extends readonly (infer E)[] ? E : T
+type WaHistorySyncKey = Exclude<
+    keyof Proto.IHistorySync,
+    'syncType' | 'conversations' | '$unknowns'
+>
+
+/**
+ * One decoded record of a history-sync chunk. `kind` is the `HistorySync` field it
+ * came from, one element per item for repeated fields; `syncType` rides on the chunk ref.
+ * Conversation messages precede their metadata on the wire, so they stream out first as
+ * `conversations.messages` and the conversation arrives at its close, without `messages`.
+ */
+export type WaHistorySyncItem =
+    | {
+          [K in WaHistorySyncKey]-?: {
+              readonly kind: K
+              readonly value: NonNullable<WaHistorySyncElement<NonNullable<Proto.IHistorySync[K]>>>
+          }
+      }[WaHistorySyncKey]
+    | { readonly kind: 'conversations'; readonly value: Omit<Proto.IConversation, 'messages'> }
+    | {
+          readonly kind: 'conversations.messages'
+          readonly conversationId: string
+          /** Includes stubs and records without content, which the stores skip. */
+          readonly value: Proto.IHistorySyncMsg
+      }
+
+export interface WaHistorySyncSink {
+    /**
+     * Called per record in wire order. A returned promise pauses the stream until
+     * it settles; a throw or rejection aborts the chunk. Items arrive before the
+     * chunk MAC is verified.
+     */
+    item(item: WaHistorySyncItem, chunk: WaHistorySyncChunkRef): void | Promise<void>
+    /** Called once the chunk verified and applied; the receipt goes out after it resolves. */
+    commit?(chunk: WaHistorySyncChunkEvent): void | Promise<void>
+    /**
+     * Called when the chunk fails after items may have been delivered. The primary
+     * resends it, so items repeat: dedupe by `key.id`.
+     */
+    abort?(chunk: WaHistorySyncChunkRef, error: Error): void | Promise<void>
+}
+
+export interface WaHistorySyncChunkEvent extends WaHistorySyncChunkRef {
     readonly messagesCount: number
     readonly conversationsCount: number
     readonly pushnamesCount: number

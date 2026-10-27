@@ -375,6 +375,8 @@ class WaClientImpl extends EventEmitter {
                             mediaTransfer: this.mediaTransfer,
                             chatMetadataStore: this.stores.chatMetadata,
                             writeBehind: this.writeBehind,
+                            chunkId: event.key.id,
+                            sink: this.options.history?.sink,
                             emitEvent: this.emit.bind(this),
                             onPrivacyTokens: (conversations) =>
                                 this.deps.trustedContactToken.hydrateFromHistorySync(conversations),

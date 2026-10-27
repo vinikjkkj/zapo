@@ -1281,3 +1281,112 @@ test('newsletter send publishes a link preview as type=media with mediatype=url'
     assert.equal(plaintext.attrs.mediatype, 'url')
     assert.ok(plaintext.content instanceof Uint8Array)
 })
+
+async function deliverHistoryNotification(options: WaClientOptions['history']) {
+    const timeline: string[] = []
+    const emitted: { readonly name: string; readonly payload: unknown }[] = []
+    const receipts: { readonly to: string; readonly id: string }[] = []
+    const noop = async () => undefined
+    const fakeClient = {
+        options: { addons: { autoDecrypt: false }, history: options },
+        logger: createNoopLogger(),
+        stores: { messageSecret: {} },
+        writeBehind: {
+            persistMessage: () => undefined,
+            persistContact: () => undefined,
+            persistMessageAsync: noop,
+            persistThreadAsync: noop,
+            persistContactAsync: noop
+        },
+        mediaTransfer: {},
+        message: {
+            sendReceipt: async (to: string, id: string) => {
+                timeline.push('receipt')
+                receipts.push({ to, id })
+            }
+        },
+        deps: {
+            botCoordinator: { tryDecryptChunk: noop },
+            messageCoordinator: { tryDecryptAddon: noop },
+            trustedContactToken: {
+                hydrateFromHistorySync: noop,
+                hydrateNctSaltFromHistorySync: noop
+            },
+            authClient: { getCurrentCredentials: () => null }
+        },
+        tryEnterIncomingHandler: () => true,
+        leaveIncomingHandler: () => undefined,
+        observeEphemeralSetting: () => undefined,
+        emit: (name: string, payload: unknown) => {
+            if (name === 'history_sync_chunk') {
+                timeline.push('event')
+            }
+            emitted.push({ name, payload })
+            return true
+        }
+    }
+    const handleIncomingMessageEvent = (
+        WaClient.prototype as unknown as {
+            readonly handleIncomingMessageEvent: (this: unknown, event: unknown) => Promise<void>
+        }
+    ).handleIncomingMessageEvent
+    await handleIncomingMessageEvent.call(fakeClient, {
+        key: { remoteJid: '5511888888888@s.whatsapp.net', id: 'CARRIER-77', fromMe: false },
+        rawNode: { tag: 'message', attrs: {} },
+        message: {
+            protocolMessage: {
+                type: proto.Message.ProtocolMessage.Type.HISTORY_SYNC_NOTIFICATION,
+                historySyncNotification: {
+                    syncType: proto.Message.HistorySyncType.RECENT,
+                    initialHistBootstrapInlinePayload: gzipSync(
+                        proto.HistorySync.encode({
+                            pushnames: [{ id: '5511777777777@s.whatsapp.net', pushname: 'Friend' }]
+                        }).finish()
+                    )
+                }
+            }
+        }
+    })
+    return { timeline, emitted, receipts }
+}
+
+test('history.sink receives the chunk id of the carrier message and commits before the receipt', async () => {
+    const items: { readonly kind: string; readonly chunk: unknown }[] = []
+    const commits: unknown[] = []
+    const result = await deliverHistoryNotification({
+        sink: {
+            item: (item, chunk) => {
+                items.push({ kind: item.kind, chunk })
+            },
+            commit: (chunk) => {
+                commits.push(chunk)
+            }
+        }
+    })
+
+    assert.deepEqual(items, [
+        {
+            kind: 'pushnames',
+            chunk: { id: 'CARRIER-77', syncType: proto.Message.HistorySyncType.RECENT }
+        }
+    ])
+    assert.equal((commits[0] as { id: string }).id, 'CARRIER-77')
+    const chunkEvent = result.emitted.find((entry) => entry.name === 'history_sync_chunk')
+    assert.equal((chunkEvent?.payload as { id: string }).id, 'CARRIER-77')
+    assert.deepEqual(result.receipts, [{ to: '5511888888888@s.whatsapp.net', id: 'CARRIER-77' }])
+    assert.deepEqual(result.timeline, ['event', 'receipt'])
+})
+
+test('history.sink is skipped when history.enabled is false, and the primary is still acked', async () => {
+    let calls = 0
+    const bump = () => {
+        calls += 1
+    }
+    const result = await deliverHistoryNotification({
+        enabled: false,
+        sink: { item: bump, commit: bump, abort: bump }
+    })
+
+    assert.equal(calls, 0)
+    assert.deepEqual(result.timeline, ['receipt'])
+})

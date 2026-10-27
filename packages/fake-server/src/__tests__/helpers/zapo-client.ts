@@ -1,4 +1,10 @@
-import { createNoopLogger, createStore, type Logger, WaClient } from 'zapo-js'
+import {
+    createNoopLogger,
+    createStore,
+    type Logger,
+    WaClient,
+    type WaHistorySyncSink
+} from 'zapo-js'
 
 const NOOP_LOGGER: Logger = createNoopLogger('error')
 
@@ -8,6 +14,7 @@ export interface CreateZapoClientOptions {
     readonly sessionId?: string
     readonly connectTimeoutMs?: number
     readonly historySyncEnabled?: boolean
+    readonly historySink?: WaHistorySyncSink
     readonly emitSnapshotMutations?: boolean
     readonly logger?: Logger
 }
@@ -28,7 +35,10 @@ export function createZapoClient(
             sessionId: options.sessionId ?? 'fake-server-cross-check',
             chatSocketUrls: [server.url],
             connectTimeoutMs: options.connectTimeoutMs ?? 60_000,
-            history: options.historySyncEnabled ? { enabled: true } : undefined,
+            history:
+                options.historySyncEnabled || options.historySink
+                    ? { enabled: true, sink: options.historySink }
+                    : undefined,
             chatEvents: options.emitSnapshotMutations ? { emitSnapshotMutations: true } : undefined,
             proxy: {
                 mediaUpload: server.mediaProxyAgent,

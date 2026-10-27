@@ -11,12 +11,19 @@ import {
     processHistorySyncNotification
 } from '@client/persistence/history-sync'
 import { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
+import type {
+    WaHistorySyncChunkEvent,
+    WaHistorySyncChunkRef,
+    WaHistorySyncItem,
+    WaHistorySyncSink
+} from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
 import { proto, type Proto } from '@proto'
 import type { WaStoredContactRecord } from '@store/contracts/contact.store'
 import type { WaStoredMessageRecord } from '@store/contracts/message.store'
 import type { WaStoredThreadRecord } from '@store/contracts/thread.store'
 import { toBytesView } from '@util/bytes'
+import { longToNumber } from '@util/primitives'
 import { readProtoVarint } from '@util/protoscan'
 
 const gzipAsync = promisify(gzip)
@@ -847,4 +854,915 @@ test('history sync leaves an unresolved group author empty instead of naming the
     assert.equal(capture.messages.length, 1)
     assert.equal(capture.messages[0].senderJid, undefined)
     assert.equal(capture.messages[0].participantJid, undefined)
+})
+
+const SINK_CARRIER_ID = '3EB0CARRIER0001'
+
+interface SinkHooks {
+    readonly item?: (item: WaHistorySyncItem, index: number) => void | Promise<void>
+    readonly commit?: (event: WaHistorySyncChunkEvent) => void | Promise<void>
+    readonly abort?: (chunk: WaHistorySyncChunkRef, error: Error) => void | Promise<void>
+}
+
+interface SinkRun {
+    readonly capture: Capture
+    readonly timeline: string[]
+    readonly items: WaHistorySyncItem[]
+    readonly chunks: WaHistorySyncChunkRef[]
+    readonly commits: WaHistorySyncChunkEvent[]
+    readonly aborts: { readonly chunk: WaHistorySyncChunkRef; readonly error: Error }[]
+    readonly deps: Record<string, unknown>
+}
+
+function createSinkRun(hooks: SinkHooks = {}): SinkRun {
+    const { capture, deps } = createCapture()
+    const timeline: string[] = []
+    const items: WaHistorySyncItem[] = []
+    const chunks: WaHistorySyncChunkRef[] = []
+    const commits: WaHistorySyncChunkEvent[] = []
+    const aborts: { chunk: WaHistorySyncChunkRef; error: Error }[] = []
+    const sink: WaHistorySyncSink = {
+        item: (item, chunk) => {
+            timeline.push(`item:${item.kind}`)
+            items.push(item)
+            chunks.push(chunk)
+            return hooks.item?.(item, items.length - 1)
+        },
+        commit: (event) => {
+            timeline.push('commit')
+            commits.push(event)
+            return hooks.commit?.(event)
+        },
+        abort: (chunk, error) => {
+            timeline.push('abort')
+            aborts.push({ chunk, error })
+            return hooks.abort?.(chunk, error)
+        }
+    }
+    return {
+        capture,
+        timeline,
+        items,
+        chunks,
+        commits,
+        aborts,
+        deps: {
+            ...(deps as Record<string, unknown>),
+            chunkId: SINK_CARRIER_ID,
+            sink,
+            emitEvent: (_type: string, payload: unknown) => {
+                timeline.push('event')
+                capture.events.push(payload)
+            },
+            onProcessed: async (syncType: number) => {
+                timeline.push('ack')
+                capture.acked.push(syncType)
+            }
+        }
+    }
+}
+
+function describeItem(item: WaHistorySyncItem): string {
+    switch (item.kind) {
+        case 'conversations.messages':
+            return `message:${item.conversationId}:${item.value.message?.key?.id}`
+        case 'conversations':
+            return `conversation:${item.value.id}`
+        case 'pushnames':
+            return `pushname:${item.value.id}`
+        case 'inlineContacts':
+            return `inline_contact:${item.value.pnJid}`
+        case 'phoneNumberToLidMappings':
+            return `pn_lid_mapping:${item.value.pnJid}`
+        default:
+            return item.kind
+    }
+}
+
+async function inlineNotificationOf(
+    payload: Uint8Array,
+    syncType: Proto.Message.HistorySyncType = proto.Message.HistorySyncType.RECENT
+): Promise<Proto.Message.IHistorySyncNotification> {
+    return {
+        syncType,
+        initialHistBootstrapInlinePayload: toBytesView(await gzipAsync(payload))
+    }
+}
+
+function encodeVarintBytes(value: number): number[] {
+    const out: number[] = []
+    let rest = value
+    while (rest > 0x7f) {
+        out.push((rest & 0x7f) | 0x80)
+        rest = Math.floor(rest / 128)
+    }
+    out.push(rest)
+    return out
+}
+
+function conversationRecord(conversation: Uint8Array): Uint8Array {
+    return new Uint8Array([0x12, ...encodeVarintBytes(conversation.length), ...conversation])
+}
+
+function concatParts(...parts: Uint8Array[]): Uint8Array {
+    const out = new Uint8Array(parts.reduce((total, part) => total + part.length, 0))
+    let offset = 0
+    for (const part of parts) {
+        out.set(part, offset)
+        offset += part.length
+    }
+    return out
+}
+
+async function settleMacrotasks(): Promise<void> {
+    for (let index = 0; index < 5; index += 1) {
+        await new Promise((resolve) => setImmediate(resolve))
+    }
+}
+
+function createGate(): { readonly promise: Promise<void>; readonly open: () => void } {
+    let open: () => void = () => undefined
+    const promise = new Promise<void>((resolve) => {
+        open = resolve
+    })
+    return { promise, open }
+}
+
+test('history sink receives stubs and fields the stores drop, followed by the conversation header', async () => {
+    const chat = '5511111111111@s.whatsapp.net'
+    const run = createSinkRun()
+    await processHistorySyncNotification(
+        run.deps as never,
+        await inlineNotificationOf(
+            proto.HistorySync.encode({
+                conversations: [
+                    {
+                        id: chat,
+                        name: 'Alice',
+                        messages: [
+                            {
+                                message: {
+                                    key: { remoteJid: chat, id: 'M1' },
+                                    pushName: 'Alice Push',
+                                    status: proto.WebMessageInfo.Status.READ,
+                                    message: { conversation: 'oi' },
+                                    messageTimestamp: 1_722_000_000
+                                }
+                            },
+                            {
+                                message: {
+                                    key: { remoteJid: chat, id: 'STUB1' },
+                                    messageStubType:
+                                        proto.WebMessageInfo.StubType.GROUP_PARTICIPANT_ADD,
+                                    messageTimestamp: 1_722_000_001
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }).finish()
+        )
+    )
+
+    assert.deepEqual(run.items.map(describeItem), [
+        `message:${chat}:M1`,
+        `message:${chat}:STUB1`,
+        `conversation:${chat}`
+    ])
+    const [first, stub, header] = run.items
+    assert.ok(
+        first.kind === 'conversations.messages' &&
+            stub.kind === 'conversations.messages' &&
+            header.kind === 'conversations'
+    )
+    assert.equal(first.value.message?.pushName, 'Alice Push')
+    assert.equal(first.value.message?.status, proto.WebMessageInfo.Status.READ)
+    assert.equal(first.value.message?.message?.conversation, 'oi')
+    assert.equal(
+        stub.value.message?.messageStubType,
+        proto.WebMessageInfo.StubType.GROUP_PARTICIPANT_ADD
+    )
+    assert.ok(!stub.value.message?.message, 'the stub carries no content')
+    assert.equal(header.value.name, 'Alice')
+    assert.equal(
+        (header.value as Proto.IConversation).messages?.length ?? 0,
+        0,
+        'the header carries no messages'
+    )
+
+    assert.deepEqual(
+        run.chunks,
+        run.chunks.map(() => ({
+            id: SINK_CARRIER_ID,
+            syncType: proto.Message.HistorySyncType.RECENT
+        }))
+    )
+    assert.equal(run.chunks.length, 3)
+    assert.deepEqual(
+        run.capture.messages.map((record) => record.id),
+        ['M1'],
+        'the stores keep dropping the stub'
+    )
+    assert.deepEqual(
+        run.capture.threads.map((record) => record.jid),
+        [chat]
+    )
+})
+
+test('history sink delivers a conversation whose id follows its messages after those messages', async () => {
+    const inOrderChat = '5511111111111@s.whatsapp.net'
+    const reversedChat = '5511222222222@s.whatsapp.net'
+    const inOrder = proto.Conversation.encode({
+        id: inOrderChat,
+        messages: [
+            {
+                message: {
+                    key: { remoteJid: inOrderChat, id: 'A1' },
+                    message: { conversation: 'a' }
+                }
+            }
+        ]
+    }).finish()
+    const reversedMessages = proto.Conversation.encode({
+        messages: [
+            {
+                message: {
+                    key: { remoteJid: reversedChat, id: 'P1' },
+                    message: { conversation: 'parked' }
+                }
+            },
+            {
+                message: {
+                    key: { remoteJid: reversedChat, id: 'PSTUB' },
+                    messageStubType: proto.WebMessageInfo.StubType.GROUP_PARTICIPANT_ADD
+                }
+            }
+        ]
+    }).finish()
+    const reversedHeader = proto.Conversation.encode({
+        id: reversedChat,
+        name: 'Reversed'
+    }).finish()
+    const blob = concatParts(
+        conversationRecord(inOrder),
+        conversationRecord(concatParts(reversedMessages, reversedHeader))
+    )
+
+    const run = createSinkRun()
+    await processHistorySyncNotification(run.deps as never, await inlineNotificationOf(blob))
+
+    assert.deepEqual(run.items.map(describeItem), [
+        `message:${inOrderChat}:A1`,
+        `conversation:${inOrderChat}`,
+        `message:${reversedChat}:P1`,
+        `message:${reversedChat}:PSTUB`,
+        `conversation:${reversedChat}`
+    ])
+    const header = run.items[4]
+    assert.ok(header.kind === 'conversations')
+    assert.equal(header.value.name, 'Reversed')
+    assert.deepEqual(
+        run.capture.messages.map((record) => record.id),
+        ['A1', 'P1'],
+        'the stores still drop the parked stub'
+    )
+})
+
+test('history sink receives one item per pushname, inline contact and phone number mapping', async () => {
+    const alice = '5511111111111@s.whatsapp.net'
+    const bob = '5522222222222@s.whatsapp.net'
+    const carol = '5533333333333@s.whatsapp.net'
+    const run = createSinkRun()
+    await processHistorySyncNotification(
+        run.deps as never,
+        await inlineNotificationOf(
+            proto.HistorySync.encode({
+                pushnames: [
+                    { id: alice, pushname: 'Alice' },
+                    { id: bob, pushname: 'Bob' }
+                ],
+                phoneNumberToLidMappings: [{ pnJid: carol, lidJid: '333@lid' }],
+                inlineContacts: [{ pnJid: bob, lidJid: '222@lid', fullName: 'Bob Silva' }]
+            }).finish()
+        )
+    )
+
+    assert.deepEqual(run.items.map(describeItem), [
+        `pushname:${alice}`,
+        `pushname:${bob}`,
+        `pn_lid_mapping:${carol}`,
+        `inline_contact:${bob}`
+    ])
+    const [aliceItem, , mappingItem, contactItem] = run.items
+    assert.ok(
+        aliceItem.kind === 'pushnames' &&
+            mappingItem.kind === 'phoneNumberToLidMappings' &&
+            contactItem.kind === 'inlineContacts'
+    )
+    assert.equal(aliceItem.value.pushname, 'Alice')
+    assert.equal(mappingItem.value.lidJid, '333@lid')
+    assert.equal(contactItem.value.fullName, 'Bob Silva')
+    assert.equal(contactItem.value.lidJid, '222@lid')
+})
+
+test('history sink message items keep their bytes after the stream reuses its buffer', async () => {
+    const chat = '5511111111111@s.whatsapp.net'
+    const count = 300
+    const thumbnailBytes = 600
+    const fillOf = (index: number): number => (index * 7 + 1) % 256
+    const messages: Proto.IHistorySyncMsg[] = []
+    for (let index = 0; index < count; index += 1) {
+        messages.push({
+            message: {
+                key: { remoteJid: chat, id: `T${index}` },
+                message: {
+                    imageMessage: {
+                        jpegThumbnail: new Uint8Array(thumbnailBytes).fill(fillOf(index))
+                    }
+                }
+            }
+        })
+    }
+    const payload = proto.HistorySync.encode({ conversations: [{ id: chat, messages }] }).finish()
+    assert.ok(payload.length > 2 * 64 * 1024, 'the fixture must outgrow the reader buffer')
+
+    const run = createSinkRun()
+    await processHistorySyncNotification(run.deps as never, await inlineNotificationOf(payload))
+
+    const retained = run.items.filter((item) => item.kind === 'conversations.messages')
+    assert.equal(retained.length, count)
+    retained.forEach((item, index) => {
+        assert.ok(item.kind === 'conversations.messages')
+        const thumbnail = item.value.message?.message?.imageMessage?.jpegThumbnail
+        assert.ok(thumbnail)
+        assert.equal(thumbnail.length, thumbnailBytes)
+        assert.ok(
+            thumbnail.every((byte) => byte === fillOf(index)),
+            `thumbnail ${index} was overwritten`
+        )
+    })
+})
+
+test('history sink pauses the stream while an item is pending', async () => {
+    const chat = '5511111111111@s.whatsapp.net'
+    const gate = createGate()
+    const run = createSinkRun({ item: (_item, index) => (index === 0 ? gate.promise : undefined) })
+    const done = processHistorySyncNotification(
+        run.deps as never,
+        await inlineNotificationOf(
+            proto.HistorySync.encode({
+                conversations: [
+                    {
+                        id: chat,
+                        messages: ['B1', 'B2', 'B3'].map((id) => ({
+                            message: {
+                                key: { remoteJid: chat, id },
+                                message: { conversation: id }
+                            }
+                        }))
+                    }
+                ]
+            }).finish()
+        )
+    )
+
+    await settleMacrotasks()
+    assert.deepEqual(run.items.map(describeItem), [`message:${chat}:B1`])
+    assert.deepEqual(run.commits, [])
+
+    gate.open()
+    await done
+    assert.deepEqual(run.items.map(describeItem), [
+        `message:${chat}:B1`,
+        `message:${chat}:B2`,
+        `message:${chat}:B3`,
+        `conversation:${chat}`
+    ])
+})
+
+test('history sink commit gets the chunk event and the receipt waits for it', async () => {
+    const chat = '5511111111111@s.whatsapp.net'
+    const gate = createGate()
+    const run = createSinkRun({ commit: () => gate.promise })
+    const done = processHistorySyncNotification(
+        run.deps as never,
+        await inlineNotificationOf(
+            proto.HistorySync.encode({
+                chunkOrder: 2,
+                progress: 40,
+                pushnames: [{ id: chat, pushname: 'Alice' }],
+                conversations: [
+                    {
+                        id: chat,
+                        messages: [
+                            {
+                                message: {
+                                    key: { remoteJid: chat, id: 'C1' },
+                                    message: { conversation: 'oi' }
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }).finish()
+        )
+    )
+
+    await settleMacrotasks()
+    assert.equal(run.commits.length, 1)
+    assert.deepEqual(run.capture.events, [], 'no chunk event before the commit resolves')
+    assert.deepEqual(run.capture.acked, [], 'no receipt before the commit resolves')
+
+    gate.open()
+    await done
+    assert.deepEqual(run.commits[0], {
+        id: SINK_CARRIER_ID,
+        syncType: proto.Message.HistorySyncType.RECENT,
+        messagesCount: 1,
+        conversationsCount: 1,
+        pushnamesCount: 1,
+        inlineContactsCount: 0,
+        chunkOrder: 2,
+        progress: 40
+    })
+    assert.deepEqual(
+        run.capture.events,
+        [run.commits[0]],
+        'history_sync_chunk carries the same event'
+    )
+    assert.deepEqual(run.timeline.slice(-3), ['commit', 'event', 'ack'])
+})
+
+for (const mode of ['throws', 'rejects'] as const) {
+    test(`history sink item that ${mode} aborts the chunk and tears the stream down`, async () => {
+        const chat = '5511111111111@s.whatsapp.net'
+        const failure = new Error(`item ${mode}`)
+        const gzipped = toBytesView(
+            await gzipAsync(
+                proto.HistorySync.encode({
+                    conversations: [
+                        {
+                            id: chat,
+                            messages: ['F1', 'F2'].map((id) => ({
+                                message: {
+                                    key: { remoteJid: chat, id },
+                                    message: { conversation: id }
+                                }
+                            }))
+                        }
+                    ]
+                }).finish()
+            )
+        )
+        const plaintext = new Readable({ read: () => undefined })
+        plaintext.push(Buffer.from(gzipped))
+        const run = createSinkRun({
+            item: (_item, index) => {
+                if (index !== 1) {
+                    return undefined
+                }
+                if (mode === 'throws') {
+                    throw failure
+                }
+                return Promise.reject(failure)
+            }
+        })
+        const deps = {
+            ...run.deps,
+            mediaTransfer: {
+                downloadAndDecryptStream: async () => ({
+                    plaintext,
+                    metadata: Promise.resolve(null)
+                })
+            }
+        }
+
+        await assert.rejects(
+            () =>
+                processHistorySyncNotification(deps as never, {
+                    syncType: proto.Message.HistorySyncType.RECENT,
+                    directPath: '/history',
+                    mediaKey: new Uint8Array(32),
+                    fileSha256: new Uint8Array(32),
+                    fileEncSha256: new Uint8Array(32)
+                }),
+            (error) => error === failure
+        )
+
+        assert.deepEqual(run.timeline, [
+            'item:conversations.messages',
+            'item:conversations.messages',
+            'abort'
+        ])
+        assert.equal(run.aborts[0].error, failure)
+        assert.deepEqual(run.aborts[0].chunk, {
+            id: SINK_CARRIER_ID,
+            syncType: proto.Message.HistorySyncType.RECENT
+        })
+        assert.deepEqual(run.capture.events, [])
+        assert.deepEqual(run.capture.acked, [])
+        await settleMacrotasks()
+        assert.equal(plaintext.destroyed, true, 'the decryption source must be torn down')
+    })
+}
+
+test('history sink aborts after its items when the chunk MAC fails', async () => {
+    const chat = '5511111111111@s.whatsapp.net'
+    const gzipped = toBytesView(
+        await gzipAsync(
+            proto.HistorySync.encode({
+                conversations: [
+                    {
+                        id: chat,
+                        messages: [
+                            {
+                                message: {
+                                    key: { remoteJid: chat, id: 'X1' },
+                                    message: { conversation: 'x' }
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }).finish()
+        )
+    )
+    const run = createSinkRun()
+    const deps = {
+        ...run.deps,
+        mediaTransfer: {
+            downloadAndDecryptStream: async () => ({
+                plaintext: Readable.from([Buffer.from(gzipped)]),
+                metadata: Promise.reject(new Error('media MAC mismatch'))
+            })
+        }
+    }
+
+    await assert.rejects(
+        () =>
+            processHistorySyncNotification(deps as never, {
+                syncType: proto.Message.HistorySyncType.RECENT,
+                directPath: '/history',
+                mediaKey: new Uint8Array(32),
+                fileSha256: new Uint8Array(32),
+                fileEncSha256: new Uint8Array(32)
+            }),
+        /media MAC mismatch/
+    )
+
+    assert.deepEqual(run.timeline, ['item:conversations.messages', 'item:conversations', 'abort'])
+    assert.match(run.aborts[0].error.message, /media MAC mismatch/)
+    assert.deepEqual(run.commits, [])
+    assert.deepEqual(run.capture.events, [])
+    assert.deepEqual(run.capture.acked, [])
+})
+
+test('history sink commit that fails aborts the chunk without a chunk event or receipt', async () => {
+    const run = createSinkRun({
+        commit: () => {
+            throw new Error('commit failed')
+        }
+    })
+
+    await assert.rejects(
+        async () =>
+            processHistorySyncNotification(
+                run.deps as never,
+                await inlineNotificationOf(
+                    proto.HistorySync.encode({
+                        pushnames: [{ id: '5511111111111@s.whatsapp.net', pushname: 'Alice' }]
+                    }).finish()
+                )
+            ),
+        /commit failed/
+    )
+
+    assert.deepEqual(run.timeline, ['item:pushnames', 'commit', 'abort'])
+    assert.match(run.aborts[0].error.message, /commit failed/)
+    assert.deepEqual(run.capture.events, [])
+    assert.deepEqual(run.capture.acked, [])
+})
+
+test('history sink abort that throws does not replace the original failure', async () => {
+    const run = createSinkRun({
+        item: () => {
+            throw new Error('item failed')
+        },
+        abort: () => Promise.reject(new Error('abort failed'))
+    })
+
+    await assert.rejects(
+        async () =>
+            processHistorySyncNotification(
+                run.deps as never,
+                await inlineNotificationOf(
+                    proto.HistorySync.encode({
+                        pushnames: [{ id: '5511111111111@s.whatsapp.net', pushname: 'Alice' }]
+                    }).finish()
+                )
+            ),
+        /item failed/
+    )
+    assert.equal(run.aborts.length, 1)
+})
+
+test('history sink streams INITIAL_STATUS_V3 statusV3Messages, commits and acks without touching the stores or the event', async () => {
+    const status = (id: string): Proto.IWebMessageInfo => ({
+        key: { remoteJid: 'status@broadcast', id },
+        message: { conversation: id },
+        messageTimestamp: 1_722_000_000
+    })
+    const run = createSinkRun()
+    await processHistorySyncNotification(
+        run.deps as never,
+        await inlineNotificationOf(
+            proto.HistorySync.encode({
+                syncType: proto.HistorySync.HistorySyncType.INITIAL_STATUS_V3,
+                statusV3Messages: [status('S1'), status('S2')]
+            }).finish(),
+            proto.Message.HistorySyncType.INITIAL_STATUS_V3
+        )
+    )
+
+    assert.deepEqual(
+        run.items.map((item) => item.kind),
+        ['statusV3Messages', 'statusV3Messages']
+    )
+    assert.deepEqual(
+        run.items.map((item) => item.kind === 'statusV3Messages' && item.value.key?.id),
+        ['S1', 'S2']
+    )
+    assert.deepEqual(run.chunks[0], {
+        id: SINK_CARRIER_ID,
+        syncType: proto.Message.HistorySyncType.INITIAL_STATUS_V3
+    })
+    assert.equal(run.commits.length, 1)
+    assert.equal(run.commits[0].syncType, proto.Message.HistorySyncType.INITIAL_STATUS_V3)
+    assert.deepEqual(run.capture.events, [])
+    assert.deepEqual(run.capture.acked, [proto.Message.HistorySyncType.INITIAL_STATUS_V3])
+    assert.deepEqual(run.timeline.slice(-2), ['commit', 'ack'])
+    assert.ok(!run.timeline.includes('event'))
+    assert.deepEqual(run.capture.messages, [])
+    assert.deepEqual(run.capture.threads, [])
+})
+
+test('INITIAL_STATUS_V3 without a sink is acked without downloading', async () => {
+    const { capture, deps } = createCapture()
+    let downloads = 0
+    await processHistorySyncNotification(
+        {
+            ...(deps as Record<string, unknown>),
+            mediaTransfer: {
+                downloadAndDecryptStream: async () => {
+                    downloads += 1
+                    throw new Error('must not download')
+                }
+            }
+        } as never,
+        {
+            syncType: proto.Message.HistorySyncType.INITIAL_STATUS_V3,
+            directPath: '/history',
+            mediaKey: new Uint8Array(32),
+            fileSha256: new Uint8Array(32),
+            fileEncSha256: new Uint8Array(32)
+        }
+    )
+
+    assert.equal(downloads, 0)
+    assert.deepEqual(capture.acked, [proto.Message.HistorySyncType.INITIAL_STATUS_V3])
+    assert.deepEqual(capture.events, [])
+})
+
+test('history sink item carries msgOrderId and receives records without a message that the stores skip', async () => {
+    const inOrderChat = '5511111111111@s.whatsapp.net'
+    const reversedChat = '5511222222222@s.whatsapp.net'
+    const withMessage = (chat: string, id: string, msgOrderId: number): Proto.IHistorySyncMsg => ({
+        message: { key: { remoteJid: chat, id }, message: { conversation: id } },
+        msgOrderId
+    })
+    const inOrder = proto.Conversation.encode({
+        id: inOrderChat,
+        messages: [withMessage(inOrderChat, 'O1', 41), { msgOrderId: 42 }]
+    }).finish()
+    const reversedMessages = proto.Conversation.encode({
+        messages: [{ msgOrderId: 51 }, withMessage(reversedChat, 'R1', 52)]
+    }).finish()
+    const reversedHeader = proto.Conversation.encode({ id: reversedChat }).finish()
+
+    const run = createSinkRun()
+    await processHistorySyncNotification(
+        run.deps as never,
+        await inlineNotificationOf(
+            concatParts(
+                conversationRecord(inOrder),
+                conversationRecord(concatParts(reversedMessages, reversedHeader))
+            )
+        )
+    )
+
+    const records = run.items.flatMap((item) =>
+        item.kind === 'conversations.messages'
+            ? [
+                  {
+                      chat: item.conversationId,
+                      id: item.value.message?.key?.id ?? null,
+                      order: longToNumber(item.value.msgOrderId)
+                  }
+              ]
+            : []
+    )
+    assert.deepEqual(records, [
+        { chat: inOrderChat, id: 'O1', order: 41 },
+        { chat: inOrderChat, id: null, order: 42 },
+        { chat: reversedChat, id: null, order: 51 },
+        { chat: reversedChat, id: 'R1', order: 52 }
+    ])
+    assert.deepEqual(
+        run.capture.messages.map((record) => record.id),
+        ['O1', 'R1'],
+        'the stores skip the records without a message'
+    )
+    assert.equal(run.commits[0].messagesCount, 2)
+})
+
+const ALL_FIELDS_CHAT = '5511111111111@s.whatsapp.net'
+
+function buildAllFieldsHistorySync(): Proto.IHistorySync {
+    return {
+        syncType: proto.HistorySync.HistorySyncType.RECENT,
+        conversations: [
+            {
+                id: ALL_FIELDS_CHAT,
+                name: 'Alice',
+                messages: [
+                    {
+                        message: {
+                            key: { remoteJid: ALL_FIELDS_CHAT, id: 'AF1' },
+                            message: { conversation: 'oi' }
+                        },
+                        msgOrderId: 7
+                    }
+                ]
+            }
+        ],
+        statusV3Messages: [
+            { key: { remoteJid: 'status@broadcast', id: 'SV1' }, message: { conversation: 'a' } },
+            { key: { remoteJid: 'status@broadcast', id: 'SV2' }, message: { conversation: 'b' } }
+        ],
+        chunkOrder: 3,
+        progress: 55,
+        pushnames: [
+            { id: ALL_FIELDS_CHAT, pushname: 'Alice' },
+            { id: '5522222222222@s.whatsapp.net', pushname: 'Bob' }
+        ],
+        globalSettings: { fontSize: 14, showGroupNotificationsPreview: true },
+        threadIdUserSecret: new Uint8Array([1, 2, 3, 4]),
+        threadDsTimeframeOffset: 9,
+        recentStickers: [
+            { url: 'https://s/1', mimetype: 'image/webp', fileSha256: new Uint8Array([9, 8]) }
+        ],
+        pastParticipants: [
+            {
+                groupJid: '120363000000000000@g.us',
+                pastParticipants: [{ userJid: ALL_FIELDS_CHAT, leaveTs: 100 }]
+            }
+        ],
+        callLogRecords: [{ callId: 'CALL1', duration: 12, isVideo: true }],
+        aiWaitListState: proto.HistorySync.BotAIWaitListState.AI_AVAILABLE,
+        phoneNumberToLidMappings: [{ pnJid: ALL_FIELDS_CHAT, lidJid: '111@lid' }],
+        companionMetaNonce: 'nonce-1',
+        shareableChatIdentifierEncryptionKey: new Uint8Array([5, 6, 7]),
+        accounts: [{ lid: '111@lid', username: 'alice' }],
+        nctSalt: new Uint8Array([11, 12, 13]),
+        inlineContacts: [{ pnJid: ALL_FIELDS_CHAT, lidJid: '111@lid', fullName: 'Alice Silva' }],
+        inlineContactsProvided: true
+    }
+}
+
+type ProtoCodec = { encode: (value: never) => { finish: () => Uint8Array } }
+
+function encodedHexOf(codec: ProtoCodec, value: unknown): string {
+    return Buffer.from(codec.encode(value as never).finish()).toString('hex')
+}
+
+test('history sink receives one item per field and element, with the HistorySync key as kind', async () => {
+    const source = buildAllFieldsHistorySync()
+    const run = createSinkRun()
+    await processHistorySyncNotification(
+        run.deps as never,
+        await inlineNotificationOf(proto.HistorySync.encode(source).finish())
+    )
+
+    const expectedKinds: string[] = ['conversations.messages', 'conversations']
+    for (const [key, value] of Object.entries(source)) {
+        if (key !== 'syncType' && key !== 'conversations') {
+            expectedKinds.push(...(Array.isArray(value) ? value.map(() => key) : [key]))
+        }
+    }
+    assert.deepEqual(
+        run.items.map((item) => item.kind),
+        expectedKinds
+    )
+    assert.equal(
+        new Set(run.items.map((item) => item.kind)).size,
+        20,
+        'every field but syncType is represented, conversations split in two'
+    )
+
+    const codecs: Record<string, ProtoCodec> = {
+        statusV3Messages: proto.WebMessageInfo,
+        pushnames: proto.Pushname,
+        globalSettings: proto.GlobalSettings,
+        recentStickers: proto.StickerMetadata,
+        pastParticipants: proto.PastParticipants,
+        callLogRecords: proto.CallLogRecord,
+        phoneNumberToLidMappings: proto.PhoneNumberToLIDMapping,
+        accounts: proto.Account,
+        inlineContacts: proto.InlineContact
+    }
+    const cursor = new Map<string, number>()
+    for (const item of run.items) {
+        if (item.kind === 'conversations.messages') {
+            assert.equal(item.conversationId, ALL_FIELDS_CHAT)
+            assert.equal(
+                encodedHexOf(proto.HistorySyncMsg, item.value),
+                encodedHexOf(proto.HistorySyncMsg, source.conversations?.[0].messages?.[0])
+            )
+            continue
+        }
+        if (item.kind === 'conversations') {
+            assert.equal(item.value.id, ALL_FIELDS_CHAT)
+            assert.equal(item.value.name, 'Alice')
+            continue
+        }
+        const field = (source as Record<string, unknown>)[item.kind]
+        const index = cursor.get(item.kind) ?? 0
+        cursor.set(item.kind, index + 1)
+        const expected = Array.isArray(field) ? field[index] : field
+        const codec = codecs[item.kind]
+        if (codec) {
+            assert.equal(encodedHexOf(codec, item.value), encodedHexOf(codec, expected))
+        } else if (expected instanceof Uint8Array) {
+            assert.deepEqual(Array.from(item.value as Uint8Array), Array.from(expected))
+        } else {
+            assert.equal(item.value, expected)
+        }
+    }
+})
+
+test('history sink bytes fields keep their content after the stream reuses its buffer', async () => {
+    const count = 300
+    const fillOf = (index: number): number => (index * 7 + 1) % 256
+    const source: Proto.IHistorySync = {
+        statusV3Messages: Array.from({ length: count }, (_, index) => ({
+            key: { remoteJid: 'status@broadcast', id: `SB${index}` },
+            message: { imageMessage: { jpegThumbnail: new Uint8Array(600).fill(fillOf(index)) } }
+        })),
+        threadIdUserSecret: new Uint8Array(32).fill(0xa1),
+        recentStickers: Array.from({ length: count }, (_, index) => ({
+            fileSha256: new Uint8Array(600).fill(fillOf(index)),
+            mediaKey: new Uint8Array(600).fill(fillOf(index + 1))
+        })),
+        shareableChatIdentifierEncryptionKey: new Uint8Array(32).fill(0xb2),
+        nctSalt: new Uint8Array(32).fill(0xc3),
+        inlineContacts: Array.from({ length: count }, (_, index) => ({
+            pnJid: `55119${index}@s.whatsapp.net`,
+            fullName: 'x'.repeat(600)
+        }))
+    }
+    const payload = proto.HistorySync.encode(source).finish()
+    assert.ok(payload.length > 2 * 64 * 1024, 'the fixture must outgrow the reader buffer')
+
+    const run = createSinkRun()
+    await processHistorySyncNotification(run.deps as never, await inlineNotificationOf(payload))
+
+    const isFilled = (bytes: Uint8Array | null | undefined, fill: number): boolean =>
+        !!bytes && bytes.length > 0 && bytes.every((byte) => byte === fill)
+
+    const statuses = run.items.filter((item) => item.kind === 'statusV3Messages')
+    assert.equal(statuses.length, count)
+    statuses.forEach((item, index) => {
+        assert.ok(item.kind === 'statusV3Messages')
+        assert.ok(
+            isFilled(item.value.message?.imageMessage?.jpegThumbnail, fillOf(index)),
+            `status thumbnail ${index} was overwritten`
+        )
+    })
+    const stickers = run.items.filter((item) => item.kind === 'recentStickers')
+    assert.equal(stickers.length, count)
+    stickers.forEach((item, index) => {
+        assert.ok(item.kind === 'recentStickers')
+        assert.ok(isFilled(item.value.fileSha256, fillOf(index)), `sha ${index} was overwritten`)
+        assert.ok(isFilled(item.value.mediaKey, fillOf(index + 1)), `key ${index} was overwritten`)
+    })
+    for (const [kind, fill] of [
+        ['threadIdUserSecret', 0xa1],
+        ['shareableChatIdentifierEncryptionKey', 0xb2],
+        ['nctSalt', 0xc3]
+    ] as const) {
+        const item = run.items.find((candidate) => candidate.kind === kind)
+        assert.ok(item && item.kind === kind)
+        assert.equal(item.value.length, 32)
+        assert.ok(isFilled(item.value, fill), `${kind} was overwritten`)
+    }
 })
