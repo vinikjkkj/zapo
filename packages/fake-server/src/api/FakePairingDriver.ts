@@ -69,12 +69,10 @@ export class FakePairingDriver {
             platform: this.options.platform ?? 'IOS',
             deviceIdentityBytes
         })
-        const waitForSign = this.deps.waitForPairSuccessAck?.(pairSuccessIq.attrs.id)
+        void this.deps
+            .waitForPairSuccessAck?.(pairSuccessIq.attrs.id)
+            .then(() => this.deps.pipeline.sendStanza(buildStreamErrorCode(FORCE_LOGIN_CODE)))
+            .catch(() => undefined)
         await this.deps.pipeline.sendStanza(pairSuccessIq)
-        if (waitForSign) {
-            void waitForSign
-                .then(() => this.deps.pipeline.sendStanza(buildStreamErrorCode(FORCE_LOGIN_CODE)))
-                .catch(() => undefined)
-        }
     }
 }
