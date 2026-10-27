@@ -398,6 +398,11 @@ export class WaAuthClient {
      * call this. The user then enters the returned code in WhatsApp on their
      * phone under *Linked Devices → Link with phone number instead*.
      *
+     * The server binds the code to the connection that requested it. If the
+     * socket drops and reconnects first, the client registers the same code on
+     * the new connection; if that fails, `auth_pairing_required` fires with
+     * `forceManual: true` and a new code must be requested.
+     *
      * @example
      * ```ts
      * // Start the handshake; do NOT await – connect() resolves only after pairing

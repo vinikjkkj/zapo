@@ -110,55 +110,17 @@ export class WaPairingFlow {
             customCode !== undefined ? normalizeCustomPairingCode(customCode) : undefined
         const credentials = this.requireCredentials()
         const phoneJid = parsePhoneJid(phoneNumber)
-        const createdAtSeconds = Math.floor(Date.now() / 1000)
-        const [companionHello, refreshedCredentials] = await Promise.all([
-            createCompanionHello({ customCode: normalizedCustomCode }),
+        const [session] = await Promise.all([
+            this.sendCompanionHello(phoneJid, shouldShowPushNotification, normalizedCustomCode),
             this.rotateAdvSecret(credentials)
         ])
-        const browserDisplayName = getWaBrowserDisplayName(this.opts.device.browser)
-
-        const response = await this.opts.socket.query(
-            buildCompanionHelloRequestNode({
-                phoneJid,
-                shouldShowPushNotification,
-                wrappedCompanionEphemeralPub: companionHello.wrappedCompanionEphemeralPub,
-                companionServerAuthKeyPub: refreshedCredentials.noiseKeyPair.pubKey,
-                companionPlatformId: this.opts.device.platform,
-                companionPlatformDisplay: `${browserDisplayName} (${this.opts.device.osDisplayName})`
-            }),
-            WA_DEFAULTS.IQ_TIMEOUT_MS
-        )
-        this.opts.logger.debug('pairing code request response received', {
-            responseTag: response.tag,
-            responseType: response.attrs.type
-        })
-        assertIqResult(response, 'companion hello')
-
-        const linkCodeNode = findNodeChild(response, WA_NODE_TAGS.LINK_CODE_COMPANION_REG)
-        if (!linkCodeNode) {
-            throw new Error('companion hello response missing link_code_companion_reg')
-        }
-        const refNode = findNodeChild(linkCodeNode, WA_NODE_TAGS.LINK_CODE_PAIRING_REF)
-        if (!refNode) {
-            throw new Error('companion hello response missing link_code_pairing_ref')
-        }
-
-        const ref = decodeNodeContentUtf8OrBytes(refNode.content, 'link_code_pairing_ref')
-        this.pairingSession = {
-            pairingCode: companionHello.pairingCode,
-            phoneJid,
-            ref,
-            createdAtSeconds,
-            companionEphemeralKeyPair: companionHello.companionEphemeralKeyPair,
-            attempts: 0,
-            finished: false
-        }
-        this.opts.callbacks.emitPairingCode(companionHello.pairingCode)
+        this.pairingSession = session
+        this.opts.callbacks.emitPairingCode(session.pairingCode)
         this.opts.logger.debug('pairing code emitted', {
             phoneJid,
-            createdAtSeconds: this.pairingSession.createdAtSeconds
+            createdAtSeconds: session.createdAtSeconds
         })
-        return companionHello.pairingCode
+        return session.pairingCode
     }
 
     public async fetchPairingCountryCodeIso(): Promise<string> {
@@ -273,6 +235,10 @@ export class WaPairingFlow {
         await this.opts.socket.sendNode(buildIqResultNode(iqNode))
         this.opts.qrFlow.setRefs(refs)
         this.opts.logger.debug('pair-device refs updated', { refsCount: refs.length })
+        // The server sends pair-device once per connection: a pending code belongs to an older one.
+        if (this.pairingSession) {
+            void this.rearmPairingCode(this.pairingSession)
+        }
     }
 
     private async handlePairSuccess(
@@ -556,6 +522,90 @@ export class WaPairingFlow {
         }
         pairingSession.finished = true
         this.opts.logger.debug('primary_hello completed with companion_finish success')
+    }
+
+    private async sendCompanionHello(
+        phoneJid: string,
+        shouldShowPushNotification: boolean,
+        customCode: string | undefined
+    ): Promise<ActivePairingSession> {
+        const credentials = this.requireCredentials()
+        const createdAtSeconds = Math.floor(Date.now() / 1000)
+        const companionHello = await createCompanionHello({ customCode })
+        const browserDisplayName = getWaBrowserDisplayName(this.opts.device.browser)
+
+        const response = await this.opts.socket.query(
+            buildCompanionHelloRequestNode({
+                phoneJid,
+                shouldShowPushNotification,
+                wrappedCompanionEphemeralPub: companionHello.wrappedCompanionEphemeralPub,
+                companionServerAuthKeyPub: credentials.noiseKeyPair.pubKey,
+                companionPlatformId: this.opts.device.platform,
+                companionPlatformDisplay: `${browserDisplayName} (${this.opts.device.osDisplayName})`
+            }),
+            WA_DEFAULTS.IQ_TIMEOUT_MS
+        )
+        this.opts.logger.debug('pairing code request response received', {
+            responseTag: response.tag,
+            responseType: response.attrs.type
+        })
+        assertIqResult(response, 'companion hello')
+
+        const linkCodeNode = findNodeChild(response, WA_NODE_TAGS.LINK_CODE_COMPANION_REG)
+        if (!linkCodeNode) {
+            throw new Error('companion hello response missing link_code_companion_reg')
+        }
+        const refNode = findNodeChild(linkCodeNode, WA_NODE_TAGS.LINK_CODE_PAIRING_REF)
+        if (!refNode) {
+            throw new Error('companion hello response missing link_code_pairing_ref')
+        }
+
+        return {
+            pairingCode: companionHello.pairingCode,
+            phoneJid,
+            ref: decodeNodeContentUtf8OrBytes(refNode.content, 'link_code_pairing_ref'),
+            createdAtSeconds,
+            companionEphemeralKeyPair: companionHello.companionEphemeralKeyPair,
+            attempts: 0,
+            finished: false
+        }
+    }
+
+    /**
+     * The server delivers `primary_hello` only to the connection that sent the
+     * `companion_hello`, so a code requested on a dropped connection is dead.
+     * Registers the same code again, without a push, like WA Web's code refresh.
+     * The ADV secret is not rotated: the QR just emitted for this connection carries it.
+     */
+    private async rearmPairingCode(previous: ActivePairingSession): Promise<void> {
+        try {
+            const session = await this.sendCompanionHello(
+                previous.phoneJid,
+                false,
+                previous.pairingCode
+            )
+            if (this.pairingSession !== previous) {
+                this.opts.logger.debug('pairing code re-registration superseded')
+                return
+            }
+            this.pairingSession = session
+            this.opts.logger.info('pairing code re-registered on the new connection', {
+                phoneJid: session.phoneJid
+            })
+        } catch (error) {
+            const message = toError(error).message
+            if (this.pairingSession !== previous) {
+                this.opts.logger.debug('superseded pairing code re-registration failed', {
+                    message
+                })
+                return
+            }
+            this.pairingSession = null
+            this.opts.logger.warn('failed to re-register pairing code on the new connection', {
+                message
+            })
+            this.opts.callbacks.emitPairingRefresh(true)
+        }
     }
 
     private async rotateAdvSecret(credentials: WaAuthCredentials): Promise<WaAuthCredentials> {

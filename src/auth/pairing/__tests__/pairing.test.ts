@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { buildSignedCompanionIdentity } from '@auth/pairing/companion-host'
+import { buildSignedCompanionIdentity, preparePrimaryHello } from '@auth/pairing/companion-host'
 import {
     completeCompanionFinish,
     createCompanionHello,
@@ -178,6 +178,164 @@ test('pair-success rejects an oversized device-identity payload', async () => {
         () => ctx.flow.handleIncomingIqSet(ctx.buildIq(new Uint8Array(501))),
         /device-identity must be 1-500 bytes/
     )
+})
+
+async function setupLinkCode(options: { readonly failRearm?: boolean } = {}) {
+    const [noiseKeyPair, identityKeyPair, signedPreKeyPair, primaryIdentity, advSecretKey] =
+        await Promise.all([
+            X25519.generateKeyPair(),
+            X25519.generateKeyPair(),
+            X25519.generateKeyPair(),
+            X25519.generateKeyPair(),
+            randomBytesAsync(32)
+        ])
+    let credentials: WaAuthCredentials = {
+        noiseKeyPair,
+        registrationInfo: { registrationId: 7, identityKeyPair },
+        signedPreKey: {
+            keyId: 1,
+            keyPair: signedPreKeyPair,
+            signature: new Uint8Array(64),
+            uploaded: false
+        },
+        advSecretKey
+    }
+    const hellos: BinaryNode[] = []
+    const finishes: BinaryNode[] = []
+    const refreshes: boolean[] = []
+    const flow = new WaPairingFlow({
+        logger: createNoopLogger(),
+        auth: {
+            getCredentials: () => credentials,
+            updateCredentials: async (next) => {
+                credentials = next
+            }
+        },
+        socket: {
+            sendNode: async () => undefined,
+            query: async (node) => {
+                const reg = (node.content as BinaryNode[])[0]
+                if (reg.attrs.stage !== 'companion_hello') {
+                    finishes.push(node)
+                    return { tag: 'iq', attrs: { type: 'result' } }
+                }
+                hellos.push(node)
+                if (options.failRearm && hellos.length > 1) {
+                    throw new Error('rate-overlimit')
+                }
+                return {
+                    tag: 'iq',
+                    attrs: { type: 'result' },
+                    content: [
+                        {
+                            tag: 'link_code_companion_reg',
+                            attrs: { stage: 'companion_hello' },
+                            content: [
+                                {
+                                    tag: 'link_code_pairing_ref',
+                                    attrs: {},
+                                    content: `ref-${hellos.length}`
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        qrFlow: { setRefs: () => undefined, clear: () => undefined, refreshCurrentQr: () => true },
+        device: { browser: 'firefox', osDisplayName: 'Windows', platform: '3' },
+        callbacks: {
+            emitPairingCode: () => undefined,
+            emitPairingRefresh: (forceManual) => {
+                refreshes.push(forceManual)
+            },
+            emitPaired: () => undefined
+        }
+    })
+
+    const pairDevice: BinaryNode = {
+        tag: 'iq',
+        attrs: { id: 'pd-1', from: 's.whatsapp.net', type: 'set' },
+        content: [
+            {
+                tag: 'pair-device',
+                attrs: {},
+                content: [{ tag: 'ref', attrs: {}, content: 'qr-ref' }]
+            }
+        ]
+    }
+    const primaryHello = async (
+        ref: string,
+        code: string,
+        hello: BinaryNode
+    ): Promise<BinaryNode> => {
+        const wrapped = ((hello.content as BinaryNode[])[0].content as BinaryNode[])[0]
+            .content as Uint8Array
+        const prepared = await preparePrimaryHello({
+            pairingCode: code,
+            wrappedCompanionEphemeralPub: wrapped
+        })
+        return {
+            tag: 'notification',
+            attrs: { id: 'n-1', from: 's.whatsapp.net', type: 'link_code_companion_reg' },
+            content: [
+                {
+                    tag: 'link_code_companion_reg',
+                    attrs: { stage: 'primary_hello' },
+                    content: [
+                        { tag: 'link_code_pairing_ref', attrs: {}, content: ref },
+                        {
+                            tag: 'link_code_pairing_wrapped_primary_ephemeral_pub',
+                            attrs: {},
+                            content: prepared.wrappedPrimaryEphemeralPub
+                        },
+                        { tag: 'primary_identity_pub', attrs: {}, content: primaryIdentity.pubKey }
+                    ]
+                }
+            ]
+        }
+    }
+
+    return { flow, hellos, finishes, refreshes, pairDevice, primaryHello }
+}
+
+async function waitUntil(check: () => boolean): Promise<void> {
+    for (let i = 0; i < 300 && !check(); i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.ok(check(), 'condition not reached in time')
+}
+
+test('pair-device on a new connection registers the pending pairing code again', async () => {
+    const ctx = await setupLinkCode()
+    await ctx.flow.handleIncomingIqSet(ctx.pairDevice)
+    assert.equal(ctx.hellos.length, 0)
+
+    const code = await ctx.flow.requestPairingCode('5511999999999')
+    await ctx.flow.handleIncomingIqSet(ctx.pairDevice)
+    await waitUntil(() => ctx.hellos.length === 2)
+
+    const pushAttr = (hello: BinaryNode) =>
+        (hello.content as BinaryNode[])[0].attrs.should_show_push_notification
+    assert.equal(pushAttr(ctx.hellos[0]), 'true')
+    assert.equal(pushAttr(ctx.hellos[1]), 'false')
+
+    await ctx.flow.handleLinkCodeNotification(await ctx.primaryHello('ref-1', code, ctx.hellos[0]))
+    assert.equal(ctx.finishes.length, 0)
+
+    await ctx.flow.handleLinkCodeNotification(await ctx.primaryHello('ref-2', code, ctx.hellos[1]))
+    assert.equal(ctx.finishes.length, 1)
+})
+
+test('a failed re-registration drops the pairing code and asks for a manual refresh', async () => {
+    const ctx = await setupLinkCode({ failRearm: true })
+    await ctx.flow.requestPairingCode('5511999999999')
+    await ctx.flow.handleIncomingIqSet(ctx.pairDevice)
+    await waitUntil(() => ctx.refreshes.length === 1)
+
+    assert.deepEqual(ctx.refreshes, [true])
+    assert.equal(ctx.flow.hasPairingSession(), false)
 })
 
 test('qr flow emits rotating QR values and can be refreshed', async (t) => {

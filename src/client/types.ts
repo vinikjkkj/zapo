@@ -1432,7 +1432,8 @@ export interface WaClientEventMap {
     readonly auth_pairing_code: (event: { readonly code: string }) => void
     /**
      * The server is ready to receive pairing input. `forceManual: true` means
-     * the QR refresh budget was exhausted and the user must request a fresh
+     * the QR refresh budget was exhausted, or a pending pairing code could not
+     * be registered again after a reconnect, and the user must request a fresh
      * one (e.g. via the link-code flow).
      */
     readonly auth_pairing_required: (event: { readonly forceManual: boolean }) => void
