@@ -1027,12 +1027,16 @@ export class WaMessageCoordinator {
         if (idArray.length === 0) {
             throw new Error('sendReceipt requires at least one message id')
         }
-        const [id, ...rest] = idArray
         const input: WaSendReceiptInput = {
             ...options,
             to: jid,
-            id,
-            listIds: rest.length > 0 ? rest : undefined
+            id: idArray[0],
+            // `listIds` carries the FULL id list, including the one in
+            // `attrs.id`: buildListItemsNode skips its first element because
+            // that id is already on the stanza. Passing only the remainder
+            // made it skip a real id, so the second id of every batch reached
+            // neither the attribute nor the <list>.
+            listIds: idArray.length > 1 ? idArray : undefined
         }
         return this.messageDispatch.sendReceipt(input)
     }
