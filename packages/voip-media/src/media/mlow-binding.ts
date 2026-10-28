@@ -24,7 +24,14 @@ export interface MlowEncoder {
     free(): void
 }
 
+/**
+ * `OPUS_SET_USE_SMPL`, on the encoder and the decoder: 1 runs the SMPL/MLow path, 0 standard
+ * Opus. Both handles open with it on; a peer that sends standard Opus needs it off.
+ */
+export const MLOW_SET_USE_SMPL_CTL = 4050
+
 export interface MlowDecoder {
+    decoderCtl(request: number, value: number): void
     decodeFloatInto(
         target: Float32Array,
         packet: Uint8Array | null,

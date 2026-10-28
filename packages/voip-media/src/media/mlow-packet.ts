@@ -97,6 +97,31 @@ function samplesOfSubframes(packet: Uint8Array, count: number, bounds: Int32Arra
     return samples
 }
 
+/** Samples of one standard Opus frame on the 16 kHz clock, by TOC config (RFC 6716 §3.1). */
+function opusConfigSamples(config: number): number {
+    if (config < 12) return [160, 320, 640, 960][config & 3]
+    if (config < 16) return [160, 320][config & 1]
+    return [40, 80, 160, 320][config & 3]
+}
+
+/**
+ * Samples `packet` spans read as a standard Opus packet (RFC 6716 §3.1), on the 16 kHz RTP
+ * clock; 0 when it is empty or its frame count does not parse. The same TOC byte reads
+ * differently as SMPL: `0x58` is one 120 ms SMPL frame but one 60 ms SILK wideband frame.
+ */
+export function opusPacketSamples(packet: Uint8Array): number {
+    if (packet.length === 0) return 0
+    const toc = packet[0]
+    const code = toc & 3
+    let frames = code === 0 ? 1 : 2
+    if (code === 3) {
+        if (packet.length < 2) return 0
+        frames = packet[1] & MULTIFRAME_COUNT_MASK
+        if (frames === 0) return 0
+    }
+    return frames * opusConfigSamples(toc >> 3)
+}
+
 /** A RED copy header's first byte: F set and a non-zero step back. */
 function isRedHeader(byte: number): boolean {
     return (byte & RED_COPY_MARKER) !== 0 && (byte & RED_DELTA_MASK) !== 0

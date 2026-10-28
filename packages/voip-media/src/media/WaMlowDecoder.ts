@@ -5,6 +5,7 @@ import {
     MLOW_CHANNELS,
     MLOW_MAX_FRAME_SIZE,
     MLOW_SAMPLE_RATE,
+    MLOW_SET_USE_SMPL_CTL,
     type MlowDecoder,
     type MlowModule
 } from './mlow-binding.js'
@@ -16,6 +17,7 @@ import {
     type MlowPacketRead,
     mlowPacketSamples,
     MULTIFRAME_MARKER,
+    opusPacketSamples,
     readMlowRed,
     readMlowSubframes
 } from './mlow-packet.js'
@@ -32,6 +34,12 @@ const MAX_REDUNDANT_LAG = MLOW_SAMPLE_RATE
  * hole is a pause the sender took, left silent.
  */
 const MAX_LOST_PACKET_SAMPLES = MLOW_MAX_FRAME_SIZE
+
+/**
+ * Consecutive packets whose RTP step matches only one reading of their TOC before the stream
+ * is taken to be in that codec. A step that fits both readings (a 10 ms DTX frame) says nothing.
+ */
+const CODEC_SWITCH_VOTES = 3
 
 export interface MLowCodecStats {
     /** Packets decoded normally. */
@@ -85,6 +93,21 @@ export class WaMlowDecoder {
     private playedUntil = -1
     /** New audio the last packet that followed on without a hole brought; 0 unknown. */
     private packetStep = 0
+
+    /**
+     * The peer sends standard Opus on PT 120 instead of SMPL: some clients fall back to it, and
+     * the SMPL decoder turns those packets into silence twice as long (a `0x58` TOC is one 60 ms
+     * SILK frame, read as one 120 ms SMPL frame). Told apart by the RTP timeline, which follows
+     * the codec the packet really is.
+     */
+    private plainOpus = false
+    private opusVotes = 0
+    private smplVotes = 0
+    /** RTP timestamp of the last stream-0 packet, and its span read as Opus and as SMPL. */
+    private probeTimestamp = -1
+    private probeOpusSpan = 0
+    private probeSmplSpan = 0
+    private readonly probeBounds = new Int32Array(MLOW_MAX_SUBFRAMES * 2)
 
     /** Every decoded frame lands here, concealed ones too; see {@link decodeSequenced}. */
     private readonly decodeScratch = new Float32Array(MLOW_MAX_FRAME_SIZE)
@@ -165,6 +188,15 @@ export class WaMlowDecoder {
             missing = delta - 1
         }
 
+        if (stream === 0) {
+            this.probeCodec(packet, timestamp, lastSeq >= 0 && missing === 0)
+            if (this.plainOpus) {
+                const played = this.playPlainOpus(packet, timestamp, missing, onFrame)
+                this.lastSeqs[stream] = played ? current : (current - 1 + SEQ_SPACE) % SEQ_SPACE
+                return played ? 'decoded' : 'rejected'
+            }
+        }
+
         const onTimeline = timestamp !== undefined && this.playedUntil >= 0
         const reuse = stream === 1 && read !== undefined && read.packet === packet
         const subframeBounds = reuse ? read.subframeBounds : this.subframeBounds
@@ -203,7 +235,15 @@ export class WaMlowDecoder {
         return played ? 'decoded' : 'rejected'
     }
 
+    /** Whether the peer's PT 120 stream turned out to be standard Opus; see {@link plainOpus}. */
+    get peerSendsPlainOpus(): boolean {
+        return this.plainOpus
+    }
+
     resetSequence(): void {
+        this.opusVotes = 0
+        this.smplVotes = 0
+        this.probeTimestamp = -1
         this.lastSeqs.fill(-1)
         this.concealer.resetFrameSize()
         this.playedUntil = -1
@@ -235,6 +275,93 @@ export class WaMlowDecoder {
         this.lib?.free()
         this.lib = null
         this.concealer.free()
+    }
+
+    /**
+     * Votes on the codec of the stream from the step between the last packet and this one: the
+     * step is the last packet's span, which only one reading of its TOC may give. Then keeps this
+     * packet's two spans for the next step. `follows` is false across a loss or the first packet.
+     */
+    private probeCodec(packet: Uint8Array, timestamp: number | undefined, follows: boolean): void {
+        if (timestamp === undefined) {
+            this.probeTimestamp = -1
+            return
+        }
+        const ts = timestamp >>> 0
+        if (follows && this.probeTimestamp >= 0 && this.probeOpusSpan !== this.probeSmplSpan) {
+            const step = (ts - this.probeTimestamp) >>> 0
+            if (step === this.probeOpusSpan) {
+                this.opusVotes++
+                this.smplVotes = 0
+            } else if (step === this.probeSmplSpan) {
+                this.smplVotes++
+                this.opusVotes = 0
+            }
+            if (!this.plainOpus && this.opusVotes >= CODEC_SWITCH_VOTES) this.setPlainOpus(true)
+            else if (this.plainOpus && this.smplVotes >= CODEC_SWITCH_VOTES)
+                this.setPlainOpus(false)
+        }
+        this.probeTimestamp = ts
+        this.probeOpusSpan = opusPacketSamples(packet)
+        this.probeSmplSpan = mlowPacketSamples(packet, this.probeBounds)
+    }
+
+    /** Switches the decoder between SMPL and standard Opus; the timeline reopens on the next packet. */
+    private setPlainOpus(plain: boolean): void {
+        if (!this.lib) return
+        try {
+            this.lib.decoderCtl(MLOW_SET_USE_SMPL_CTL, plain ? 0 : 1)
+        } catch (err) {
+            this.logger.warn('mlow decoder codec switch failed', {
+                plainOpus: plain,
+                message: toError(err).message
+            })
+            // A fresh run of consistent steps is needed before the next try.
+            this.opusVotes = 0
+            this.smplVotes = 0
+            return
+        }
+        this.plainOpus = plain
+        this.opusVotes = 0
+        this.smplVotes = 0
+        this.playedUntil = -1
+        this.packetStep = 0
+        this.logger.debug('peer audio codec detected', { codec: plain ? 'opus' : 'smpl' })
+    }
+
+    /**
+     * Plays one standard Opus packet: conceals what `missing` packets left, decodes it whole and
+     * moves the timeline by its Opus span. No multiframe or in-band RED on this path.
+     */
+    private playPlainOpus(
+        packet: Uint8Array,
+        timestamp: number | undefined,
+        missing: number,
+        onFrame: (pcm: Float32Array) => void
+    ): boolean {
+        if (missing > 0) {
+            // Packets of 60 and 120 ms mix on this stream: fill the hole the timeline shows.
+            if (timestamp !== undefined && this.playedUntil >= 0) {
+                this.concealUntil(
+                    timestamp >>> 0,
+                    missing * MAX_LOST_PACKET_SAMPLES,
+                    packet,
+                    onFrame
+                )
+            } else {
+                this.concealer.concealGap(missing, packet, onFrame)
+            }
+        }
+        const decoded = this.tryDecode(packet)
+        if (decoded === null) {
+            return false
+        }
+        this.playedUntil =
+            timestamp === undefined
+                ? -1
+                : (timestamp + (opusPacketSamples(packet) || decoded.length)) >>> 0
+        onFrame(decoded)
+        return true
     }
 
     /**
