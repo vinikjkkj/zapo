@@ -461,15 +461,14 @@ function parseGroupParticipants(node: BinaryNode): readonly WaGroupParticipant[]
             continue
         }
         const type = participant.role ?? WA_GROUP_PARTICIPANT_TYPES.REGULAR
-        const isOwner =
+        const isAdmin =
             type === WA_GROUP_PARTICIPANT_TYPES.SUPERADMIN ||
             type === WA_GROUP_PARTICIPANT_TYPES.ADMIN
-        participants[participantsCount] = {
+
+        const participantData = {
             jid: participant.jid,
             type,
-            isAdmin:
-                type === WA_GROUP_PARTICIPANT_TYPES.ADMIN ||
-                type === WA_GROUP_PARTICIPANT_TYPES.SUPERADMIN,
+            isAdmin,
             isSuperAdmin: type === WA_GROUP_PARTICIPANT_TYPES.SUPERADMIN,
             lid: participant.lidJid,
             phoneNumber: participant.phoneJid,
@@ -477,9 +476,11 @@ function parseGroupParticipants(node: BinaryNode): readonly WaGroupParticipant[]
             username: participant.username,
             expirationSeconds: participant.expirationSeconds
         }
+
+        participants[participantsCount] = participantData
         participantsCount += 1
-        if (isOwner) {
-            ownerParticipants[ownerParticipantsCount] = participants[participantsCount]
+        if (isAdmin) {
+            ownerParticipants[ownerParticipantsCount] = participantData
             ownerParticipantsCount += 1
         }
     }
