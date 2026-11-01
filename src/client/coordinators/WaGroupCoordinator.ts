@@ -452,13 +452,18 @@ type WaGroupParticipantChangeAction = 'add' | 'remove' | 'promote' | 'demote'
 function parseGroupParticipants(node: BinaryNode): readonly WaGroupParticipant[] {
     const parsed = parseGroupEventParticipants(node)
     const participants = new Array<WaGroupParticipant>(parsed.length)
+    const ownerParticipants = new Array<WaGroupParticipant>(parsed.length)
     let participantsCount = 0
+    let ownerParticipantsCount = 0
     for (let index = 0; index < parsed.length; index += 1) {
         const participant = parsed[index]
         if (!participant.jid) {
             continue
         }
         const type = participant.role ?? WA_GROUP_PARTICIPANT_TYPES.REGULAR
+        const isOwner =
+            type === WA_GROUP_PARTICIPANT_TYPES.SUPERADMIN ||
+            type === WA_GROUP_PARTICIPANT_TYPES.ADMIN
         participants[participantsCount] = {
             jid: participant.jid,
             type,
@@ -473,8 +478,13 @@ function parseGroupParticipants(node: BinaryNode): readonly WaGroupParticipant[]
             expirationSeconds: participant.expirationSeconds
         }
         participantsCount += 1
+        if (isOwner) {
+            ownerParticipants[ownerParticipantsCount] = participants[participantsCount]
+            ownerParticipantsCount += 1
+        }
     }
     participants.length = participantsCount
+    ownerParticipants.length = ownerParticipantsCount
     return participants
 }
 
