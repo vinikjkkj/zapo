@@ -103,6 +103,7 @@ export interface WaGroupMetadata {
     readonly appealUpdateTime?: number
     readonly linkedParentJid?: string
     readonly participants: readonly WaGroupParticipant[]
+    readonly ownerParticipants: readonly WaGroupParticipant[]
 }
 
 export interface WaMembershipRequest {
@@ -449,7 +450,10 @@ export interface WaGroupCoordinator {
 
 type WaGroupParticipantChangeAction = 'add' | 'remove' | 'promote' | 'demote'
 
-function parseGroupParticipants(node: BinaryNode): readonly WaGroupParticipant[] {
+function parseGroupParticipants(node: BinaryNode): {
+    readonly participants: readonly WaGroupParticipant[]
+    readonly ownerParticipants: readonly WaGroupParticipant[]
+} {
     const parsed = parseGroupEventParticipants(node)
     const participants = new Array<WaGroupParticipant>(parsed.length)
     const ownerParticipants = new Array<WaGroupParticipant>(parsed.length)
@@ -486,7 +490,10 @@ function parseGroupParticipants(node: BinaryNode): readonly WaGroupParticipant[]
     }
     participants.length = participantsCount
     ownerParticipants.length = ownerParticipantsCount
-    return participants
+    return {
+        participants,
+        ownerParticipants
+    }
 }
 
 const APPEAL_STATUSES = new Set(['approved', 'in_review', 'none', 'rejected'])
@@ -615,6 +622,8 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
     const memberLinkModeNode = findNodeChild(target, 'member_link_mode')
     const memberShareNode = findNodeChild(target, 'member_share_group_history_mode')
 
+    const { participants, ownerParticipants } = parseGroupParticipants(target)
+
     return {
         ...commons,
         owner: attrs.creator ?? attrs.owner,
@@ -659,7 +668,8 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
         appealUpdateTime: appealUpdateTimeNode?.attrs.value
             ? Number(appealUpdateTimeNode.attrs.value)
             : undefined,
-        participants: parseGroupParticipants(target)
+        participants,
+        ownerParticipants
     }
 }
 
@@ -1138,7 +1148,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             const result = await queryWithContext('community.linkedGroupsParticipants', node)
             assertIqResult(result, 'community.linkedGroupsParticipants')
             const container = findNodeChild(result, 'linked_groups_participants')
-            return container ? parseGroupParticipants(container) : []
+            return container ? parseGroupParticipants(container).participants : []
         },
 
         fetchSubGroups: async (communityJid) => {
