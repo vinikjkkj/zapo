@@ -324,14 +324,20 @@ for (const wrapper of ['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2
     })
 }
 
-test('context skips sender key distribution metadata before the content payload', () => {
-    const original = {
-        senderKeyDistributionMessage: { groupId: '123@g.us' },
-        imageMessage: { contextInfo: { stanzaId: 'original' } }
-    }
-    assert.equal(getContextInfo(original)?.stanzaId, 'original')
-    const result = applyContextInfo(original, { quotedMessageId: 'updated' })
-    assert.equal(getContextInfo(result)?.stanzaId, 'updated')
-    assert.equal(original.imageMessage.contextInfo.stanzaId, 'original')
-    assert.deepEqual(result.senderKeyDistributionMessage, { groupId: '123@g.us' })
-})
+for (const key of [
+    'senderKeyDistributionMessage',
+    'fastRatchetKeySenderKeyDistributionMessage'
+] as const) {
+    test(`context skips ${key} before the content payload`, () => {
+        const original = {
+            [key]: { groupId: '123@g.us' },
+            imageMessage: { contextInfo: { stanzaId: 'original' } }
+        }
+        assert.equal(getContextInfo(original)?.stanzaId, 'original')
+        const result = applyContextInfo(original, { quotedMessageId: 'updated' })
+        const decoded = proto.Message.decode(proto.Message.encode(result).finish())
+        assert.equal(getContextInfo(decoded)?.stanzaId, 'updated')
+        assert.equal(original.imageMessage.contextInfo.stanzaId, 'original')
+        assert.deepEqual(result[key], { groupId: '123@g.us' })
+    })
+}

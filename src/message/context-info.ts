@@ -180,7 +180,12 @@ export function pickIncomingEphemeralSettingTimestamp(
 /** Selects content rather than top-level context or sender-key distribution metadata. */
 function pickContextInfoTargetKey(message: Proto.IMessage): keyof Proto.IMessage | null {
     for (const key of Object.keys(message)) {
-        if (key === 'messageContextInfo' || key === 'senderKeyDistributionMessage') continue
+        if (
+            key === 'messageContextInfo' ||
+            key === 'senderKeyDistributionMessage' ||
+            key === 'fastRatchetKeySenderKeyDistributionMessage'
+        )
+            continue
         const value = (message as Record<string, unknown>)[key]
         if (
             value &&
