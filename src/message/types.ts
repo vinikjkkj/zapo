@@ -23,6 +23,10 @@ export interface WaMessageAckMetadata {
 }
 
 export interface WaMessagePublishResult {
+    /** Token sent by a native form, including an automatically generated UUID.
+     * @example `const { flowToken } = await client.message.send(jid, form)`
+     */
+    readonly flowToken?: string
     readonly id: string
     readonly attempts: number
     readonly ackNode: BinaryNode
@@ -39,6 +43,8 @@ export interface WaMessageUploadInfo {
 }
 
 export interface WaMessageBuildResult {
+    /** Native form correlation token, preserved by `client.message.send`. */
+    readonly flowToken?: string
     readonly message: Proto.IMessage
     readonly upload?: WaMessageUploadInfo
 }
@@ -346,7 +352,225 @@ export type WaSendMediaMessage =
     | WaSendStickerMessage
     | WaSendStickerPackMessage
 
+/** Reply button. IDs must be unique within the message.
+ * @example `const button: WaReplyButton = { id: 'accept', text: 'Accept' }`
+ */
+export interface WaReplyButton {
+    readonly id: string
+    readonly text: string
+}
+
+interface WaBusinessMessageBase extends WaSendMessageContextInfo {
+    readonly text: string
+    readonly footer?: string
+    readonly contextInfo?: WaSendContextInfo
+}
+
+/** Up to three reply buttons, wrapped in documentWithCaptionMessage.
+ * In groups, choosing a reply posts it to the whole group.
+ * @example `await client.message.send(jid, { type: 'buttons', text: 'Continue?', buttons: [{ id: 'yes', text: 'Yes' }] })`
+ */
+export interface WaSendButtonsMessage extends WaBusinessMessageBase {
+    readonly type: 'buttons'
+    /** Omitted or empty headers use EMPTY; non-empty text uses TEXT. */
+    readonly header?: string
+    readonly buttons: readonly WaReplyButton[]
+}
+
+/** Native-flow action. Quick replies post the choice to the whole group in group chats.
+ * Catalog actions require a business phone number, never a LID; omitted numbers use the account PN.
+ * Copy actions use `code` for both `copy_code` and `id`. URL actions use `url` as `merchant_url`.
+ * These field defaults are API choices, not protocol requirements.
+ * @example `const button: WaNativeFlowButton = { type: 'cta_url', text: 'Visit', url: 'https://example.com', webview: true }`
+ */
+export type WaNativeFlowButton =
+    | ({ readonly type: 'quick_reply' } & WaReplyButton)
+    | {
+          readonly type: 'cta_url'
+          readonly text: string
+          readonly url: string
+          /** Requests a WebView with full presentation. */
+          readonly webview?: boolean
+      }
+    | { readonly type: 'cta_copy'; readonly text: string; readonly code: string }
+    | { readonly type: 'cta_call'; readonly text: string; readonly phoneNumber: string }
+    | {
+          readonly type: 'cta_catalog'
+          readonly businessPhoneNumber?: string
+          readonly productId?: string
+      }
+
+/** Native-flow buttons with an optional text header.
+ * Accepts 1-10 quick replies or 1-3 CTA buttons; mixing the two categories throws.
+ * A first cta_catalog button selects the cta_catalog business envelope.
+ * @example `await client.message.send(jid, { type: 'interactive', text: 'Coupon', buttons: [{ type: 'cta_copy', text: 'Copy', code: 'SAVE10' }] })`
+ */
+export interface WaSendInteractiveMessage extends WaBusinessMessageBase {
+    readonly type: 'interactive'
+    readonly header?: string
+    readonly buttons: readonly WaNativeFlowButton[]
+}
+
+/** A selectable list row. IDs must be unique across all sections.
+ * @example `const row: WaListRow = { id: 'coffee', title: 'Coffee', description: 'Freshly brewed' }`
+ */
+export interface WaListRow {
+    readonly id: string
+    readonly title: string
+    readonly header?: string
+    readonly description?: string
+}
+
+/** A titled group of list rows.
+ * @example `const section: WaListSection = { title: 'Drinks', rows: [{ id: 'tea', title: 'Tea' }] }`
+ */
+export interface WaListSection {
+    readonly title: string
+    readonly rows: readonly WaListRow[]
+}
+
+/** Native-flow single_select list.
+ * Raw `listMessage` remains available for the separate list protocol.
+ * For menu_options replies, read id/description params and the selected title in
+ * interactiveResponseMessage.body.text. Read params with parseNativeFlowResponse.
+ * @example `await client.message.send(jid, { type: 'list', text: 'Choose', buttonText: 'Menu', sections: [{ title: 'Drinks', rows: [{ id: 'tea', title: 'Tea' }] }] })`
+ */
+export interface WaSendListMessage extends WaBusinessMessageBase {
+    readonly type: 'list'
+    readonly buttonText: string
+    readonly sections: readonly WaListSection[]
+}
+
+/** Carousel card whose image/video is uploaded using the normal media pipeline.
+ * Video media.caption is omitted from the header; use text for the card body.
+ * @example `const card: WaCarouselCard = { title: 'New', text: 'See details', media: { type: 'image', media: '/tmp/item.jpg', mimetype: 'image/jpeg' }, buttons: [{ type: 'cta_url', text: 'View', url: 'https://example.com' }] }`
+ */
+export interface WaCarouselCard {
+    readonly title: string
+    readonly text: string
+    readonly media: Extract<WaSendMediaMessage, { readonly type: 'image' | 'video' }>
+    readonly buttons: readonly WaNativeFlowButton[]
+}
+
+/** Media carousel with 1-100 cards. Uploads run sequentially; the singular result.upload is not set.
+ * Quick replies in cards post to the whole group when sent to a group.
+ * @example `await client.message.send(jid, { type: 'carousel', text: 'Our selection', cards: [card] })`
+ */
+export interface WaSendCarouselMessage extends WaBusinessMessageBase {
+    readonly type: 'carousel'
+    readonly cards: readonly WaCarouselCard[]
+}
+
+/** WhatsApp Business app form (galaxy_message), sent with the mixed business node.
+ * The form must exist. The returned publish result exposes the token as `flowToken`.
+ * @example `const { flowToken } = await client.message.send(jid, { type: 'native-form', text: 'Your details', flowId: '123', flowCta: 'Fill form' })`
+ */
+export interface WaSendNativeFormMessage extends WaBusinessMessageBase {
+    readonly type: 'native-form'
+    /** Decimal digits only, kept as a string to preserve large IDs and leading zeros. */
+    readonly flowId: string
+    readonly flowCta: string
+    /** Defaults to template. */
+    readonly formType?: string
+    /** Defaults to a new UUID for each send. */
+    readonly flowToken?: string
+    readonly flowActionPayload?: {
+        readonly screen?: string
+        readonly data?: Readonly<Record<string, unknown>>
+    }
+}
+
+/** Static PIX key settings. PHONE keys should use E.164.
+ * @example `const pix: WaPixSettings = { merchantName: 'Shop', key: 'pay@example.com', keyType: 'EMAIL' }`
+ */
+export interface WaPixSettings {
+    readonly merchantName: string
+    readonly key: string
+    readonly keyType: 'EVP' | 'EMAIL' | 'PHONE' | 'CPF' | 'CNPJ'
+}
+
+/** PIX key card (payment_info), with zero order/total amounts.
+ * @example `await client.message.send(jid, { type: 'payment', text: 'Pay via PIX', referenceId: 'PIX-1', pix: { merchantName: 'Shop', key: 'pay@example.com', keyType: 'EMAIL' } })`
+ */
+export interface WaSendPaymentMessage extends WaBusinessMessageBase {
+    readonly type: 'payment'
+    readonly referenceId: string
+    readonly pix: WaPixSettings
+    readonly displayText?: string
+}
+
+/** Charge line item. Amount is the unit price in major currency units, rounded to cents.
+ * @example `const item: WaChargeItem = { name: 'Coffee', amount: 5.5, quantity: 2 }`
+ */
+export interface WaChargeItem {
+    readonly name: string
+    readonly amount: number
+    readonly quantity: number
+}
+
+/** PIX checkout (review_and_pay). Amounts are BRL major units, rounded to cents.
+ * Total must equal the item subtotal minus the optional discount. Items are custom items.
+ * @example `await client.message.send(jid, { type: 'charge', text: 'Your order', referenceId: 'ORDER-1', total: 11, items: [{ name: 'Coffee', amount: 5.5, quantity: 2 }], pix })`
+ */
+export interface WaSendChargeMessage extends WaBusinessMessageBase {
+    readonly type: 'charge'
+    readonly referenceId: string
+    readonly pix: WaPixSettings
+    readonly total: number
+    readonly items: readonly WaChargeItem[]
+    readonly discount?: number
+    readonly additionalNote?: string
+}
+
+/** Business catalog button. Defaults to the account phone number (never its LID).
+ * @example `await client.message.send(jid, { type: 'catalog', text: 'Browse our catalog', thumbnailProductRetailerId: 'sku-1' })`
+ */
+export interface WaSendCatalogMessage extends WaBusinessMessageBase {
+    readonly type: 'catalog'
+    readonly businessPhoneNumber?: string
+    readonly thumbnailProductRetailerId?: string
+}
+
+/** Native catalog product. Requires a real product in the owner's business catalog.
+ * Prices are major currency units, multiplied by 1000 and rounded. Owner defaults to the account PN JID.
+ * `productImage` must already be uploaded (e.g. using `client.message.upload`).
+ * @example `await client.message.send(jid, { type: 'product', productId: '123', title: 'Hat', currencyCode: 'BRL', price: 49.9 })`
+ */
+export interface WaSendProductMessage extends WaSendMessageContextInfo {
+    readonly type: 'product'
+    readonly productId: string
+    readonly title: string
+    readonly description?: string
+    readonly currencyCode: string
+    readonly price: number
+    readonly salePrice?: number
+    readonly retailerId?: string
+    readonly url?: string
+    readonly productImage?: Proto.Message.IImageMessage
+    /** Defaults to 1 when productImage is present. */
+    readonly productImageCount?: number
+    readonly businessOwnerJid?: string
+    readonly text?: string
+    readonly footer?: string
+    readonly contextInfo?: WaSendContextInfo
+}
+
+/** Typed interactive and business content accepted by send.
+ * @example `const content: WaSendBusinessMessage = { type: 'catalog', text: 'Browse' }`
+ */
+export type WaSendBusinessMessage =
+    | WaSendButtonsMessage
+    | WaSendInteractiveMessage
+    | WaSendListMessage
+    | WaSendCarouselMessage
+    | WaSendNativeFormMessage
+    | WaSendPaymentMessage
+    | WaSendChargeMessage
+    | WaSendCatalogMessage
+    | WaSendProductMessage
+
 export type WaSendTypedMessage =
+    | WaSendBusinessMessage
     | WaSendTextMessage
     | WaSendReactionMessage
     | WaSendRevokeMessage

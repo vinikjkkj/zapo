@@ -517,7 +517,10 @@ export class WaMessageDispatchCoordinator {
             })
         } else {
             ;[built, sendOptions] = await Promise.all([
-                this.deps.buildMessageContent(content, { to: recipientJid }),
+                this.deps.buildMessageContent(content, {
+                    to: recipientJid,
+                    meJid: this.deps.getCurrentCredentials()?.meJid
+                }),
                 this.withResolvedMessageId(options)
             ])
         }
@@ -694,6 +697,9 @@ export class WaMessageDispatchCoordinator {
                   envelope,
                   peerRecipientPn
               )
+        if (built.flowToken !== undefined) {
+            return { ...publishResult, ...(upload ? { upload } : {}), flowToken: built.flowToken }
+        }
         return upload ? { ...publishResult, upload } : publishResult
     }
 

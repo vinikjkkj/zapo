@@ -36,7 +36,9 @@ import {
     createUseCaseSecret,
     WA_USE_CASE_SECRET_MODIFICATION_TYPES
 } from '@message/crypto/use-case-secret'
+import { buildBusinessMessage } from '@message/encode/business'
 import {
+    isSendBusinessMessage,
     isSendEventMessage,
     isSendEventResponseMessage,
     isSendKeepMessage,
@@ -415,6 +417,21 @@ async function buildTypedMessageContent(
     content: WaSendTypedMessage,
     ctx?: WaBuildMessageContext
 ): Promise<WaMessageBuildResult> {
+    if (isSendBusinessMessage(content)) {
+        const built = buildBusinessMessage(content, ctx?.meJid)
+        if (content.type === 'carousel') {
+            const cards = built.message.interactiveMessage!.carouselMessage!.cards!
+            for (let index = 0; index < content.cards.length; index += 1) {
+                const uploaded = await buildMediaMessage(options, content.cards[index].media)
+                const header = cards[index].header!
+                if (uploaded.message.imageMessage)
+                    header.imageMessage = uploaded.message.imageMessage
+                else if (uploaded.message.videoMessage)
+                    header.videoMessage = { ...uploaded.message.videoMessage, caption: undefined }
+            }
+        }
+        return built
+    }
     if (isSendTextMessage(content)) {
         if (options.linkPreviewResolver) {
             try {

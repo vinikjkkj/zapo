@@ -4,8 +4,10 @@ import test from 'node:test'
 import {
     applyContextInfo,
     buildContextInfoProto,
+    getContextInfo,
     resolveSendContextInfo
 } from '@message/context-info'
+import { proto } from '@proto'
 
 test('buildContextInfoProto maps friendly fields to proto fields', () => {
     const proto = buildContextInfoProto({
@@ -277,4 +279,18 @@ test('resolveSendContextInfo merges content-level + options-level + quote + forw
     assert.equal(result?.quotedMessageId, 'q-1')
     assert.equal(result?.isForwarded, true)
     assert.deepEqual(result?.mentionedJids, ['a@s.whatsapp.net'])
+})
+
+test('wrapped reply buttons retain quote and expiration through protobuf serialization', () => {
+    const message = {
+        documentWithCaptionMessage: { message: { buttonsMessage: { contentText: 'Choose' } } }
+    }
+    const out = applyContextInfo(message, { quotedMessageId: 'ORIGINAL', expirationSeconds: 60 })
+    const decoded = proto.Message.decode(proto.Message.encode(out).finish())
+    assert.equal(
+        decoded.documentWithCaptionMessage?.message?.buttonsMessage?.contextInfo?.stanzaId,
+        'ORIGINAL'
+    )
+    assert.equal(getContextInfo(decoded)?.expiration, 60)
+    assert.equal(getContextInfo({ documentWithCaptionMessage: { message: {} } }), null)
 })

@@ -2176,3 +2176,25 @@ test('disallowed-list entries prefer the username identifier under lid addressin
         jid: '88881111@lid'
     })
 })
+
+for (const kind of ['catalog_message', 'cta_catalog'] as const) {
+    test(`catalog native flow uses ${kind} without the mixed version`, () => {
+        assert.deepEqual(buildButtonAddonNode(kind), {
+            tag: 'biz',
+            attrs: {},
+            content: [
+                {
+                    tag: 'interactive',
+                    attrs: { type: 'native_flow', v: '1' },
+                    content: [
+                        {
+                            tag: 'native_flow',
+                            attrs: { name: kind },
+                            content: undefined
+                        }
+                    ]
+                }
+            ]
+        })
+    })
+}

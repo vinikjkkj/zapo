@@ -601,7 +601,8 @@ export class WaMessageCoordinator {
     /**
      * Sends a message (any {@link WaSendMessageContent} kind – text, media,
      * poll, reaction, edit, revoke, etc.) to `to` and returns the publish
-     * result containing the stanza id and ack metadata.
+     * result containing the stanza id and ack metadata. Native form sends also
+     * return `flowToken`, including the UUID generated when none was supplied.
      *
      * `to` accepts any JID accepted by {@link normalizeRecipientJid}: bare
      * digits (`'5511999999999'`), a phone JID (`'5511…@s.whatsapp.net'`),
@@ -659,6 +660,12 @@ export class WaMessageCoordinator {
      *     selectableCount: 1
      * })
      * console.log('sent as', result.id)
+     *
+     * // 6. Business app form (must already exist in the business account)
+     * const form = await client.message.send(jid, {
+     *     type: 'native-form', text: 'Your details', flowId: '123', flowCta: 'Fill form'
+     * })
+     * console.log('form token', form.flowToken)
      * ```
      */
     public send(

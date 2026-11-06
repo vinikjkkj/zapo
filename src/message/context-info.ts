@@ -88,6 +88,16 @@ export function applyContextInfo(
     const proto = buildContextInfoProto(ctx)
     if (!hasAnyKey(proto)) return message
 
+    const wrapped = message.documentWithCaptionMessage
+    if (wrapped?.message) {
+        return {
+            ...message,
+            documentWithCaptionMessage: {
+                ...wrapped,
+                message: applyContextInfo(wrapped.message, ctx)
+            }
+        }
+    }
     const next: Proto.IMessage = { ...message }
 
     if (typeof next.conversation === 'string' && !next.extendedTextMessage) {
@@ -163,6 +173,9 @@ export function pickIncomingEphemeralSettingTimestamp(
 }
 
 function pickContextInfoTarget(message: Proto.IMessage): ContextInfoCarrier | null {
+    if (message.documentWithCaptionMessage?.message) {
+        return pickContextInfoTarget(message.documentWithCaptionMessage.message)
+    }
     for (const key of Object.keys(message)) {
         if (key === 'messageContextInfo') continue
         const value = (message as Record<string, unknown>)[key]
@@ -178,7 +191,10 @@ function pickContextInfoTarget(message: Proto.IMessage): ContextInfoCarrier | nu
     return null
 }
 
-/** Reads the `contextInfo` off a message's first content submessage (null when absent). */
+/** Reads the first content submessage's contextInfo, descending documentWithCaptionMessage.
+ * Returns null when absent.
+ * @example `const quotedId = getContextInfo(message)?.stanzaId`
+ */
 export function getContextInfo(message: Proto.IMessage): Proto.IContextInfo | null {
     return pickContextInfoTarget(message)?.contextInfo ?? null
 }

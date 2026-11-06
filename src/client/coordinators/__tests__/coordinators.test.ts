@@ -13,7 +13,11 @@ import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDisp
 import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import { createStreamControlHandler } from '@client/coordinators/WaStreamControlCoordinator'
 import { createGroupMetadataCache } from '@client/messaging/group-metadata'
-import { buildMediaMessageContent, type WaMediaMessageOptions } from '@client/messaging/messages'
+import {
+    buildMediaMessageContent,
+    type WaBuildMessageContext,
+    type WaMediaMessageOptions
+} from '@client/messaging/messages'
 import type {
     WaAppStateMutationEvent,
     WaGroupEvent,
@@ -26,7 +30,11 @@ import { createNoopLogger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { getContextInfo } from '@message/context-info'
 import { unpadPkcs7 } from '@message/encode/padding'
-import type { WaSendMessageContent } from '@message/types'
+import type {
+    WaMessageBuildResult,
+    WaSendBusinessMessage,
+    WaSendMessageContent
+} from '@message/types'
 import { proto, type Proto } from '@proto'
 import {
     WA_APP_STATE_COLLECTION_STATES,
@@ -168,8 +176,9 @@ function createMessageDispatchCoordinator(
         readonly threadStore?: WaThreadStore
         readonly chatMetadataStore?: WaChatMetadataMemoryStore
         readonly buildMessageContent?: (
-            content: WaSendMessageContent
-        ) => Promise<{ readonly message: Proto.IMessage }>
+            content: WaSendMessageContent,
+            ctx?: WaBuildMessageContext
+        ) => Promise<WaMessageBuildResult>
         readonly senderKeyManager?: unknown
         readonly messageClient?: unknown
         readonly retryTracker?: unknown
@@ -2633,3 +2642,95 @@ test('syncSignalSession rejects group jids before touching the session', async (
 
     assert.deepEqual(harness.calls, [])
 })
+
+for (const [content, expectedFlow] of [
+    [{ type: 'native-form', text: 'Details', flowId: '123', flowCta: 'Fill form' }, 'mixed'],
+    [{ type: 'catalog', text: 'Browse' }, 'catalog_message'],
+    [{ type: 'buttons', text: 'Choose', buttons: [{ id: 'yes', text: 'Yes' }] }, 'mixed']
+] satisfies readonly [WaSendBusinessMessage, string][]) {
+    test(`message dispatch sends typed ${content.type} with secret and correct biz node`, async () => {
+        let published: BinaryNode | undefined
+        let plaintext: Uint8Array | undefined
+        let buildContext: WaBuildMessageContext | undefined
+        const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+            meJid: '15551234567:8@s.whatsapp.net',
+            meLid: '9999999@lid',
+            buildMessageContent: (input, ctx) => {
+                buildContext = ctx
+                return buildMediaMessageContent(
+                    { logger: createNoopLogger() } as WaMediaMessageOptions,
+                    input,
+                    ctx
+                )
+            },
+            signalStore: { getRegistrationInfo: async () => null },
+            fanoutResolver: { resolveGroupParticipantDeviceJids: async () => [] },
+            retryTracker: {
+                track: async (_meta: unknown, publish: () => Promise<unknown>) => publish()
+            },
+            messageClient: {
+                publishNode: async (node: BinaryNode) => {
+                    published = node
+                    return {
+                        id: node.attrs.id,
+                        attempts: 1,
+                        ackNode: { tag: 'ack', attrs: { id: node.attrs.id } },
+                        ack: { refreshLid: false }
+                    }
+                }
+            },
+            senderKeyManager: {
+                prepareGroupEncryption: async (
+                    _jid: string,
+                    _sender: unknown,
+                    bytes: Uint8Array
+                ) => {
+                    plaintext = bytes
+                    return {
+                        distributionMessage: {},
+                        ciphertext: { ciphertext: new Uint8Array(1) },
+                        keyId: 1
+                    }
+                }
+            }
+        })
+        const result = await coordinator.sendMessage('120363000000000001@g.us', content, {
+            id: 'BUSINESS-1',
+            expirationSeconds: 60
+        })
+        assert.equal(result.id, 'BUSINESS-1')
+        assert.equal(buildContext?.meJid, '15551234567:8@s.whatsapp.net')
+        const decoded = proto.Message.decode(unpadPkcs7(plaintext!))
+        assert.equal(decoded.messageContextInfo?.messageSecret?.byteLength, 32)
+        const biz = (published!.content as BinaryNode[]).find((node) => node.tag === 'biz')!
+        assert.ok(biz)
+        const interactive = (biz.content as BinaryNode[])[0]
+        assert.deepEqual(interactive.attrs, { type: 'native_flow', v: '1' })
+        assert.deepEqual(
+            (interactive.content as BinaryNode[])[0].attrs,
+            expectedFlow === 'mixed' ? { v: '9', name: 'mixed' } : { name: expectedFlow }
+        )
+        if (content.type === 'native-form') {
+            const flow = decoded.interactiveMessage!.nativeFlowMessage!
+            assert.equal(flow.buttons![0].name, 'galaxy_message')
+            assert.equal(
+                JSON.parse(flow.buttons![0].buttonParamsJson!).flow_token,
+                result.flowToken
+            )
+            assert.ok(result.flowToken)
+        } else {
+            assert.equal(result.flowToken, undefined)
+        }
+        if (content.type === 'catalog') {
+            const params = JSON.parse(
+                decoded.interactiveMessage!.nativeFlowMessage!.buttons![0].buttonParamsJson!
+            )
+            assert.equal(params.business_phone_number, '15551234567')
+        }
+        if (content.type === 'buttons') {
+            const buttons = decoded.documentWithCaptionMessage!.message!.buttonsMessage!
+            assert.equal(buttons.buttons![0].buttonId, 'yes')
+            assert.equal(buttons.contextInfo?.expiration, 60)
+        }
+    })
+}
