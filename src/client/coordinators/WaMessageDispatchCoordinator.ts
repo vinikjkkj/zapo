@@ -28,6 +28,7 @@ import {
 } from '@message/crypto/reporting-token'
 import {
     isSendAddonCryptoMessage,
+    isSendBusinessMessage,
     isSendMediaMessage,
     isSendTextMessage,
     needsSecretPersistence,
@@ -517,7 +518,10 @@ export class WaMessageDispatchCoordinator {
             })
         } else {
             ;[built, sendOptions] = await Promise.all([
-                this.deps.buildMessageContent(content, { to: recipientJid }),
+                this.deps.buildMessageContent(content, {
+                    to: recipientJid,
+                    meJid: this.deps.getCurrentCredentials()?.meJid
+                }),
                 this.withResolvedMessageId(options)
             ])
         }
@@ -544,14 +548,19 @@ export class WaMessageDispatchCoordinator {
         const autoInjectDisabled = isGroupRecipient
             ? options.disableGroupEphemeralAutoInject
             : options.disableDirectEphemeralAutoInject
-        if (optionsCtx?.expirationSeconds === undefined && !autoInjectDisabled) {
+        const contentCtx = pickContentContextInfo(content)
+        if (
+            optionsCtx?.expirationSeconds === undefined &&
+            contentCtx?.expirationSeconds === undefined &&
+            !autoInjectDisabled
+        ) {
             optionsCtx = {
                 ...(await this.resolveChatEphemeral(directRecipientJid)),
                 ...optionsCtx
             }
         }
         const ctx = resolveSendContextInfo({
-            contentLevel: pickContentContextInfo(content),
+            contentLevel: contentCtx,
             optionsLevel: optionsCtx,
             quote: options.quote,
             forward: options.forward,
@@ -694,6 +703,9 @@ export class WaMessageDispatchCoordinator {
                   envelope,
                   peerRecipientPn
               )
+        if (built.flowToken !== undefined) {
+            return { ...publishResult, ...(upload ? { upload } : {}), flowToken: built.flowToken }
+        }
         return upload ? { ...publishResult, upload } : publishResult
     }
 
@@ -2100,7 +2112,11 @@ export class WaMessageDispatchCoordinator {
 
 function pickContentContextInfo(content: WaSendMessageContent): WaSendContextInfo | undefined {
     if (typeof content !== 'object' || content === null) return undefined
-    if (isSendTextMessage(content) || isSendMediaMessage(content)) {
+    if (
+        isSendTextMessage(content) ||
+        isSendMediaMessage(content) ||
+        isSendBusinessMessage(content)
+    ) {
         return content.contextInfo
     }
     return undefined

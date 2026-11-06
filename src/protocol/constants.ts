@@ -38,6 +38,7 @@ export {
     WA_ENC_CIPHERTEXT_TYPES,
     WA_ENC_MEDIA_TYPES,
     WA_EVENT_META_TYPES,
+    WA_INTERACTIVE_LIMITS,
     WA_MESSAGE_TAGS,
     WA_MESSAGE_TYPES,
     WA_NACK_REASONS,
@@ -169,3 +170,5 @@ export type {
     WaNewsletterSendType,
     WaNewsletterStateType
 } from '@protocol/newsletter'
+
+export { WA_CATALOG } from '@protocol/catalog'

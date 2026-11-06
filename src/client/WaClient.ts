@@ -152,6 +152,7 @@ class WaClientImpl extends EventEmitter {
         this.bindNodeTransportEvents()
         this.on('connection', (event) => {
             if (event.status !== 'close') return
+            this.deps.businessCoordinator.resetCatalog()
             if (!this.options.recoverFromClientTooOld) return
             if (event.reason !== WA_DISCONNECT_REASONS.FAILURE_CLIENT_TOO_OLD) return
             this.logger.warn(

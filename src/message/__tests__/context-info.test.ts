@@ -4,8 +4,12 @@ import test from 'node:test'
 import {
     applyContextInfo,
     buildContextInfoProto,
+    getContextInfo,
+    pickIncomingEphemeralSettingTimestamp,
+    pickIncomingExpirationSeconds,
     resolveSendContextInfo
 } from '@message/context-info'
+import { proto, type Proto } from '@proto'
 
 test('buildContextInfoProto maps friendly fields to proto fields', () => {
     const proto = buildContextInfoProto({
@@ -278,3 +282,62 @@ test('resolveSendContextInfo merges content-level + options-level + quote + forw
     assert.equal(result?.isForwarded, true)
     assert.deepEqual(result?.mentionedJids, ['a@s.whatsapp.net'])
 })
+
+test('wrapped reply buttons retain quote and expiration through protobuf serialization', () => {
+    const message = {
+        documentWithCaptionMessage: { message: { buttonsMessage: { contentText: 'Choose' } } }
+    }
+    const out = applyContextInfo(message, { quotedMessageId: 'ORIGINAL', expirationSeconds: 60 })
+    const decoded = proto.Message.decode(proto.Message.encode(out).finish())
+    assert.equal(
+        decoded.documentWithCaptionMessage?.message?.buttonsMessage?.contextInfo?.stanzaId,
+        'ORIGINAL'
+    )
+    assert.equal(getContextInfo(decoded)?.expiration, 60)
+    assert.equal(getContextInfo({ documentWithCaptionMessage: { message: {} } }), null)
+})
+
+for (const wrapper of ['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2'] as const) {
+    test(`context info traverses ${wrapper} around document reply buttons without mutating a template`, () => {
+        const buttons = { contentText: 'Choose', contextInfo: { mentionedJid: ['1@lid'] } }
+        const original: Proto.IMessage = {
+            [wrapper]: {
+                message: { documentWithCaptionMessage: { message: { buttonsMessage: buttons } } }
+            }
+        }
+        const before = proto.Message.encode(original).finish()
+        const first = applyContextInfo(original, {
+            quotedMessageId: 'FIRST',
+            expirationSeconds: 120,
+            ephemeralSettingTimestamp: 1_751_808_692
+        })
+        const second = applyContextInfo(original, { quotedMessageId: 'SECOND' })
+        const decoded = proto.Message.decode(proto.Message.encode(first).finish())
+        assert.equal(getContextInfo(decoded)?.stanzaId, 'FIRST')
+        assert.deepEqual(getContextInfo(decoded)?.mentionedJid, ['1@lid'])
+        assert.equal(pickIncomingExpirationSeconds(decoded), 120)
+        assert.equal(pickIncomingEphemeralSettingTimestamp(decoded), 1_751_808_692)
+        assert.equal(getContextInfo(second)?.stanzaId, 'SECOND')
+        assert.equal(getContextInfo(second)?.expiration, undefined)
+        assert.deepEqual(proto.Message.encode(original).finish(), before)
+        assert.deepEqual(buttons.contextInfo, { mentionedJid: ['1@lid'] })
+    })
+}
+
+for (const key of [
+    'senderKeyDistributionMessage',
+    'fastRatchetKeySenderKeyDistributionMessage'
+] as const) {
+    test(`context skips ${key} before the content payload`, () => {
+        const original = {
+            [key]: { groupId: '123@g.us' },
+            imageMessage: { contextInfo: { stanzaId: 'original' } }
+        }
+        assert.equal(getContextInfo(original)?.stanzaId, 'original')
+        const result = applyContextInfo(original, { quotedMessageId: 'updated' })
+        const decoded = proto.Message.decode(proto.Message.encode(result).finish())
+        assert.equal(getContextInfo(decoded)?.stanzaId, 'updated')
+        assert.equal(original.imageMessage.contextInfo.stanzaId, 'original')
+        assert.deepEqual(result[key], { groupId: '123@g.us' })
+    })
+}

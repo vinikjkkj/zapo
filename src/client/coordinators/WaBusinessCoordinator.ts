@@ -1,3 +1,7 @@
+import {
+    createBusinessCatalogCoordinator,
+    type WaBusinessCatalogOperations
+} from '@client/coordinators/WaBusinessCatalogCoordinator'
 import { parseBusinessProfileNode, parseVerifiedNameNode } from '@client/events/business'
 import {
     assertMediaUploadStatus,
@@ -37,15 +41,18 @@ export interface WaVerifiedNameBatchEntry {
 
 /**
  * Coordinates WhatsApp Business profile reads/writes (profile body, verified
- * name, cover photo). Accessed via {@link WaClient.business}.
+ * name, cover photo) and catalog/product queries. Accessed via {@link WaClient.business}.
  *
  * Read methods (`getBusinessProfile`, `getVerifiedName`, `getVerifiedNames`)
- * work from any account. Write methods (`editBusinessProfile`,
+ * work from any account. Catalog reads (`getCatalog`, `getProduct`) use the public
+ * view for other accounts; the current account's owner view requires server-side
+ * Business eligibility and successful catalog authentication.
+ * Write methods (`editBusinessProfile`,
  * `updateCoverPhoto`, `deleteCoverPhoto`) are **business-only**: they target
  * the current account's own business profile and the server rejects them
  * when the account is not registered as a WhatsApp Business account.
  */
-export interface WaBusinessCoordinator {
+export interface WaBusinessCoordinator extends WaBusinessCatalogOperations {
     /** Batched fetch of business profile bodies (about, address, hours, ...). */
     readonly getBusinessProfile: (
         jids: readonly string[]
@@ -75,7 +82,17 @@ export interface WaBusinessCoordinator {
     readonly deleteCoverPhoto: (id: string) => Promise<void>
 }
 
+/** Internal lifecycle hooks for the business coordinator. */
+export interface WaBusinessCoordinatorRuntime extends WaBusinessCoordinator {
+    readonly handleCatalogNotification: (node: BinaryNode) => Promise<boolean>
+    readonly resetCatalog: () => void
+}
+
 interface WaBusinessCoordinatorOptions {
+    readonly sendNode: (node: BinaryNode) => Promise<void>
+    readonly isOwnJid: (jid: string) => boolean
+    readonly isConnected: () => boolean
+    readonly getNonceWaitMs?: () => number
     readonly queryWithContext: (
         context: string,
         node: BinaryNode,
@@ -139,10 +156,11 @@ function parseUsyncVerifiedNames(result: BinaryNode): readonly WaVerifiedNameBat
 /** Builds a {@link WaBusinessCoordinator} from its IQ/media dependencies. */
 export function createBusinessCoordinator(
     options: WaBusinessCoordinatorOptions
-): WaBusinessCoordinator {
+): WaBusinessCoordinatorRuntime {
     const { queryWithContext, mediaTransfer, getMediaConn, logger, generateSid } = options
 
     return {
+        ...createBusinessCatalogCoordinator(options),
         getBusinessProfile: async (jids) => {
             if (jids.length === 0) return []
             const node = buildGetBusinessProfileIq(jids)
