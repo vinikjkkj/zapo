@@ -450,3 +450,13 @@ export type {
 } from '@protocol'
 export { proto } from '@proto'
 export type { Proto } from '@proto'
+
+export { WaCatalogError } from '@client'
+export type {
+    WaCatalogImage,
+    WaCatalogVideo,
+    WaCatalogProduct,
+    WaCatalogQueryOptions,
+    WaCatalogPageOptions,
+    WaCatalogPage
+} from '@client'

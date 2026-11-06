@@ -170,3 +170,5 @@ export type {
     WaNewsletterSendType,
     WaNewsletterStateType
 } from '@protocol/newsletter'
+
+export { WA_CATALOG } from '@protocol/catalog'

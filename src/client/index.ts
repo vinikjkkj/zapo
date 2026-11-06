@@ -9,3 +9,13 @@ export type {
     WaDeleteMessageForMeOptions,
     WaLogoutStoreClearOptions
 } from '@client/types'
+
+export { WaCatalogError } from '@client/catalog'
+export type {
+    WaCatalogImage,
+    WaCatalogVideo,
+    WaCatalogProduct,
+    WaCatalogQueryOptions,
+    WaCatalogPageOptions,
+    WaCatalogPage
+} from '@client/catalog'
