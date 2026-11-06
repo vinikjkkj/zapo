@@ -1,4 +1,4 @@
-import { unwrapMessage } from '@message/encode/content'
+import { unwrapMessage, WA_MESSAGE_WRAPPER_KEYS } from '@message/encode/content'
 import type { Proto } from '@proto'
 import { isGroupOrBroadcastJid, toUserJid } from '@protocol/jid'
 import { longToNumber } from '@util/primitives'
@@ -89,19 +89,7 @@ export function applyContextInfo(
     const proto = buildContextInfoProto(ctx)
     if (!hasAnyKey(proto)) return message
 
-    // Match unwrapMessage's wrapper precedence while copying only the edited path.
-    for (const key of [
-        'ephemeralMessage',
-        'groupMentionedMessage',
-        'botInvokeMessage',
-        'deviceSentMessage',
-        'viewOnceMessage',
-        'viewOnceMessageV2',
-        'documentWithCaptionMessage',
-        'groupStatusMessage',
-        'groupStatusMessageV2',
-        'botForwardedMessage'
-    ] as const) {
+    for (const key of WA_MESSAGE_WRAPPER_KEYS) {
         const wrapped = message[key]
         if (wrapped?.message) {
             return {
@@ -189,9 +177,10 @@ export function pickIncomingEphemeralSettingTimestamp(
     return undefined
 }
 
+/** Selects content rather than top-level context or sender-key distribution metadata. */
 function pickContextInfoTargetKey(message: Proto.IMessage): keyof Proto.IMessage | null {
     for (const key of Object.keys(message)) {
-        if (key === 'messageContextInfo') continue
+        if (key === 'messageContextInfo' || key === 'senderKeyDistributionMessage') continue
         const value = (message as Record<string, unknown>)[key]
         if (
             value &&

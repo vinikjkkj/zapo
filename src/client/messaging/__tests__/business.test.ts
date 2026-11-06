@@ -266,3 +266,18 @@ test('carousel cleans spooled media when MIME detection fails before upload', as
     assert.ok(path)
     await assert.rejects(access(path), { code: 'ENOENT' })
 })
+
+test('pre-upload validation leaves caller-owned streams usable', async () => {
+    const stream = Readable.from([new Uint8Array([1, 2, 3])])
+    await assert.rejects(
+        buildMediaMessageContent(OPTIONS, {
+            type: 'image',
+            media: stream
+        }),
+        /mimetype is required/
+    )
+    assert.equal(stream.destroyed, false)
+    const chunks = []
+    for await (const chunk of stream) chunks.push(chunk)
+    assert.deepEqual(chunks, [new Uint8Array([1, 2, 3])])
+})

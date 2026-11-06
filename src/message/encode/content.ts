@@ -241,20 +241,33 @@ export function wrapAsViewOnce(message: Proto.IMessage): Proto.IMessage {
     return message
 }
 
+/** Supported message envelopes in unwrap precedence order.
+ * @example `const outer = WA_MESSAGE_WRAPPER_KEYS.find((key) => message[key]?.message)`
+ */
+export const WA_MESSAGE_WRAPPER_KEYS = Object.freeze([
+    'ephemeralMessage',
+    'groupMentionedMessage',
+    'botInvokeMessage',
+    'deviceSentMessage',
+    'viewOnceMessage',
+    'viewOnceMessageV2',
+    'documentWithCaptionMessage',
+    'groupStatusMessage',
+    'groupStatusMessageV2',
+    'botForwardedMessage'
+] as const)
+
+/** Returns the innermost payload using the shared envelope precedence without copying it.
+ * @example `const image = unwrapMessage(message).imageMessage`
+ */
 export function unwrapMessage(message: Proto.IMessage): Proto.IMessage {
     let msg = message
     for (;;) {
-        const inner =
-            msg.ephemeralMessage?.message ??
-            msg.groupMentionedMessage?.message ??
-            msg.botInvokeMessage?.message ??
-            msg.deviceSentMessage?.message ??
-            msg.viewOnceMessage?.message ??
-            msg.viewOnceMessageV2?.message ??
-            msg.documentWithCaptionMessage?.message ??
-            msg.groupStatusMessage?.message ??
-            msg.groupStatusMessageV2?.message ??
-            msg.botForwardedMessage?.message
+        let inner: Proto.IMessage | null | undefined
+        for (const key of WA_MESSAGE_WRAPPER_KEYS) {
+            inner = msg[key]?.message
+            if (inner) break
+        }
         if (!inner) return msg
         msg = inner
     }

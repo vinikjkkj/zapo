@@ -323,3 +323,15 @@ for (const wrapper of ['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2
         assert.deepEqual(buttons.contextInfo, { mentionedJid: ['1@lid'] })
     })
 }
+
+test('context skips sender key distribution metadata before the content payload', () => {
+    const original = {
+        senderKeyDistributionMessage: { groupId: '123@g.us' },
+        imageMessage: { contextInfo: { stanzaId: 'original' } }
+    }
+    assert.equal(getContextInfo(original)?.stanzaId, 'original')
+    const result = applyContextInfo(original, { quotedMessageId: 'updated' })
+    assert.equal(getContextInfo(result)?.stanzaId, 'updated')
+    assert.equal(original.imageMessage.contextInfo.stanzaId, 'original')
+    assert.deepEqual(result.senderKeyDistributionMessage, { groupId: '123@g.us' })
+})

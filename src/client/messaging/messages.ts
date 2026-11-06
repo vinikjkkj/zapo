@@ -523,6 +523,7 @@ async function resolveMimetype(
     )
 }
 
+/** Builds uploaded media and releases only builder-owned streams and temporary files. */
 async function buildMediaMessage(
     options: WaMediaMessageOptions,
     content: WaSendMediaMessage
@@ -739,7 +740,8 @@ async function buildMediaMessage(
                 )
         }
     } finally {
-        if (isReadableStream(resolved.uploadMedia)) resolved.uploadMedia.destroy()
+        if (resolved.ownsUploadStream && isReadableStream(resolved.uploadMedia))
+            resolved.uploadMedia.destroy()
         if (resolved.tempFilePath) {
             await cleanupTempFile(resolved.tempFilePath)
         }
