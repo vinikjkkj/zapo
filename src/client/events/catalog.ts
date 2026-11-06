@@ -19,6 +19,7 @@ export function requireCatalogRecord(value: unknown): Record<string, unknown> {
     return record
 }
 
+/** Requires a wire string without coercing malformed remote values. */
 function requiredString(value: unknown): string {
     if (typeof value !== 'string') {
         throw new WaCatalogError('CATALOG_INVALID_RESPONSE', 'catalog string is missing')
@@ -26,11 +27,13 @@ function requiredString(value: unknown): string {
     return value
 }
 
+/** Normalizes absent and empty catalog strings to null. */
 function nullableString(value: unknown): string | null {
     if (value === null || value === undefined || value === '') return null
     return requiredString(value)
 }
 
+/** Converts decimal thousandths to major units without accepting unsafe integers. */
 function price(value: unknown): number | null {
     if (value === null || value === undefined || value === '') return null
     if (typeof value !== 'string' || !/^\d+$/.test(value)) {
@@ -191,7 +194,13 @@ export function parseCatalogNonceNotification(node: BinaryNode): string | null {
     ) {
         const nonce = findNodeChild(node, 'recovery_nonce')
         if (nonce?.attrs.use_case === WA_CATALOG.RECOVERY_USE_CASE) {
-            return nonce.attrs.code || null
+            if (!nonce.attrs.code) {
+                throw new WaCatalogError(
+                    'CATALOG_INVALID_RESPONSE',
+                    'catalog recovery nonce is invalid'
+                )
+            }
+            return nonce.attrs.code
         }
     }
     return null

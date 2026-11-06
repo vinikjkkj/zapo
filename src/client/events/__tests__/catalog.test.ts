@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { WaCatalogError } from '@client/catalog'
 import {
     parseCatalogNonceNotification,
     parseCatalogProduct,
@@ -35,6 +36,7 @@ test('catalog parser preserves absent prices, booleans and media without conflat
     assert.equal(publicItem.price, 0)
     assert.equal(publicItem.salePrice, 1.234)
     assert.equal(publicItem.isHidden, true)
+    assert.equal(publicItem.availability, 'OUT_OF_STOCK')
 })
 
 test('catalog parser rejects unsafe or malformed prices and malformed media', () => {
@@ -62,6 +64,8 @@ test('catalog token parser validates sender and required fields without disclosi
                 content: [{ tag: 'access_token', attrs: {}, content: 'secret' }]
             }),
         (error) => {
+            assert.ok(error instanceof WaCatalogError)
+            assert.equal(error.code, 'CATALOG_INVALID_RESPONSE')
             assert.doesNotMatch(String(error), /secret/)
             return true
         }

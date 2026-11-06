@@ -13,6 +13,7 @@ import {
     parseCatalogTokenResult,
     requireCatalogRecord
 } from '@client/events/catalog'
+import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { WA_CATALOG } from '@protocol/catalog'
 import { isLidJid, isUserJid, normalizeRecipientJid, toUserJid } from '@protocol/jid'
@@ -41,6 +42,7 @@ export interface WaBusinessCatalogOperations {
 }
 
 interface CatalogDependencies {
+    readonly logger: Logger
     readonly queryWithContext: (
         context: string,
         node: BinaryNode,
@@ -53,18 +55,21 @@ interface CatalogDependencies {
     readonly getNonceWaitMs?: () => number
 }
 
+/** Validates image dimensions before issuing a catalog request. */
 function positiveInteger(value: number, field: string): number {
     if (!Number.isSafeInteger(value) || value <= 0)
         throw new Error(`${field} must be a positive integer`)
     return value
 }
 
+/** Preserves opaque product IDs while rejecting empty or padded values. */
 function productId(value: string): string {
     if (!value || value.trim() !== value)
         throw new Error('product ID must be non-empty without surrounding whitespace')
     return value
 }
 
+/** Normalizes optional catalog metadata and rejects non-string values. */
 function nullableText(value: unknown): string | null {
     if (value === null || value === undefined || value === '') return null
     if (typeof value !== 'string')
@@ -72,6 +77,7 @@ function nullableText(value: unknown): string | null {
     return value
 }
 
+/** Prevents work from a disconnected session from completing on a new connection. */
 function assertActive(signal: AbortSignal): void {
     if (signal.aborted)
         throw new WaCatalogError('CATALOG_DISCONNECTED', 'catalog connection closed')
@@ -89,6 +95,7 @@ export function createBusinessCatalogCoordinator(deps: CatalogDependencies) {
         readonly reject: (error: unknown) => void
     } | null = null
 
+    /** Registers the nonce waiter before its IQ and retries once after recovery is requested. */
     async function acquireToken(signal: AbortSignal): Promise<string> {
         for (let attempt = 0; attempt < 2; attempt++) {
             assertActive(signal)
@@ -141,6 +148,7 @@ export function createBusinessCatalogCoordinator(deps: CatalogDependencies) {
         throw new WaCatalogError('CATALOG_AUTH_FAILED', 'catalog authentication failed')
     }
 
+    /** Shares one authentication exchange and caches its token only for the active connection. */
     function getToken(signal: AbortSignal): Promise<string> {
         if (cachedToken) return Promise.resolve(cachedToken)
         if (tokenPromise) return tokenPromise
@@ -157,6 +165,7 @@ export function createBusinessCatalogCoordinator(deps: CatalogDependencies) {
         return promise
     }
 
+    /** Validates query options and captures the current connection cancellation signal. */
     function prepare(jid: string, options: WaCatalogQueryOptions | undefined) {
         const normalized = normalizeRecipientJid(jid)
         const userJid = toUserJid(normalized, { canonicalizeSignalServer: true })
@@ -178,6 +187,7 @@ export function createBusinessCatalogCoordinator(deps: CatalogDependencies) {
         }
     }
 
+    /** Selects the public or owner GraphQL operation and invalidates rejected owner credentials. */
     async function query(
         request: ReturnType<typeof prepare>,
         publicId: string,
@@ -298,10 +308,17 @@ export function createBusinessCatalogCoordinator(deps: CatalogDependencies) {
     return {
         ...operations,
         handleCatalogNotification: async (node: BinaryNode): Promise<boolean> => {
-            const nonce = parseCatalogNonceNotification(node)
-            if (nonce === null) return false
-            pendingNonce?.resolve(nonce)
-            if (node.tag === 'notification')
+            try {
+                const nonce = parseCatalogNonceNotification(node)
+                if (nonce === null) return false
+                pendingNonce?.resolve(nonce)
+            } catch (error) {
+                if (!(error instanceof WaCatalogError)) throw error
+                pendingNonce?.reject(error)
+                deps.logger.trace('invalid catalog nonce consumed', { code: error.code })
+            }
+            // Consume malformed private pushes too, so generic events never expose the nonce.
+            if (node.tag === 'notification' && node.attrs.id)
                 await deps.sendNode(buildAckNode({ kind: 'notification', node }))
             return true
         },

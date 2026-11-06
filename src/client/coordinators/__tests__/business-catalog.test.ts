@@ -4,6 +4,7 @@ import test from 'node:test'
 
 import { WaCatalogError } from '@client/catalog'
 import { createBusinessCatalogCoordinator } from '@client/coordinators/WaBusinessCatalogCoordinator'
+import { createNoopLogger } from '@infra/log/types'
 import { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { WA_CATALOG } from '@protocol/catalog'
 import type { BinaryNode } from '@transport/types'
@@ -97,6 +98,7 @@ function setup(
         }
     }
     coordinator = createBusinessCatalogCoordinator({
+        logger: createNoopLogger(),
         mediaTransfer: new Transfer(),
         isConnected: () => true,
         isOwnJid: () => options.owner ?? false,
@@ -354,4 +356,45 @@ test('catalog normalizes nonce and token IQ transport failures', async () => {
         })
         assert.equal(requests.length, 0)
     }
+})
+
+test('catalog consumes malformed server nonce, rejects authentication and acknowledges the push', async () => {
+    let consumed = false
+    const { coordinator, acks, requests } = setup({
+        owner: true,
+        query: async (_node, instance) => {
+            consumed = await instance.handleCatalogNotification({
+                ...nonceNode,
+                attrs: { ...nonceNode.attrs, t: 'invalid' }
+            })
+            return result([{ tag: 'result', attrs: { status: 'Success' } }])
+        }
+    })
+    await assert.rejects(coordinator.getCatalog('5511@s.whatsapp.net'), {
+        code: 'CATALOG_INVALID_RESPONSE'
+    })
+    assert.equal(consumed, true)
+    assert.equal(acks.length, 1)
+    assert.equal(requests.length, 0)
+    assert.doesNotMatch(JSON.stringify(acks), /private-nonce/)
+})
+
+test('catalog consumes malformed unsolicited server nonce without exposing it', async () => {
+    const { coordinator, acks } = setup()
+    assert.equal(
+        await coordinator.handleCatalogNotification({
+            ...nonceNode,
+            attrs: { ...nonceNode.attrs, t: 'invalid' }
+        }),
+        true
+    )
+    assert.equal(acks.length, 1)
+    assert.equal(
+        await coordinator.handleCatalogNotification({
+            tag: 'ib',
+            attrs: {},
+            content: [{ tag: 'recovery_nonce', attrs: { use_case: '547' } }]
+        }),
+        true
+    )
 })

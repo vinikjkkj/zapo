@@ -505,10 +505,20 @@ export class WaIncomingNodeCoordinator {
         let handled = false
 
         const children = getNodeChildren(node)
+        const recoveryNonce = findNodeChild(node, 'recovery_nonce')
+        let publicNode = node
+        if (recoveryNonce && children.length > 1) {
+            // Dispatch private recovery data separately before public bulletin events.
+            handled = await this.dispatchIncomingNode({ ...node, content: [recoveryNonce] })
+            publicNode = {
+                ...node,
+                content: children.filter((child) => child.tag !== 'recovery_nonce')
+            }
+        }
         for (const child of children) {
             if (INFO_BULLETIN_CHILD_TAGS.has(child.tag)) {
                 this.runtime.emitIncomingNotification(
-                    createInfoBulletinNotificationEvent(node, child.tag, {
+                    createInfoBulletinNotificationEvent(publicNode, child.tag, {
                         count: parseOptionalInt(child.attrs.count),
                         message: parseOptionalInt(child.attrs.message),
                         receipt: parseOptionalInt(child.attrs.receipt),

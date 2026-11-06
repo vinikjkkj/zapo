@@ -51,9 +51,16 @@ test('catalog HTTP preserves error codes without exposing remote messages', asyn
             message: 'catalog query failed'
         })
     }
-    await assert.rejects(queryCatalogGraphql(transfer('{}', 503), query), {
-        remoteCode: 503
-    })
+    for (const body of ['{}', 'not json', '[]', '']) {
+        await assert.rejects(queryCatalogGraphql(transfer(body, 503), query), {
+            code: 'CATALOG_QUERY_FAILED',
+            remoteCode: 503
+        })
+    }
+    await assert.rejects(
+        queryCatalogGraphql(transfer('{"errors":[{"message":"private-token"}]}'), query),
+        { code: 'CATALOG_QUERY_FAILED', remoteCode: null, message: 'catalog query failed' }
+    )
 })
 
 test('catalog HTTP bounds response bytes', async () => {
@@ -146,9 +153,11 @@ test('catalog HTTP normalizes transport and body failures without leaking detail
 test('catalog HTTP does not send an already cancelled query', async () => {
     const controller = new AbortController()
     controller.abort()
+    let uploadCalls = 0
     class Transfer extends WaMediaTransferClient {
         public override async uploadStream(): Promise<never> {
-            assert.fail('cancelled query must not send HTTP')
+            uploadCalls += 1
+            throw new Error('unexpected upload')
         }
     }
     await assert.rejects(
@@ -157,4 +166,5 @@ test('catalog HTTP does not send an already cancelled query', async () => {
             code: 'CATALOG_DISCONNECTED'
         }
     )
+    assert.equal(uploadCalls, 0)
 })

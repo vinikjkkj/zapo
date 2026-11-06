@@ -67,7 +67,8 @@ export interface WaCatalogPage {
 }
 
 /** Catalog failure without raw server payloads or authentication material.
- * `remoteCode` is the server's numeric error code when available.
+ * `remoteCode` is the numeric GraphQL or authentication IQ error code when available.
+ * Failed HTTP responses fall back to their status; otherwise it is null.
  * HTTP deadlines use CATALOG_QUERY_TIMEOUT; connection cancellation uses CATALOG_DISCONNECTED.
  * Other HTTP transport failures use CATALOG_QUERY_FAILED; IQ transport failures use CATALOG_AUTH_FAILED.
  * Raw transport errors are not retained because they may contain sensitive details.

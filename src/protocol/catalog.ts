@@ -1,3 +1,8 @@
+/** Catalog wire constants used by the business coordinator.
+ * The application token is a public client identifier shipped by WhatsApp, not an account credential.
+ * Query IDs and endpoints follow the upstream protocol and may change between library releases.
+ * @example `const timeoutMs = WA_CATALOG.QUERY_TIMEOUT_MS`
+ */
 export const WA_CATALOG = Object.freeze({
     PUBLIC_APPLICATION_TOKEN: 'WA|787118555984857|7bb1544a3599aa180ac9a3f7688ba243',
     PUBLIC_ENDPOINT: 'https://graph.whatsapp.com/graphql/catalog',

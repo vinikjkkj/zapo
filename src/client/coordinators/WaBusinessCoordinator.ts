@@ -44,7 +44,10 @@ export interface WaVerifiedNameBatchEntry {
  * name, cover photo) and catalog/product queries. Accessed via {@link WaClient.business}.
  *
  * Read methods (`getBusinessProfile`, `getVerifiedName`, `getVerifiedNames`)
- * work from any account. Write methods (`editBusinessProfile`,
+ * work from any account. Catalog reads (`getCatalog`, `getProduct`) use the public
+ * view for other accounts; the current account's owner view requires server-side
+ * Business eligibility and successful catalog authentication.
+ * Write methods (`editBusinessProfile`,
  * `updateCoverPhoto`, `deleteCoverPhoto`) are **business-only**: they target
  * the current account's own business profile and the server rejects them
  * when the account is not registered as a WhatsApp Business account.

@@ -65,6 +65,13 @@ export async function queryCatalogGraphql(
         try {
             payload = requireCatalogRecord(JSON.parse(TEXT_DECODER.decode(bytes)))
         } catch {
+            if (!response.ok) {
+                throw new WaCatalogError(
+                    'CATALOG_QUERY_FAILED',
+                    'catalog query failed',
+                    response.status
+                )
+            }
             throw new WaCatalogError(
                 'CATALOG_INVALID_RESPONSE',
                 'catalog response is not a JSON object'
@@ -72,7 +79,8 @@ export async function queryCatalogGraphql(
         }
         const error = tryAsRecord(Array.isArray(payload.errors) ? payload.errors[0] : payload.error)
         if (error || (Array.isArray(payload.errors) && payload.errors.length > 0) || !response.ok) {
-            const remoteCode = typeof error?.code === 'number' ? error.code : response.status
+            const remoteCode =
+                typeof error?.code === 'number' ? error.code : response.ok ? null : response.status
             throw new WaCatalogError('CATALOG_QUERY_FAILED', 'catalog query failed', remoteCode)
         }
         return requireCatalogRecord(payload.data)
