@@ -211,7 +211,10 @@ test('carousel accepts 100 cards and rejects 101 without applying top-level butt
             { type: 'cta_url', text: 'Visit', url: 'https://example.com' }
         ]
     } as const
-    const cards = Array.from({ length: 101 }, () => card)
+    const cards = Array.from({ length: 101 }, (_, index) => ({
+        ...card,
+        buttons: [{ ...card.buttons[0], id: `yes-${index}` }, card.buttons[1]]
+    }))
     const built = buildBusinessMessage({
         type: 'carousel',
         text: 'Cards',
@@ -601,5 +604,30 @@ test('catalog actions never derive phone numbers from LIDs or missing accounts',
                 '123@lid'
             ),
         /never a LID/
+    )
+})
+
+test('interactive omits empty headers', () => {
+    const message = roundTrip(
+        buildBusinessMessage({
+            type: 'interactive',
+            text: 'Choose',
+            header: '',
+            buttons: [{ type: 'quick_reply', id: 'yes', text: 'Yes' }]
+        }).message
+    )
+    assert.equal(message.interactiveMessage?.header, null)
+})
+
+test('carousel rejects quick reply IDs repeated across cards', () => {
+    const card = {
+        text: 'Choose',
+        title: 'Card',
+        media: { type: 'image', media: new Uint8Array([1]), mimetype: 'image/jpeg' },
+        buttons: [{ type: 'quick_reply', id: 'yes', text: 'Yes' }]
+    } as const
+    assert.throws(
+        () => buildBusinessMessage({ type: 'carousel', text: 'Cards', cards: [card, card] }),
+        /unique/
     )
 })

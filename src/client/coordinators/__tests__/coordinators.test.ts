@@ -2652,7 +2652,14 @@ for (const [content, expectedFlow] of [
         let published: BinaryNode | undefined
         let plaintext: Uint8Array | undefined
         let buildContext: WaBuildMessageContext | undefined
-        const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+        const groupMetadataStore = new WaGroupMetadataMemoryStore()
+        await groupMetadataStore.upsertGroupMetadata({
+            groupJid: '120363000000000001@g.us',
+            participants: [],
+            updatedAtMs: Date.now(),
+            ephemeral: 86_400
+        })
+        const coordinator = createMessageDispatchCoordinator(groupMetadataStore, {
             meJid: '15551234567:8@s.whatsapp.net',
             meLid: '9999999@lid',
             buildMessageContent: (input, ctx) => {
@@ -2694,13 +2701,32 @@ for (const [content, expectedFlow] of [
                 }
             }
         })
-        const result = await coordinator.sendMessage('120363000000000001@g.us', content, {
+        const contextualContent = {
+            ...content,
+            contextInfo: {
+                expirationSeconds: 120,
+                mentionedJids: ['123@lid'],
+                quotedMessageId: 'CONTENT-QUOTE'
+            }
+        }
+        await coordinator.sendMessage('120363000000000001@g.us', contextualContent, {
+            id: 'CONTENT-ONLY'
+        })
+        const contentDecoded = proto.Message.decode(unpadPkcs7(plaintext!))
+        assert.equal(getContextInfo(contentDecoded)?.expiration, 120)
+        assert.equal(getContextInfo(contentDecoded)?.stanzaId, 'CONTENT-QUOTE')
+        assert.deepEqual(getContextInfo(contentDecoded)?.mentionedJid, ['123@lid'])
+        const result = await coordinator.sendMessage('120363000000000001@g.us', contextualContent, {
             id: 'BUSINESS-1',
-            expirationSeconds: 60
+            expirationSeconds: 60,
+            contextInfo: { quotedMessageId: 'OPTIONS-QUOTE' }
         })
         assert.equal(result.id, 'BUSINESS-1')
         assert.equal(buildContext?.meJid, '15551234567:8@s.whatsapp.net')
         const decoded = proto.Message.decode(unpadPkcs7(plaintext!))
+        assert.equal(getContextInfo(decoded)?.expiration, 60)
+        assert.equal(getContextInfo(decoded)?.stanzaId, 'OPTIONS-QUOTE')
+        assert.deepEqual(getContextInfo(decoded)?.mentionedJid, ['123@lid'])
         assert.equal(decoded.messageContextInfo?.messageSecret?.byteLength, 32)
         const biz = (published!.content as BinaryNode[]).find((node) => node.tag === 'biz')!
         assert.ok(biz)

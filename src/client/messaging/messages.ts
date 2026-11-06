@@ -560,14 +560,13 @@ async function buildMediaMessage(
         (content.type === 'sticker' && content.firstFrameLength === undefined) ||
         needsMimetypeDetection
     const resolved = await resolveMediaInputs(needsTempFile, content.media)
-    const mimetype = await resolveMimetype(
-        content,
-        options.media,
-        resolved.processorInput,
-        processorCtx
-    )
-
     try {
+        const mimetype = await resolveMimetype(
+            content,
+            options.media,
+            resolved.processorInput,
+            processorCtx
+        )
         let detectedFirstFrameLength: number | undefined
         if (
             content.type === 'sticker' &&
@@ -740,6 +739,7 @@ async function buildMediaMessage(
                 )
         }
     } finally {
+        if (isReadableStream(resolved.uploadMedia)) resolved.uploadMedia.destroy()
         if (resolved.tempFilePath) {
             await cleanupTempFile(resolved.tempFilePath)
         }

@@ -5,9 +5,11 @@ import {
     applyContextInfo,
     buildContextInfoProto,
     getContextInfo,
+    pickIncomingEphemeralSettingTimestamp,
+    pickIncomingExpirationSeconds,
     resolveSendContextInfo
 } from '@message/context-info'
-import { proto } from '@proto'
+import { proto, type Proto } from '@proto'
 
 test('buildContextInfoProto maps friendly fields to proto fields', () => {
     const proto = buildContextInfoProto({
@@ -294,3 +296,30 @@ test('wrapped reply buttons retain quote and expiration through protobuf seriali
     assert.equal(getContextInfo(decoded)?.expiration, 60)
     assert.equal(getContextInfo({ documentWithCaptionMessage: { message: {} } }), null)
 })
+
+for (const wrapper of ['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2'] as const) {
+    test(`context info traverses ${wrapper} around document reply buttons without mutating a template`, () => {
+        const buttons = { contentText: 'Choose', contextInfo: { mentionedJid: ['1@lid'] } }
+        const original: Proto.IMessage = {
+            [wrapper]: {
+                message: { documentWithCaptionMessage: { message: { buttonsMessage: buttons } } }
+            }
+        }
+        const before = proto.Message.encode(original).finish()
+        const first = applyContextInfo(original, {
+            quotedMessageId: 'FIRST',
+            expirationSeconds: 120,
+            ephemeralSettingTimestamp: 1_751_808_692
+        })
+        const second = applyContextInfo(original, { quotedMessageId: 'SECOND' })
+        const decoded = proto.Message.decode(proto.Message.encode(first).finish())
+        assert.equal(getContextInfo(decoded)?.stanzaId, 'FIRST')
+        assert.deepEqual(getContextInfo(decoded)?.mentionedJid, ['1@lid'])
+        assert.equal(pickIncomingExpirationSeconds(decoded), 120)
+        assert.equal(pickIncomingEphemeralSettingTimestamp(decoded), 1_751_808_692)
+        assert.equal(getContextInfo(second)?.stanzaId, 'SECOND')
+        assert.equal(getContextInfo(second)?.expiration, undefined)
+        assert.deepEqual(proto.Message.encode(original).finish(), before)
+        assert.deepEqual(buttons.contextInfo, { mentionedJid: ['1@lid'] })
+    })
+}

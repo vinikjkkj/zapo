@@ -556,6 +556,7 @@ export interface WaSendProductMessage extends WaSendMessageContextInfo {
 }
 
 /** Typed interactive and business content accepted by send.
+ * These typed formats are not supported by newsletter sends.
  * @example `const content: WaSendBusinessMessage = { type: 'catalog', text: 'Browse' }`
  */
 export type WaSendBusinessMessage =

@@ -15,6 +15,7 @@ import type { WaMediaConn } from '@media/types'
 import { buildExtendedTextWithPreview } from '@message/addons/link-preview/builder'
 import { applyContextInfo, type WaSendContextInfo } from '@message/context-info'
 import {
+    isSendBusinessMessage,
     isSendEventMessage,
     isSendEventResponseMessage,
     isSendKeepMessage,
@@ -374,6 +375,9 @@ export async function buildNewsletterMessageContent(
         throw new Error(
             "newsletter sends do not accept 'poll-vote' content; use newsletter.votePoll() instead"
         )
+    }
+    if (isSendBusinessMessage(content)) {
+        throw new Error(`newsletter sends do not accept typed business content: ${content.type}`)
     }
     if (isSendPollMessage(content) || isSendEventMessage(content)) {
         throw new Error(

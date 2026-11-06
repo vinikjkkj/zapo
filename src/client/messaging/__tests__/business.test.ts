@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { access } from 'node:fs/promises'
+import { Readable } from 'node:stream'
 import test from 'node:test'
 
 import { buildMediaMessageContent, type WaMediaMessageOptions } from '@client/messaging/messages'
@@ -220,4 +222,47 @@ test('carousel validates every card before uploading and stops on upload failure
         /upload failed/
     )
     assert.equal(uploads, 1)
+})
+
+test('carousel cleans spooled media when MIME detection fails before upload', async () => {
+    let path: string | undefined
+    let uploads = 0
+    await assert.rejects(
+        buildMediaMessageContent(
+            {
+                ...OPTIONS,
+                media: {
+                    processor: {
+                        detectMimetype: async (input) => {
+                            assert.equal(typeof input, 'string')
+                            path = input as string
+                            await access(path)
+                            throw new Error('detect failed')
+                        }
+                    }
+                },
+                mediaTransfer: {
+                    uploadStream: async () => {
+                        uploads += 1
+                    }
+                } as never
+            },
+            {
+                type: 'carousel',
+                text: 'Cards',
+                cards: [
+                    {
+                        title: 'Photo',
+                        text: 'Details',
+                        buttons: [BUTTON],
+                        media: { type: 'image', media: Readable.from([new Uint8Array([1, 2, 3])]) }
+                    }
+                ]
+            }
+        ),
+        /detect failed/
+    )
+    assert.equal(uploads, 0)
+    assert.ok(path)
+    await assert.rejects(access(path), { code: 'ENOENT' })
 })

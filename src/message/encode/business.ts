@@ -12,6 +12,7 @@ import { WA_DEFAULTS } from '@protocol/constants'
 import { parseJidFull } from '@protocol/jid'
 import { WA_INTERACTIVE_LIMITS } from '@protocol/message'
 
+/** Rejects blank required text while preserving the caller's non-empty spelling. */
 function requireText(value: string, field: string): string {
     if (typeof value !== 'string' || value.trim().length === 0) {
         throw new Error(`${field} must be a non-empty string`)
@@ -19,12 +20,14 @@ function requireText(value: string, field: string): string {
     return value
 }
 
+/** Tracks reply IDs across the whole message, including carousel cards. */
 function addUniqueId(ids: Set<string>, id: string): void {
     requireText(id, 'id')
     if (ids.has(id)) throw new Error('button/row ids must be unique')
     ids.add(id)
 }
 
+/** Resolves a phone-number identity without interpreting a LID as a phone number. */
 function resolveBusinessPhone(phone: string | undefined, meJid: string | undefined): string {
     if (phone !== undefined) {
         if (!/^\+?\d+$/.test(phone))
@@ -39,6 +42,7 @@ function resolveBusinessPhone(phone: string | undefined, meJid: string | undefin
     return parsed.user
 }
 
+/** Serializes action parameters once into the native-flow JSON field. */
 function encodeButton(
     name: string,
     params: object
@@ -46,6 +50,7 @@ function encodeButton(
     return { name, buttonParamsJson: JSON.stringify(params) }
 }
 
+/** Enforces top-level action combinations; carousel cards use their own layout. */
 function validateInteractiveButtons(buttons: readonly WaNativeFlowButton[]): void {
     let quickReplies = 0
     for (const button of buttons) {
@@ -63,12 +68,13 @@ function validateInteractiveButtons(buttons: readonly WaNativeFlowButton[]): voi
         )
 }
 
+/** Encodes actions, sharing the reply-ID set when building carousel cards. */
 function encodeNativeButtons(
     buttons: readonly WaNativeFlowButton[],
-    meJid?: string
+    meJid?: string,
+    ids = new Set<string>()
 ): Proto.Message.InteractiveMessage.NativeFlowMessage.INativeFlowButton[] {
     if (buttons.length === 0) throw new Error('interactive message requires at least one button')
-    const ids = new Set<string>()
     return buttons.map((button) => {
         if (button.type === 'cta_catalog') {
             return encodeButton(button.type, {
@@ -114,6 +120,7 @@ function encodeNativeButtons(
     })
 }
 
+/** Builds the native-flow envelope with the requested protocol version. */
 function nativeFlow(
     buttons: Proto.Message.InteractiveMessage.NativeFlowMessage.INativeFlowButton[],
     messageVersion = 1
@@ -121,6 +128,7 @@ function nativeFlow(
     return { buttons, messageParamsJson: '', messageVersion }
 }
 
+/** Rounds major units to wire units and rejects negative or unsafe amounts. */
 function toAmount(value: number, scale: number, field: string): number {
     const amount = Math.round(value * scale)
     if (!Number.isFinite(value) || value < 0 || !Number.isSafeInteger(amount)) {
@@ -131,6 +139,7 @@ function toAmount(value: number, scale: number, field: string): number {
     return amount
 }
 
+/** Builds PIX settings shared by key cards and review-and-pay messages. */
 function paymentSettings(pix: WaPixSettings): object[] {
     if (!['EVP', 'EMAIL', 'PHONE', 'CPF', 'CNPJ'].includes(pix.keyType))
         throw new Error('invalid PIX key type')
@@ -146,6 +155,7 @@ function paymentSettings(pix: WaPixSettings): object[] {
     ]
 }
 
+/** Builds an order after checking item quantities and the declared total. */
 function encodeCharge(content: WaSendChargeMessage): object {
     if (content.items.length === 0) throw new Error('charge requires at least one item')
     let subtotal = 0
@@ -271,7 +281,7 @@ export function buildBusinessMessage(
     switch (content.type) {
         case 'interactive':
             validateInteractiveButtons(content.buttons)
-            if (content.header !== undefined)
+            if (content.header)
                 interactive.header = { title: content.header, hasMediaAttachment: false }
             interactive.nativeFlowMessage = nativeFlow(encodeNativeButtons(content.buttons, meJid))
             break
@@ -304,7 +314,8 @@ export function buildBusinessMessage(
             ])
             break
         }
-        case 'carousel':
+        case 'carousel': {
+            const ids = new Set<string>()
             if (content.cards.length === 0) throw new Error('carousel requires at least one card')
             if (content.cards.length > WA_INTERACTIVE_LIMITS.CAROUSEL_CARDS)
                 throw new Error(
@@ -318,11 +329,12 @@ export function buildBusinessMessage(
                     return {
                         header: { title: card.title, hasMediaAttachment: true },
                         body: { text: requireText(card.text, 'card text') },
-                        nativeFlowMessage: nativeFlow(encodeNativeButtons(card.buttons, meJid))
+                        nativeFlowMessage: nativeFlow(encodeNativeButtons(card.buttons, meJid, ids))
                     }
                 })
             }
             break
+        }
         case 'native-form':
             if (/\D/.test(requireText(content.flowId, 'flowId')))
                 throw new Error('flowId must contain only decimal digits')
