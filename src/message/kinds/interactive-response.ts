@@ -46,6 +46,7 @@ export interface WaSelectedMessageReply {
     readonly text: string | null
 }
 
+/** Treats malformed external JSON as a parse miss while propagating unexpected failures. */
 function parseJsonRecord(json: string): Record<string, unknown> | null {
     try {
         return tryAsRecord(JSON.parse(json))

@@ -336,3 +336,25 @@ test('selected reply distinguishes missing text from an empty display text', () 
         { id: 'yes', text: '' }
     )
 })
+
+test('native form v1 reads display values rather than raw component data', () => {
+    const message = form([], 1, [
+        {
+            id: 'choice',
+            components: [
+                {
+                    name: 'plan',
+                    type: 'RadioButtonsGroup',
+                    label: 'Plan',
+                    value: 'Premium',
+                    sensitive: false,
+                    componentData: {
+                        componentMeta: { type: 'RadioButtonsGroup', name: 'plan' },
+                        componentValue: 'premium_id'
+                    }
+                }
+            ]
+        }
+    ])
+    assert.equal(parseNativeFormResponse(roundTrip(message))?.answers.plan, 'Premium')
+})
