@@ -56,66 +56,71 @@ function createIncomingRuntime() {
     }
 }
 
-test('incoming mixed bulletin dispatches recovery nonce and preserves built-in processing privately', async () => {
-    const { runtime, unhandled } = createIncomingRuntime()
-    const notifications: unknown[] = []
-    const routed: Uint8Array[] = []
-    const dirty: unknown[] = []
-    const completed: number[] = []
-    const nonces: BinaryNode[] = []
-    const coordinator = new WaIncomingNodeCoordinator({
-        logger: createNoopLogger(),
-        runtime: {
-            ...runtime,
-            emitIncomingNotification: (event) => notifications.push(event),
-            persistRoutingInfo: async (info) => {
-                routed.push(info)
+for (const fails of [false, true]) {
+    test(`incoming mixed bulletin preserves built-in processing when recovery fails: ${fails}`, async () => {
+        const { runtime, unhandled } = createIncomingRuntime()
+        const notifications: unknown[] = []
+        const routed: Uint8Array[] = []
+        const dirty: unknown[] = []
+        const completed: number[] = []
+        const nonces: BinaryNode[] = []
+        const coordinator = new WaIncomingNodeCoordinator({
+            logger: createNoopLogger(),
+            runtime: {
+                ...runtime,
+                emitIncomingNotification: (event) => notifications.push(event),
+                persistRoutingInfo: async (info) => {
+                    routed.push(info)
+                },
+                parseDirtyBits: (nodes) => parseDirtyBits(nodes, createNoopLogger()),
+                handleDirtyBits: async (bits) => {
+                    dirty.push(...bits)
+                }
             },
-            parseDirtyBits: (nodes) => parseDirtyBits(nodes, createNoopLogger()),
-            handleDirtyBits: async (bits) => {
-                dirty.push(...bits)
+            offlineResume: {
+                trackOfflineStanza() {},
+                handleOfflinePreview(count: number) {
+                    completed.push(count)
+                },
+                handleOfflineComplete(count: number) {
+                    completed.push(count)
+                },
+                reset() {},
+                isComplete: false,
+                isResuming: false
+            } as never
+        })
+        coordinator.registerIncomingHandler({
+            tag: 'ib',
+            handler: async (node) => {
+                nonces.push(node)
+                if (fails) throw new Error('handler failed')
+                return true
             }
-        },
-        offlineResume: {
-            trackOfflineStanza() {},
-            handleOfflinePreview() {},
-            handleOfflineComplete(count: number) {
-                completed.push(count)
-            },
-            reset() {},
-            isComplete: false,
-            isResuming: false
-        } as never
+        })
+        await coordinator.handleIncomingNode({
+            tag: 'ib',
+            attrs: {},
+            content: [
+                { tag: 'offline_preview', attrs: { count: '2' } },
+                { tag: 'recovery_nonce', attrs: { code: 'private-nonce', use_case: '547' } },
+                { tag: 'dirty', attrs: { type: 'groups', timestamp: '1' } },
+                {
+                    tag: 'edge_routing',
+                    attrs: {},
+                    content: [{ tag: 'routing_info', attrs: {}, content: new Uint8Array([1, 2]) }]
+                }
+            ]
+        })
+        assert.equal(nonces.length, 1)
+        assert.deepEqual(nonces[0].content, [
+            { tag: 'recovery_nonce', attrs: { code: 'private-nonce', use_case: '547' } }
+        ])
+        assert.equal(notifications.length, 1)
+        assert.doesNotMatch(JSON.stringify(notifications), /private-nonce|recovery_nonce/)
+        assert.deepEqual(completed, [2])
+        assert.deepEqual(routed, [new Uint8Array([1, 2])])
+        assert.equal(dirty.length, 1)
+        assert.deepEqual(unhandled, [])
     })
-    coordinator.registerIncomingHandler({
-        tag: 'ib',
-        handler: async (node) => {
-            nonces.push(node)
-            return true
-        }
-    })
-    await coordinator.handleIncomingNode({
-        tag: 'ib',
-        attrs: {},
-        content: [
-            { tag: 'offline', attrs: { count: '2' } },
-            { tag: 'recovery_nonce', attrs: { code: 'private-nonce', use_case: '547' } },
-            { tag: 'dirty', attrs: { type: 'groups', timestamp: '1' } },
-            {
-                tag: 'edge_routing',
-                attrs: {},
-                content: [{ tag: 'routing_info', attrs: {}, content: new Uint8Array([1, 2]) }]
-            }
-        ]
-    })
-    assert.equal(nonces.length, 1)
-    assert.deepEqual(nonces[0].content, [
-        { tag: 'recovery_nonce', attrs: { code: 'private-nonce', use_case: '547' } }
-    ])
-    assert.equal(notifications.length, 1)
-    assert.doesNotMatch(JSON.stringify(notifications), /private-nonce|recovery_nonce/)
-    assert.deepEqual(completed, [2])
-    assert.deepEqual(routed, [new Uint8Array([1, 2])])
-    assert.equal(dirty.length, 1)
-    assert.deepEqual(unhandled, [])
-})
+}

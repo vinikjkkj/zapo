@@ -498,6 +498,7 @@ export class WaIncomingNodeCoordinator {
         })()
     }
 
+    /** Handles built-in bulletin children independently of private recovery-handler failures. */
     private async handleInfoBulletinNode(node: BinaryNode): Promise<boolean> {
         if (node.tag !== WA_NODE_TAGS.INFO_BULLETIN) {
             return false
@@ -509,7 +510,13 @@ export class WaIncomingNodeCoordinator {
         let publicNode = node
         if (recoveryNonce && children.length > 1) {
             // Dispatch private recovery data separately before public bulletin events.
-            handled = await this.dispatchIncomingNode({ ...node, content: [recoveryNonce] })
+            try {
+                handled = await this.dispatchIncomingNode({ ...node, content: [recoveryNonce] })
+            } catch (error) {
+                this.logger.trace('recovery nonce dispatch failed', {
+                    message: toError(error).message
+                })
+            }
             publicNode = {
                 ...node,
                 content: children.filter((child) => child.tag !== 'recovery_nonce')
