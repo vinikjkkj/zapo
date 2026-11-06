@@ -124,3 +124,30 @@ for (const fails of [false, true]) {
         assert.deepEqual(unhandled, [])
     })
 }
+
+test('failed recovery dispatch is consumed even without recognized bulletin children', async () => {
+    const { runtime, unhandled } = createIncomingRuntime()
+    const coordinator = new WaIncomingNodeCoordinator({
+        logger: createNoopLogger(),
+        runtime,
+        offlineResume: { trackOfflineStanza() {} } as never
+    })
+    let calls = 0
+    coordinator.registerIncomingHandler({
+        tag: 'ib',
+        handler: async () => {
+            calls += 1
+            throw new Error('handler failed')
+        }
+    })
+    await coordinator.handleIncomingNode({
+        tag: 'ib',
+        attrs: {},
+        content: [
+            { tag: 'recovery_nonce', attrs: { code: 'private-nonce', use_case: '547' } },
+            { tag: 'unknown_bulletin', attrs: {} }
+        ]
+    })
+    assert.equal(calls, 1)
+    assert.deepEqual(unhandled, [])
+})

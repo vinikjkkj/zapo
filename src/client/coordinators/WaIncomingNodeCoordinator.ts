@@ -513,6 +513,7 @@ export class WaIncomingNodeCoordinator {
             try {
                 handled = await this.dispatchIncomingNode({ ...node, content: [recoveryNonce] })
             } catch (error) {
+                handled = true
                 this.logger.trace('recovery nonce dispatch failed', {
                     message: toError(error).message
                 })
