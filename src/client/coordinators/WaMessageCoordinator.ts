@@ -1027,12 +1027,11 @@ export class WaMessageCoordinator {
         if (idArray.length === 0) {
             throw new Error('sendReceipt requires at least one message id')
         }
-        const [id, ...rest] = idArray
         const input: WaSendReceiptInput = {
             ...options,
             to: jid,
-            id,
-            listIds: rest.length > 0 ? rest : undefined
+            id: idArray[0],
+            listIds: idArray.length > 1 ? idArray : undefined
         }
         return this.messageDispatch.sendReceipt(input)
     }
