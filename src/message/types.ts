@@ -393,6 +393,7 @@ export interface WaSendReceiptInput {
     readonly from?: string
     readonly t?: string
     readonly peerParticipantPn?: string
+    /** Every id this receipt acknowledges. `listIds[0]` must equal {@link id}: the builder skips the first entry by position. */
     readonly listIds?: readonly string[]
     readonly content?: readonly BinaryNode[]
 }
