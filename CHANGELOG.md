@@ -1,5 +1,17 @@
 # zapo-js
 
+## 1.12.0
+
+### Minor Changes
+
+- Add `joinGroupViaLink` and flag pending membership requests in invite info. Joining a group that requires admin approval answers with a `<membership_approval_request jid/>` result instead of `<group>`, which `joinGroupViaInvite` rejected with a generic "expected <group>" error. `joinGroupViaLink` returns `{ status: 'joined' | 'pending', groupJid }`, reading only the jid like WhatsApp Web does. `queryGroupInviteInfo` now exposes `hasPendingMembershipRequest`, so a caller can skip a join that would fail with 409 conflict. `joinGroupViaInvite` is deprecated and unchanged.
+- Decode MEX argo responses with built-in wire types. Argo results carry no schema, so the previous decoder, which expected a type marker before every value, failed on any response with data. The decoder now walks the operation's wire type, reads the one-byte header the way WhatsApp writes it, claims blocks by wire key and resolves error paths to field names, and a wire type that does not match the payload fails loudly instead of producing a wrong value tree. The bundled table covers `FetchReachoutTimelock` and `FetchNewChatMessageCappingInfo`; other operations can be taught with `registerMexArgoWireType`. A boolean label other than 0 or 1 and a malformed wire stream now throw. The optional `argo-codec` peer dependency is dropped.
+
+### Patch Changes
+
+- Keep every id when a receipt batches several messages. `dispatchReceipt` passed only the ids after the first as `listIds`, but the list builder skips its own first element, so the second id of every batch reached neither the `id` attribute nor the `<list>`: a receipt for [A, B, C] went out as A and C, and [A, B] as A alone. The stanza stayed well formed and the server accepted it, so a read receipt marking all but one message read failed silently. `listIds` now carries the full id list; both `sendReceipt` overloads were affected.
+- Refresh the advertised WA Web version to `2.3000.1054821409`.
+
 ## 1.11.0
 
 ### Minor Changes
