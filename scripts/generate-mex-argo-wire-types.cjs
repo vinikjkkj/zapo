@@ -82,7 +82,11 @@ class Reader {
 function splitMessage(bytes) {
     const reader = new Reader(bytes)
     const header = bytes[reader.pos++]
-    if (header & 0x80) throw new Error('argo store: header continuation is not supported')
+    if (header & 0xc1) {
+        throw new Error(
+            `argo store: unsupported header 0x${header.toString(16)} (inline, user flags or continuation)`
+        )
+    }
     const segments = []
     while (reader.pos < reader.end) segments.push(reader.take(reader.label()))
     if (segments.length === 0) throw new Error('argo store: missing core segment')

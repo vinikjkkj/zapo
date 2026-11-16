@@ -98,7 +98,10 @@ function readPoolRef(cursor: WireCursor): string {
 /** Reads a decimal count and consumes its `;` terminator. */
 function readCount(cursor: WireCursor): number {
     const start = cursor.pos
-    while (cursor.stream[cursor.pos] !== ';') cursor.pos++
+    while (cursor.stream[cursor.pos] !== ';') {
+        if (cursor.pos >= cursor.stream.length) throw new Error('mex argo: unterminated wire count')
+        cursor.pos++
+    }
     const value = Number.parseInt(cursor.stream.slice(start, cursor.pos), 10)
     cursor.pos++
     return value
@@ -152,7 +155,11 @@ function loadBundled(opName: string): WaArgoWire | null {
     if (cached) return cached
     const stream = WA_MEX_ARGO_WIRE_TYPES[opName]
     if (stream === undefined) return null
-    const wire = expandArgoWire({ stream, pos: 0 })
+    const cursor: WireCursor = { stream, pos: 0 }
+    const wire = expandArgoWire(cursor)
+    if (cursor.pos !== stream.length) {
+        throw new Error(`mex argo: wire stream for ${opName} has trailing tokens`)
+    }
     expanded.set(opName, wire)
     return wire
 }

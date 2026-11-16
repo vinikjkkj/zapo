@@ -2,7 +2,11 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 
 import { decodeMexArgoResponse } from '@transport/node/mex/argo-decoder'
-import { registerMexArgoWireType, resolveMexArgoWireType } from '@transport/node/mex/argo-wire'
+import {
+    listMexArgoWireTypeNames,
+    registerMexArgoWireType,
+    resolveMexArgoWireType
+} from '@transport/node/mex/argo-wire'
 import { base64ToBytes } from '@util/bytes'
 
 function wireOf(opName: string) {
@@ -104,6 +108,23 @@ test('rejects a wire type that leaves bytes behind', () => {
             }),
         /trailing byte/
     )
+})
+
+test('rejects a boolean label other than 0 or 1', () => {
+    const captured = base64ToBytes('BBQxNzg4MTMyNzYzDkRFRkFVTFQMAAIUDgMD')
+    // Core is the last 6 bytes; byte 2 of it is `is_active`, zig-zag 2 -> 4.
+    captured[captured.length - 5] = 0x04
+
+    assert.throws(
+        () => decodeMexArgoResponse(captured, wireOf('FetchReachoutTimelock')),
+        /invalid boolean label 2/
+    )
+})
+
+test('expands every bundled wire type', () => {
+    for (const opName of listMexArgoWireTypeNames()) {
+        assert.equal(wireOf(opName).type, 'RECORD', opName)
+    }
 })
 
 test('reads the header flags from the raw byte, not from a bit set', () => {

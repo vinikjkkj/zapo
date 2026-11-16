@@ -327,8 +327,12 @@ function readValue(ctx: ArgoContext, wire: WaArgoWire, block: ArgoBlock | null):
             return readBlockString(ctx, block ?? useBlock(ctx, BLOCK_STRING, true, false))
         case 'BYTES':
             return readBlockBytes(ctx, block ?? useBlock(ctx, BLOCK_BYTES, true, false))
-        case 'BOOLEAN':
-            return ctx.core.label() === 1
+        case 'BOOLEAN': {
+            const label = ctx.core.label()
+            if (label !== 0 && label !== 1)
+                throw new Error(`mex argo: invalid boolean label ${label}`)
+            return label === 1
+        }
         case 'VARINT':
             return (block?.reader ?? ctx.core).label()
         case 'FLOAT64':
