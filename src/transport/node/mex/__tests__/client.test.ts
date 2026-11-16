@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 
+import { registerMexArgoWireType } from '@transport/node/mex/argo-wire'
 import { dispatchMexQuery } from '@transport/node/mex/client'
 import type { BinaryNode } from '@transport/types'
 import { base64ToBytes, TEXT_ENCODER } from '@util/bytes'
@@ -108,57 +109,102 @@ test('dispatchMexQuery surfaces GraphQL errors with path and code', async () => 
     )
 })
 
-test('dispatchMexQuery decodes captured WWWGetCertificates argo error response', async () => {
-    // Real argo response captured from WhatsApp's MEX endpoint after a failed
-    // WWWGetCertificates call (variables {use_case=CANONICAL, request_time=17}).
-    // Flag byte 0x04 → bitset value 2 → FLAG_SELF_DESCRIBING; layout is
-    // <DESC data><ARRAY<ERROR_WIRE>> in the same core.
-    const captured = base64ToBytes(
-        'BK4CVGhlIHNjaGVtYSBzcGVjaWZpZXMgdGhlIGZpZWxkIGlzIG5vbi1udWxsLCBidXQgYSBudWxsIHZhbHVlIHdhcyByZXR1cm5lZCBieSB0aGUgYmFja2VuZGNvZGVudWxsX3ZhbHVlQmFkIFJlcXVlc3RlcnJvcl9jb2RlaXNfcmV0cnlhYmxlc2V2ZXJpdHlDUklUSUNBTAgAAKAGNAEEsAEDAgAEAggIFBYDAgAEBhQMGAAQCBAD'
-    )
-    const fakeSocket = {
+function argoSocket(payload: Uint8Array): { query: () => Promise<BinaryNode> } {
+    return {
         query: async (): Promise<BinaryNode> => ({
             tag: 'iq',
             attrs: { type: 'result' },
-            content: [{ tag: 'result', attrs: { format: 'argo' }, content: captured }]
+            content: [{ tag: 'result', attrs: { format: 'argo' }, content: payload }]
         })
     }
+}
+
+test('dispatchMexQuery decodes a captured argo result', async () => {
+    // Real `format="argo"` result for FetchReachoutTimelock.
+    const captured = base64ToBytes('BBQxNzg4MTMyNzYzDkRFRkFVTFQMAAIUDgMD')
+
+    const { data } = await dispatchMexQuery(argoSocket(captured), {
+        docId: '23983697327930364',
+        clientDocId: '23983697327930364',
+        variables: {},
+        opName: 'FetchReachoutTimelock'
+    })
+
+    assert.deepEqual(data, {
+        xwa2_fetch_account_reachout_timelock: {
+            is_active: true,
+            time_enforcement_ends: '1788132763',
+            enforcement_type: 'DEFAULT'
+        }
+    })
+})
+
+test('dispatchMexQuery surfaces argo errors with their extensions', async () => {
+    // Real argo response captured after a failed WWWGetCertificates call
+    // (variables {use_case=CANONICAL, request_time=17}).
+    const captured = base64ToBytes(
+        'BK4CVGhlIHNjaGVtYSBzcGVjaWZpZXMgdGhlIGZpZWxkIGlzIG5vbi1udWxsLCBidXQgYSBudWxsIHZhbHVlIHdhcyByZXR1cm5lZCBieSB0aGUgYmFja2VuZGNvZGVudWxsX3ZhbHVlQmFkIFJlcXVlc3RlcnJvcl9jb2RlaXNfcmV0cnlhYmxlc2V2ZXJpdHlDUklUSUNBTAgAAKAGNAEEsAEDAgAEAggIFBYDAgAEBhQMGAAQCBAD'
+    )
+    registerMexArgoWireType('WWWGetCertificates', {
+        type: 'RECORD',
+        fields: [
+            {
+                name: 'data',
+                of: {
+                    type: 'NULLABLE',
+                    of: {
+                        type: 'RECORD',
+                        fields: [
+                            {
+                                name: 'xwa2_ent_get_certificates',
+                                of: { type: 'NULLABLE', of: { type: 'DESC' } },
+                                omittable: false
+                            }
+                        ]
+                    }
+                },
+                omittable: false
+            },
+            { name: 'errors', of: { type: 'ARRAY', of: { type: 'ERROR' } }, omittable: true },
+            { name: 'extensions', of: { type: 'EXTENSIONS' }, omittable: true }
+        ]
+    })
+
     await assert.rejects(
         () =>
-            dispatchMexQuery(fakeSocket, {
+            dispatchMexQuery(argoSocket(captured), {
                 docId: '25094190163544446',
                 clientDocId: '16428758503015954638431529919',
                 variables: { use_case: 'CANONICAL', request_time: '17' },
                 opName: 'WWWGetCertificates'
             }),
-        (err: Error) =>
-            /null_value: The schema specifies the field is non-null/.test(err.message) &&
-            /Bad Request/.test(err.message) &&
-            /CRITICAL/.test(err.message)
+        (error: Error) =>
+            /null_value: The schema specifies the field is non-null/.test(error.message) &&
+            /400\/CRITICAL: Bad Request @xwa2_ent_get_certificates/.test(error.message)
+    )
+})
+
+test('dispatchMexQuery reports argo operations without a known wire type', async () => {
+    await assert.rejects(
+        () =>
+            dispatchMexQuery(argoSocket(base64ToBytes('BBQxNzg4MTMyNzYzDkRFRkFVTFQMAAIUDgMD')), {
+                docId: 'a',
+                clientDocId: 'b',
+                variables: {},
+                opName: 'FetchAboutStatus'
+            }),
+        /argo response has no known wire type; register one with registerMexArgoWireType/
     )
 })
 
 test('dispatchMexQuery raises decode failure when argo bytes are malformed', async () => {
-    const fakeSocket = {
-        query: async (): Promise<BinaryNode> => ({
-            tag: 'iq',
-            attrs: { type: 'result' },
-            content: [
-                {
-                    tag: 'result',
-                    attrs: { format: 'argo' },
-                    content: TEXT_ENCODER.encode('not real argo bytes')
-                }
-            ]
-        })
-    }
     await assert.rejects(
         () =>
-            dispatchMexQuery(fakeSocket, {
+            dispatchMexQuery(argoSocket(TEXT_ENCODER.encode('not real argo bytes')), {
                 docId: 'a',
                 clientDocId: 'b',
                 variables: {},
-                opName: 'WWWGetCertificates'
+                opName: 'FetchReachoutTimelock'
             }),
         /argo decode failed/
     )

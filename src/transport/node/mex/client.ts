@@ -5,7 +5,8 @@ import {
 } from '@mex'
 import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
 import { decodeNodeContentUtf8OrBytes, findNodeChild } from '@transport/node/helpers'
-import { decodeMexArgoResponse, isMexArgoDecoderAvailable } from '@transport/node/mex/argo-decoder'
+import { decodeMexArgoResponse, type WaMexArgoResponse } from '@transport/node/mex/argo-decoder'
+import { resolveMexArgoWireType } from '@transport/node/mex/argo-wire'
 import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 import { TEXT_DECODER } from '@util/bytes'
@@ -92,11 +93,11 @@ export async function dispatchMexQuery(
     }
     const response = await socket.query(node, args.timeoutMs ?? MEX_DEFAULT_TIMEOUT_MS)
     assertIqResult(response, `mex/${args.opName}`)
-    const data = await parseMexResultPayload(response, args.opName)
+    const data = parseMexResultPayload(response, args.opName)
     return { raw: response, data }
 }
 
-async function parseMexResultPayload(node: BinaryNode, opName: string): Promise<unknown> {
+function parseMexResultPayload(node: BinaryNode, opName: string): unknown {
     const result = findNodeChild(node, 'result')
     if (!result) {
         throw new Error(`mex/${opName} response missing <result>`)
@@ -105,35 +106,44 @@ async function parseMexResultPayload(node: BinaryNode, opName: string): Promise<
     const rawBytes = decodeNodeContentUtf8OrBytes(result.content, `mex/${opName}/result`)
 
     if (format === 'argo') {
-        if (!(await isMexArgoDecoderAvailable())) {
-            throw new Error(
-                `mex/${opName} argo response received but 'argo-codec' not installed; ${rawBytes.length}B; ` +
-                    `strings: ${extractVisibleStrings(rawBytes)}`
-            )
-        }
-        let decoded
-        try {
-            decoded = await decodeMexArgoResponse(rawBytes)
-        } catch (error) {
-            throw new Error(
-                `mex/${opName} argo decode failed: ${toError(error).message}; ` +
-                    `${rawBytes.length}B; strings: ${extractVisibleStrings(rawBytes)}`
-            )
-        }
-        if (decoded.errors.length > 0) {
-            const summary = decoded.errors
-                .map((e) => {
-                    const code = e.extensions?.error_code ?? e.extensions?.code ?? '?'
-                    const sev = e.extensions?.severity
-                    return `${code}${sev ? `/${String(sev)}` : ''}: ${e.message} @${e.path ?? ''}`
-                })
-                .join('; ')
-            throw new Error(`mex/${opName} errors: ${summary}`)
-        }
-        return decoded.data
+        return parseMexArgoPayload(rawBytes, opName)
     }
 
     return extractGraphQlData(JSON.parse(TEXT_DECODER.decode(rawBytes)), opName)
+}
+
+function parseMexArgoPayload(rawBytes: Uint8Array, opName: string): unknown {
+    const wire = resolveMexArgoWireType(opName)
+    if (!wire) {
+        throw new Error(
+            `mex/${opName} argo response has no known wire type; register one with ` +
+                `registerMexArgoWireType('${opName}', ...); ${rawBytes.length}B; ` +
+                `strings: ${extractVisibleStrings(rawBytes)}`
+        )
+    }
+
+    let decoded: WaMexArgoResponse
+    try {
+        decoded = decodeMexArgoResponse(rawBytes, wire)
+    } catch (error) {
+        throw new Error(
+            `mex/${opName} argo decode failed: ${toError(error).message}; ` +
+                `${rawBytes.length}B; strings: ${extractVisibleStrings(rawBytes)}`
+        )
+    }
+
+    if (decoded.errors.length > 0) {
+        const summary = decoded.errors
+            .map((error) => {
+                const code = error.extensions?.error_code ?? error.extensions?.code ?? '?'
+                const severity = error.extensions?.severity
+                const path = error.path?.join('.') ?? ''
+                return `${code}${severity ? `/${String(severity)}` : ''}: ${error.message} @${path}`
+            })
+            .join('; ')
+        throw new Error(`mex/${opName} errors: ${summary}`)
+    }
+    return decoded.data
 }
 
 function extractVisibleStrings(bytes: Uint8Array): string {

@@ -12,7 +12,7 @@ test('createNodeIdGenerator produces a random prefix and monotonic counter', asy
     assert.equal(second, `${gen.prefix}2`)
 })
 
-test('createMobileNodeIdGenerator matches WA Android C08170Ng.A0E format', () => {
+test('createMobileNodeIdGenerator matches the WA Android id format', () => {
     const gen = createMobileNodeIdGenerator()
     assert.equal(gen.prefix, '0')
     const ids: string[] = []
