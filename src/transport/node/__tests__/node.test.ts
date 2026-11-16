@@ -25,14 +25,19 @@ import type { BinaryNode } from '@transport/types'
 import type { WaComms } from '@transport/WaComms'
 import { bytesToBase64 } from '@util/bytes'
 
-async function waitFor(predicate: () => boolean, message: string, maxTurns = 200): Promise<void> {
-    for (let turn = 0; turn < maxTurns; turn += 1) {
-        if (predicate()) {
-            return
+/** Bounded by time, not loop turns: the stanza id prefix waits on `randomFill` in the libuv threadpool. */
+async function waitFor(
+    predicate: () => boolean,
+    message: string,
+    timeoutMs = 2_000
+): Promise<void> {
+    const deadline = performance.now() + timeoutMs
+    while (!predicate()) {
+        if (performance.now() > deadline) {
+            throw new Error(message)
         }
         await new Promise<void>((resolve) => setImmediate(resolve))
     }
-    throw new Error(message)
 }
 
 test('node helpers parse child collections and binary payloads', () => {
