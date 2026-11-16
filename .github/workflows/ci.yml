@@ -24,6 +24,8 @@ jobs:
             - uses: actions/checkout@v4
             - uses: ./.github/actions/setup-node
             - run: npm run lint
+              env:
+                  NODE_OPTIONS: --max-old-space-size=6144
 
     format:
         runs-on: ubuntu-latest

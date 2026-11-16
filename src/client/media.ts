@@ -321,6 +321,8 @@ export interface ResolvedMediaInputs {
     readonly processorInput?: Uint8Array | string
     readonly uploadMedia: Uint8Array | Readable
     readonly tempFilePath?: string
+    /** True only for upload streams opened by resolveMediaInputs. */
+    readonly ownsUploadStream?: boolean
 }
 
 export async function assertReadableFile(filePath: string): Promise<void> {
@@ -338,6 +340,10 @@ export async function assertReadableFile(filePath: string): Promise<void> {
     }
 }
 
+/** Resolves processor input and an upload source, spooling streams only when processing needs it.
+ * Caller-provided streams remain caller-owned; streams opened here are marked for cleanup.
+ * @example `const resolved = await resolveMediaInputs(false, imageBytes)`
+ */
 export async function resolveMediaInputs(
     shouldProcess: boolean,
     raw: Uint8Array | ArrayBuffer | Readable | string
@@ -346,7 +352,8 @@ export async function resolveMediaInputs(
         await assertReadableFile(raw)
         return {
             processorInput: raw,
-            uploadMedia: createReadStream(raw)
+            uploadMedia: createReadStream(raw),
+            ownsUploadStream: true
         }
     }
     if (isReadableStream(raw)) {
@@ -355,6 +362,7 @@ export async function resolveMediaInputs(
             return {
                 processorInput: tempFilePath,
                 uploadMedia: createReadStream(tempFilePath),
+                ownsUploadStream: true,
                 tempFilePath
             }
         }

@@ -13,7 +13,7 @@ import {
 } from '@client/coordinators/WaBroadcastListCoordinator'
 import {
     createBusinessCoordinator,
-    type WaBusinessCoordinator
+    type WaBusinessCoordinatorRuntime
 } from '@client/coordinators/WaBusinessCoordinator'
 import {
     createEmailCoordinator,
@@ -224,7 +224,7 @@ export interface WaClientDependencies {
     readonly newsletterCoordinator: WaNewsletterCoordinator
     readonly privacyCoordinator: WaPrivacyCoordinatorRuntime
     readonly profileCoordinator: WaProfileCoordinator
-    readonly businessCoordinator: WaBusinessCoordinator
+    readonly businessCoordinator: WaBusinessCoordinatorRuntime
     readonly botCoordinator: WaBotCoordinator
     readonly emailCoordinator: WaEmailCoordinator
     readonly receiptQueue: WaReceiptQueue
@@ -687,6 +687,16 @@ export function buildWaClientDependencies(input: {
     })
 
     const businessCoordinator = createBusinessCoordinator({
+        sendNode: runtime.sendNode,
+        isOwnJid: (jid) => {
+            const credentials = getCurrentCredentials()
+            return isOwnAccountJid(jid, credentials?.meJid, credentials?.meLid)
+        },
+        isConnected: () => connectionManager?.isConnected() ?? false,
+        getNonceWaitMs: () =>
+            abPropsCoordinator.getConfigValue<number>(
+                'ctwa_ad_account_nonce_push_wait_timeout_web'
+            ) * 1_000,
         queryWithContext: runtime.queryWithContext,
         mediaTransfer,
         getMediaConn: () => getClientMediaConn(mediaMessageBuildOptions),
@@ -1134,6 +1144,18 @@ export function buildWaClientDependencies(input: {
             handleClientDirtyBits,
             incomingMessageAckOptions
         })
+    })
+
+    incomingNode.registerIncomingHandler({
+        tag: WA_NODE_TAGS.NOTIFICATION,
+        subtype: WA_NOTIFICATION_TYPES.BUSINESS,
+        prepend: true,
+        handler: businessCoordinator.handleCatalogNotification
+    })
+    incomingNode.registerIncomingHandler({
+        tag: 'ib',
+        prepend: true,
+        handler: businessCoordinator.handleCatalogNotification
     })
 
     incomingNode.registerIncomingHandler({

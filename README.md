@@ -121,6 +121,62 @@ mutations, business profile, events catalog, store providers, the typed
 event map, and the architectural reasoning - read the guides at
 **[zapo.to](https://zapo.to/)**.
 
+`client.message.send` also accepts typed `buttons`, `interactive`, `list`,
+`carousel`, `native-form`, `payment` (PIX), `charge`, `catalog`, and `product`
+content. See the public types and examples in [`src/message/types.ts`](src/message/types.ts).
+Top-level `interactive` accepts 1-10 quick replies or 1-3 CTA buttons, without
+mixing the two categories. Carousels accept 1-100 cards and use the normal media
+upload pipeline. Video header captions are omitted; use the card's `text` for its
+body. Product images
+must be pre-uploaded, and native product cards require a real product in the
+owner's business catalog. Catalog actions use the account phone number, never its LID.
+A first `cta_catalog` button selects the `cta_catalog` business envelope; the
+separate `catalog` kind uses `catalog_message`. URL `webview: true` requests a
+WebView with full presentation.
+
+```ts
+const { flowToken } = await client.message.send(jid, {
+    type: 'native-form',
+    text: 'Please fill in your details',
+    flowId: '123456789', // An existing Business app form
+    flowCta: 'Fill form'
+})
+```
+
+Reply buttons and native-flow quick replies post the choice to the entire group
+when used in group chats. The typed `list` uses native-flow `single_select`;
+raw `listMessage` sends remain supported.
+Omitted or empty button headers use `EMPTY`; non-empty headers use `TEXT`.
+Use the exported `parseNativeFlowResponse`, `parseNativeFormResponse`, and
+`parseSelectedMessageReply` helpers to read replies. For `menu_options` list replies, read `id`/`description` through `parseNativeFlowResponse`
+and the selected title from `interactiveResponseMessage.body.text`.
+Form parsing supports v1
+`response`, v2 `screens`, and the existing unversioned `screens` shape. Labels may
+be strings or objects; unanswered named components remain in `fields` and
+`answers` with value `undefined`. Values may contain sensitive data; the parser
+normalizes `sensitive`/`isSensitive` to `isSensitive`, preferring `sensitive` when
+both exist.
+
+Native forms require an existing form's decimal-string `flowId`. The `formType`
+defaults to `template`. When `flowToken` is omitted, each send generates a UUID
+and exposes it in the result as `flowToken`.
+
+Read catalog products through `client.business`:
+
+```ts
+const page = await client.business.getCatalog(businessJid)
+const product = await client.business.getProduct(businessJid, productId)
+if (page.after) {
+    const nextPage = await client.business.getCatalog(businessJid, { after: page.after })
+}
+```
+
+Catalog reads require a connected client. Queries for the current account use
+its owner view and authenticate internally. Pagination is explicit; prices use
+major currency units. `getProduct` returns `null` for a missing product and throws
+`WaCatalogError` for other query failures. Image URLs require a separate media
+upload before use in a product message.
+
 ## Packages
 
 The core lives at the repo root (`zapo-js`). Optional packages live in

@@ -25,6 +25,16 @@ export const WA_ADDRESSING_MODES = Object.freeze({
 
 export type WaAddressingMode = (typeof WA_ADDRESSING_MODES)[keyof typeof WA_ADDRESSING_MODES]
 
+/** Receiver limits for top-level native-flow buttons and carousel cards.
+ * Button limits do not describe buttons inside carousel cards.
+ * @example `const maxCards = WA_INTERACTIVE_LIMITS.CAROUSEL_CARDS`
+ */
+export const WA_INTERACTIVE_LIMITS = Object.freeze({
+    QUICK_REPLIES: 10,
+    CTA_BUTTONS: 3,
+    CAROUSEL_CARDS: 100
+} as const)
+
 export const WA_MESSAGE_TYPES = Object.freeze({
     ENC_VERSION: '2',
     MEDIA_NOTIFY: 'medianotify',

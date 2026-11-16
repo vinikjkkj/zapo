@@ -1,6 +1,7 @@
 import type {
     WaMessageKey,
     WaMessageTargetInput,
+    WaSendBusinessMessage,
     WaSendEventMessage,
     WaSendEventResponseMessage,
     WaSendKeepMessage,
@@ -175,8 +176,30 @@ export function isSendEventResponseMessage(
     )
 }
 
+/** Recognizes typed interactive/business content by its discriminator.
+ * @example `if (isSendBusinessMessage(content)) console.log(content.type)`
+ */
+export function isSendBusinessMessage(content: unknown): content is WaSendBusinessMessage {
+    if (!content || typeof content !== 'object' || !('type' in content)) return false
+    switch (content.type) {
+        case 'buttons':
+        case 'interactive':
+        case 'list':
+        case 'carousel':
+        case 'native-form':
+        case 'payment':
+        case 'charge':
+        case 'catalog':
+        case 'product':
+            return true
+        default:
+            return false
+    }
+}
+
 export function isSendTypedMessage(content: unknown): content is WaSendTypedMessage {
     return (
+        isSendBusinessMessage(content) ||
         isSendTextMessage(content) ||
         isSendReactionMessage(content) ||
         isSendRevokeMessage(content) ||
@@ -218,20 +241,33 @@ export function wrapAsViewOnce(message: Proto.IMessage): Proto.IMessage {
     return message
 }
 
+/** Supported message envelopes in unwrap precedence order.
+ * @example `const outer = WA_MESSAGE_WRAPPER_KEYS.find((key) => message[key]?.message)`
+ */
+export const WA_MESSAGE_WRAPPER_KEYS = Object.freeze([
+    'ephemeralMessage',
+    'groupMentionedMessage',
+    'botInvokeMessage',
+    'deviceSentMessage',
+    'viewOnceMessage',
+    'viewOnceMessageV2',
+    'documentWithCaptionMessage',
+    'groupStatusMessage',
+    'groupStatusMessageV2',
+    'botForwardedMessage'
+] as const)
+
+/** Returns the innermost payload using the shared envelope precedence without copying it.
+ * @example `const image = unwrapMessage(message).imageMessage`
+ */
 export function unwrapMessage(message: Proto.IMessage): Proto.IMessage {
     let msg = message
     for (;;) {
-        const inner =
-            msg.ephemeralMessage?.message ??
-            msg.groupMentionedMessage?.message ??
-            msg.botInvokeMessage?.message ??
-            msg.deviceSentMessage?.message ??
-            msg.viewOnceMessage?.message ??
-            msg.viewOnceMessageV2?.message ??
-            msg.documentWithCaptionMessage?.message ??
-            msg.groupStatusMessage?.message ??
-            msg.groupStatusMessageV2?.message ??
-            msg.botForwardedMessage?.message
+        let inner: Proto.IMessage | null | undefined
+        for (const key of WA_MESSAGE_WRAPPER_KEYS) {
+            inner = msg[key]?.message
+            if (inner) break
+        }
         if (!inner) return msg
         msg = inner
     }
@@ -453,13 +489,17 @@ function resolveEncMediaTypeFrom(msg: Proto.IMessage): string | null {
     return null
 }
 
-/** Companion business node kind for list and native-flow messages. */
+/** Companion business node kind for list and native-flow messages.
+ * @example `const kind: WaButtonAddonKind = 'cta_catalog'`
+ */
 export type WaButtonAddonKind =
     | 'list'
     | 'interactive'
     | 'payment_info'
     | 'order_details'
     | 'form_message'
+    | 'catalog_message'
+    | 'cta_catalog'
 
 export function resolveButtonAddonKind(message: Proto.IMessage): WaButtonAddonKind | null {
     return resolveButtonAddonKindFrom(unwrapMessage(message))
@@ -471,13 +511,15 @@ function resolveNativeFlowAddonKind(
     const firstButtonName = nativeFlow.buttons?.[0]?.name
     if (firstButtonName === 'payment_info') return 'payment_info'
     if (firstButtonName === 'review_and_pay') return 'order_details'
+    if (firstButtonName === 'catalog_message') return 'catalog_message'
+    if (firstButtonName === 'cta_catalog') return 'cta_catalog'
     if (firstButtonName === 'form_message') return 'form_message'
     return 'interactive'
 }
 
 function resolveButtonAddonKindFrom(msg: Proto.IMessage): WaButtonAddonKind | null {
     if (msg.listMessage) return 'list'
-    if (msg.buttonsMessage) return 'interactive'
+    if (msg.buttonsMessage || msg.interactiveMessage?.carouselMessage) return 'interactive'
     const nativeFlow = msg.interactiveMessage?.nativeFlowMessage
     if (nativeFlow) return resolveNativeFlowAddonKind(nativeFlow)
     return null

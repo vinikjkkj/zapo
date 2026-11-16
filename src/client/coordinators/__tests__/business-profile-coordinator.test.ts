@@ -25,6 +25,9 @@ type CoordinatorDeps = Parameters<typeof createBusinessCoordinator>[0]
 
 function makeBusinessCoordinator(overrides: Partial<CoordinatorDeps> = {}) {
     return createBusinessCoordinator({
+        sendNode: async () => undefined,
+        isOwnJid: () => false,
+        isConnected: () => true,
         queryWithContext: async () => createIqResult(),
         mediaTransfer: new WaMediaTransferClient(),
         getMediaConn: () => {
