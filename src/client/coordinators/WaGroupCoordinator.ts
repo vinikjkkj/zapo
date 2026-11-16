@@ -105,6 +105,11 @@ export interface WaGroupMetadata {
     readonly participants: readonly WaGroupParticipant[]
 }
 
+export interface WaGroupJoinViaLinkResult {
+    readonly status: 'joined' | 'pending'
+    readonly groupJid: string
+}
+
 export interface WaMembershipRequest {
     readonly jid: string
     readonly requestor?: string
@@ -189,6 +194,11 @@ export interface WaGroupInviteInfo extends GroupCommons {
     readonly generalChat: boolean
     readonly hasCapi: boolean
     /**
+     * The account already asked to join and is waiting for admin approval, so
+     * joining again gets `409 conflict`. `cancelMembershipRequests` withdraws it.
+     */
+    readonly hasPendingMembershipRequest: boolean
+    /**
      * Sample of participants returned alongside the invite preview - WhatsApp
      * trims this list (admins/recent members), it is not the full roster.
      * Call {@link WaGroupCoordinator.queryGroupMetadata} after joining for
@@ -253,7 +263,8 @@ export interface WaGroupCoordinator {
      * `chat.whatsapp.com/<code>` URL) into a preview of the group: subject,
      * size, ephemeral timer, description, and a trimmed participant sample.
      * The sample is NOT the full roster - call {@link queryGroupMetadata}
-     * after joining for the complete list.
+     * after joining for the complete list. `hasPendingMembershipRequest`
+     * reports a join request already awaiting approval.
      */
     readonly queryGroupInviteInfo: (code: string) => Promise<WaGroupInviteInfo>
     /**
@@ -360,9 +371,21 @@ export interface WaGroupCoordinator {
     readonly revokeInvite: (groupJid: string) => Promise<WaRevokeInviteResult>
     /**
      * Joins a group using its invite `code` (the path segment of a
+     * `chat.whatsapp.com/<code>` URL). Returns `pending` when the group
+     * requires admin approval and the request was filed; approval arrives
+     * later as a group event. A `joined` result carries only the jid, so call
+     * `queryGroupMetadata` for details. Throws if the code is expired or
+     * revoked, the group is full, or the server answers `409 conflict` (the
+     * account is already a member or already has a pending request).
+     */
+    readonly joinGroupViaLink: (code: string) => Promise<WaGroupJoinViaLinkResult>
+    /**
+     * Joins a group using its invite `code` (the path segment of a
      * `chat.whatsapp.com/<code>` URL). Throws if the code is expired,
      * revoked, the group is full, or the current account is already a
      * member. Returns the joined group's metadata.
+     *
+     * @deprecated Use {@link joinGroupViaLink}, which also reports joins pending admin approval.
      */
     readonly joinGroupViaInvite: (code: string) => Promise<WaGroupMetadata>
     /**
@@ -711,6 +734,7 @@ function parseGroupInviteInfo(node: BinaryNode): WaGroupInviteInfo {
         defaultSubgroup: hasNodeChild(target, 'default_sub_group'),
         generalChat: hasNodeChild(target, 'general_chat'),
         hasCapi: hasNodeChild(target, 'capi'),
+        hasPendingMembershipRequest: hasNodeChild(target, 'membership_approval_request'),
         participants
     }
 }
@@ -1034,6 +1058,25 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             }
             affectedParticipants.length = affectedCount
             return { code, affectedParticipants }
+        },
+
+        joinGroupViaLink: async (code) => {
+            const node = buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
+                { tag: WA_NODE_TAGS.INVITE, attrs: { code } }
+            ])
+            const result = await queryWithContext('group.joinViaLink', node)
+            assertIqResult(result, 'group.joinViaLink')
+            const approvalNode = findNodeChild(result, 'membership_approval_request')
+            const status = approvalNode ? 'pending' : 'joined'
+            const target = approvalNode ?? findNodeChild(result, WA_NODE_TAGS.GROUP)
+            if (!target) {
+                throw new Error(
+                    'expected <group> or <membership_approval_request> in join response'
+                )
+            }
+            const groupJid = target.attrs.jid
+            if (!groupJid) throw new Error(`${target.tag} in join response has no jid`)
+            return { status, groupJid }
         },
 
         joinGroupViaInvite: async (code) => {

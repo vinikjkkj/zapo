@@ -150,6 +150,7 @@ export type {
     WaCommunitySubGroupsResult,
     WaGroupCoordinator,
     WaGroupCreateOptions,
+    WaGroupJoinViaLinkResult,
     WaGroupMetadata,
     WaGroupParticipant,
     WaLinkSubGroupsResult,
