@@ -230,6 +230,8 @@ export type {
     WaUsernameResult
 } from '@client/coordinators/WaProfileCoordinator'
 export type { WaProfilePictureType } from '@transport/node/builders/profile'
+export { listMexArgoWireTypeNames, registerMexArgoWireType } from '@transport/node/mex/argo-wire'
+export type { WaArgoWire, WaArgoWireField } from '@transport/node/mex/argo-wire'
 export { parseUsyncResultEnvelope } from '@transport/node/builders/usync'
 export type { WaUsyncProtocolError, WaUsyncResultEnvelope } from '@transport/node/builders/usync'
 export type {
