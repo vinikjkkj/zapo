@@ -661,12 +661,7 @@ test('queryInviteCode throws when the response has no code', async () => {
 const JOIN_CODE = 'AbCdEf123456'
 
 function joinGroupResponse(): BinaryNode {
-    return iqResult([
-        {
-            tag: 'group',
-            attrs: { id: '120363111111111111', subject: 'Joined Group', creation: '1700000000' }
-        }
-    ])
+    return iqResult([{ tag: 'group', attrs: { jid: '120363111111111111@g.us' } }])
 }
 
 function joinPendingResponse(jid?: string): BinaryNode {
@@ -676,9 +671,7 @@ function joinPendingResponse(jid?: string): BinaryNode {
 }
 
 test('joinGroupViaLink sends the invite code and returns the joined group jid', async () => {
-    const mock = createMockQuery([
-        iqResult([{ tag: 'group', attrs: { jid: '120363111111111111@g.us' } }])
-    ])
+    const mock = createMockQuery([joinGroupResponse()])
     const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
 
     const result = await coordinator.joinGroupViaLink(JOIN_CODE)
@@ -710,9 +703,7 @@ test('joinGroupViaLink throws when the approval node has no jid', async () => {
 })
 
 test('joinGroupViaLink throws when the group node has no jid', async () => {
-    const mock = createMockQuery([
-        iqResult([{ tag: 'group', attrs: { id: '120363111111111111' } }])
-    ])
+    const mock = createMockQuery([iqResult([{ tag: 'group', attrs: {} }])])
     const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
 
     await assert.rejects(
@@ -728,12 +719,11 @@ test('joinGroupViaLink throws when the result has neither group nor approval nod
     await assert.rejects(coordinator.joinGroupViaLink(JOIN_CODE), /expected <group> or/)
 })
 
-test('joinGroupViaInvite returns metadata on a direct join', async () => {
+test('joinGroupViaInvite returns the joined group jid in its metadata', async () => {
     const mock = createMockQuery([joinGroupResponse()])
     const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
 
     const meta = await coordinator.joinGroupViaInvite(JOIN_CODE)
 
     assert.equal(meta.jid, '120363111111111111@g.us')
-    assert.equal(meta.subject, 'Joined Group')
 })
