@@ -283,6 +283,35 @@ test('queryGroupInviteInfo parses subject/owner/ephemeral/description/participan
     assert.equal(info.participants[0].jid, 'a@lid')
     assert.equal(info.participants[0].phoneNumber, 'a@s.whatsapp.net')
     assert.equal(info.participants[0].type, 'admin')
+    assert.equal(info.hasPendingMembershipRequest, false)
+})
+
+test('queryGroupInviteInfo reports a pending membership request from the group child node', async () => {
+    const withRequest = iqResult([
+        {
+            tag: 'group',
+            attrs: { id: '120363422892562379@g.us', subject: 'Approval Group' },
+            content: [
+                { tag: 'membership_approval_mode', attrs: {} },
+                { tag: 'membership_approval_request', attrs: { error: '304' } }
+            ]
+        }
+    ])
+    const withoutRequest = iqResult([
+        {
+            tag: 'group',
+            attrs: { id: '120363422892562379@g.us', subject: 'Approval Group' },
+            content: [{ tag: 'membership_approval_mode', attrs: {} }]
+        }
+    ])
+    const mock = createMockQuery([withRequest, withoutRequest])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    const pending = await coordinator.queryGroupInviteInfo('CODE')
+    const notPending = await coordinator.queryGroupInviteInfo('CODE')
+
+    assert.equal(pending.hasPendingMembershipRequest, true)
+    assert.equal(notPending.hasPendingMembershipRequest, false)
 })
 
 test('revokeInvite returns new code and any affected participants', async () => {
@@ -627,4 +656,74 @@ test('queryInviteCode throws when the response has no code', async () => {
     const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
 
     await assert.rejects(coordinator.queryInviteCode('120363@g.us'), /missing invite code/)
+})
+
+const JOIN_CODE = 'AbCdEf123456'
+
+function joinGroupResponse(): BinaryNode {
+    return iqResult([{ tag: 'group', attrs: { jid: '120363111111111111@g.us' } }])
+}
+
+function joinPendingResponse(jid?: string): BinaryNode {
+    return iqResult([
+        { tag: 'membership_approval_request', attrs: jid === undefined ? {} : { jid } }
+    ])
+}
+
+test('joinGroupViaLink sends the invite code and returns the joined group jid', async () => {
+    const mock = createMockQuery([joinGroupResponse()])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    const result = await coordinator.joinGroupViaLink(JOIN_CODE)
+
+    assert.deepEqual(result, { status: 'joined', groupJid: '120363111111111111@g.us' })
+
+    const sent = mock.calls[0].node
+    assert.equal(sent.attrs.type, 'set')
+    assert.equal(sent.attrs.to, 'g.us')
+    const invite = (sent.content as BinaryNode[])[0]
+    assert.equal(invite.tag, 'invite')
+    assert.equal(invite.attrs.code, JOIN_CODE)
+})
+
+test('joinGroupViaLink returns pending with the group jid when approval is required', async () => {
+    const mock = createMockQuery([joinPendingResponse('120363422892562379@g.us')])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    const result = await coordinator.joinGroupViaLink(JOIN_CODE)
+
+    assert.deepEqual(result, { status: 'pending', groupJid: '120363422892562379@g.us' })
+})
+
+test('joinGroupViaLink throws when the approval node has no jid', async () => {
+    const mock = createMockQuery([joinPendingResponse()])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    await assert.rejects(coordinator.joinGroupViaLink(JOIN_CODE), /no jid/)
+})
+
+test('joinGroupViaLink throws when the group node has no jid', async () => {
+    const mock = createMockQuery([iqResult([{ tag: 'group', attrs: {} }])])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    await assert.rejects(
+        coordinator.joinGroupViaLink(JOIN_CODE),
+        /group in join response has no jid/
+    )
+})
+
+test('joinGroupViaLink throws when the result has neither group nor approval node', async () => {
+    const mock = createMockQuery([iqResult()])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    await assert.rejects(coordinator.joinGroupViaLink(JOIN_CODE), /expected <group> or/)
+})
+
+test('joinGroupViaInvite returns the joined group jid in its metadata', async () => {
+    const mock = createMockQuery([joinGroupResponse()])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    const meta = await coordinator.joinGroupViaInvite(JOIN_CODE)
+
+    assert.equal(meta.jid, '120363111111111111@g.us')
 })
