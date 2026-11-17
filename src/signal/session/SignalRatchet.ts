@@ -48,6 +48,7 @@ export interface DecryptOutcome {
         readonly newIdentity: Uint8Array | null
         readonly baseSession: SignalSessionRecord
         readonly usedPreKey: number | null
+        readonly usedKyberPreKeyId?: number | null
     } | null
 }
 

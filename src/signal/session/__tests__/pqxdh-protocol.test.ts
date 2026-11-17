@@ -312,3 +312,92 @@ test('a state holding Kyber keys still receives classic messages on any runtime'
     assert.equal(new TextDecoder().decode(plaintext), 'classic')
     assert.ok(await bobStores.preKey.getKyberPreKeyById(5))
 })
+
+test(
+    'a failed session write keeps the one-time keys so the redelivery decrypts',
+    { skip },
+    async () => {
+        const { alice, bob, bundle, bobStores, bobKyber } = await buildParties()
+        await alice.establishOutgoingSession(BOB_PQ, bundle)
+        const plaintext = TEXT_ENCODER.encode('redeliver me')
+        const encrypted = await alice.encryptMessage(BOB_PQ, plaintext)
+
+        const setSession = bobStores.session.setSession.bind(bobStores.session)
+        let failWrites = true
+        bobStores.session.setSession = async (address, record) => {
+            if (failWrites) throw new Error('disk full')
+            return setSession(address, record)
+        }
+        await assert.rejects(() => bob.decryptMessage(ALICE_PQ, encrypted), /disk full/)
+        assert.ok(await bobStores.preKey.getKyberPreKeyById(bobKyber.keyId))
+        assert.ok(await bobStores.preKey.getPreKeyById(9))
+
+        failWrites = false
+        const decrypted = await bob.decryptMessage(ALICE_PQ, encrypted)
+        assert.ok(uint8Equal(decrypted, plaintext))
+        assert.equal(await bobStores.preKey.getKyberPreKeyById(bobKyber.keyId), null)
+        assert.equal(await bobStores.preKey.getPreKeyById(9), null)
+    }
+)
+
+test(
+    'a failed pre-key cleanup after the session write does not fail the message',
+    { skip },
+    async () => {
+        const { alice, bob, bundle, bobStores, bobKyber } = await buildParties()
+        await alice.establishOutgoingSession(BOB_PQ, bundle)
+        const plaintext = TEXT_ENCODER.encode('cleanup can fail')
+        const encrypted = await alice.encryptMessage(BOB_PQ, plaintext)
+
+        bobStores.preKey.consumeKyberPreKeyById = async () => {
+            throw new Error('store offline')
+        }
+        const decrypted = await bob.decryptMessage(ALICE_PQ, encrypted)
+
+        assert.ok(uint8Equal(decrypted, plaintext))
+        assert.ok(await bobStores.session.getSession(ALICE_PQ))
+        assert.ok(await bobStores.preKey.getKyberPreKeyById(bobKyber.keyId))
+    }
+)
+
+test('a failed session write keeps the classic one-time key for the redelivery', async () => {
+    const aliceStores = newStores()
+    const bobStores = newStores()
+    const [aliceRegistration, bobRegistration] = await Promise.all([
+        generateRegistrationInfo(),
+        generateRegistrationInfo()
+    ])
+    await aliceStores.signal.setRegistrationInfo(aliceRegistration)
+    await bobStores.signal.setRegistrationInfo(bobRegistration)
+    const bobSigned = await generateSignedPreKey(1, bobRegistration.identityKeyPair.privKey)
+    const bobOneTime = await generatePreKeyPair(9)
+    await bobStores.signal.setSignedPreKey(bobSigned)
+    await bobStores.preKey.putPreKey(bobOneTime)
+    const alice = new SignalProtocol(aliceStores, createNoopLogger(), PQ_OFF)
+    const bob = new SignalProtocol(bobStores, createNoopLogger(), PQ_OFF)
+    await alice.establishOutgoingSession(BOB, {
+        regId: bobRegistration.registrationId,
+        identity: bobRegistration.identityKeyPair.pubKey,
+        signedKey: {
+            id: bobSigned.keyId,
+            publicKey: bobSigned.keyPair.pubKey,
+            signature: bobSigned.signature
+        },
+        oneTimeKey: { id: bobOneTime.keyId, publicKey: bobOneTime.keyPair.pubKey }
+    })
+    const plaintext = TEXT_ENCODER.encode('classic redelivery')
+    const encrypted = await alice.encryptMessage(BOB, plaintext)
+
+    const setSession = bobStores.session.setSession.bind(bobStores.session)
+    let failWrites = true
+    bobStores.session.setSession = async (address, record) => {
+        if (failWrites) throw new Error('disk full')
+        return setSession(address, record)
+    }
+    await assert.rejects(() => bob.decryptMessage(ALICE, encrypted), /disk full/)
+    assert.ok(await bobStores.preKey.getPreKeyById(9))
+
+    failWrites = false
+    assert.ok(uint8Equal(await bob.decryptMessage(ALICE, encrypted), plaintext))
+    assert.equal(await bobStores.preKey.getPreKeyById(9), null)
+})

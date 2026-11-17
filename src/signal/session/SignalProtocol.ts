@@ -40,11 +40,7 @@ import type {
     SignalSessionRecord
 } from '@signal/types'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
-import {
-    hasPqPreKeyStore,
-    type WaPqPreKeyStore,
-    type WaPreKeyStore
-} from '@store/contracts/pre-key.store'
+import { hasPqPreKeyStore, type WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { uint8Equal } from '@util/bytes'
@@ -464,8 +460,45 @@ export class SignalProtocol {
                 )
             }
             await this.stores.session.setSession(address, outcome.updatedSession)
+            await this.consumeUsedPreKeys(outcome.newSessionInfo)
             return outcome.plaintext
         })
+    }
+
+    /**
+     * Drops the one-time keys a new session was built from, only once that
+     * session is persisted so a failed write leaves them for the redelivery.
+     * A failed cleanup is logged: the message and its session are already safe.
+     */
+    private async consumeUsedPreKeys(info: DecryptOutcome['newSessionInfo']): Promise<void> {
+        if (!info) {
+            return
+        }
+        if (info.usedPreKey !== null && info.usedPreKey !== undefined) {
+            try {
+                await this.stores.preKey.consumePreKeyById(info.usedPreKey)
+            } catch (error) {
+                this.logger.warn('signal one-time prekey cleanup failed', {
+                    preKeyId: info.usedPreKey,
+                    message: toError(error).message
+                })
+            }
+        }
+        const preKeyStore = this.stores.preKey
+        if (
+            info.usedKyberPreKeyId !== null &&
+            info.usedKyberPreKeyId !== undefined &&
+            hasPqPreKeyStore(preKeyStore)
+        ) {
+            try {
+                await preKeyStore.consumeKyberPreKeyById(info.usedKyberPreKeyId)
+            } catch (error) {
+                this.logger.warn('signal kyber prekey cleanup failed', {
+                    kyberPreKeyId: info.usedKyberPreKeyId,
+                    message: toError(error).message
+                })
+            }
+        }
     }
 
     private runWithAddressLock<T>(address: SignalAddress, task: () => Promise<T>): Promise<T> {
@@ -542,7 +575,6 @@ export class SignalProtocol {
         ])
         let pqSharedSecret: Uint8Array | null = null
         let usedKyberPreKeyId: number | null = null
-        let pqPreKeyStore: WaPqPreKeyStore | null = null
         if (parsed.kemCiphertext && parsed.localKyberPreKeyId !== null) {
             if (!isMlKemSupported()) {
                 throw new Error('signal pqxdh message requires ML-KEM runtime support')
@@ -551,7 +583,6 @@ export class SignalProtocol {
             if (!hasPqPreKeyStore(preKeyStore)) {
                 throw new Error('signal pqxdh message requires a pre-key store with pq support')
             }
-            pqPreKeyStore = preKeyStore
             const kyberPreKey = await preKeyStore.getKyberPreKeyById(parsed.localKyberPreKeyId)
             if (kyberPreKey) {
                 try {
@@ -600,21 +631,14 @@ export class SignalProtocol {
             : incoming
 
         const [updatedSession, plaintext] = await decryptMsgFromSession(baseSession, parsed)
-        // Only consume one-time prekeys after successful decrypt/session materialization.
-        if (parsed.localOneTimeKeyId !== null && parsed.localOneTimeKeyId !== undefined) {
-            await this.stores.preKey.consumePreKeyById(parsed.localOneTimeKeyId)
-        }
-        // A one-time Kyber prekey goes away with its first use; the last-resort key stays.
-        if (usedKyberPreKeyId !== null && pqPreKeyStore) {
-            await pqPreKeyStore.consumeKyberPreKeyById(usedKyberPreKeyId)
-        }
         return {
             updatedSession,
             plaintext,
             newSessionInfo: {
                 newIdentity,
                 baseSession,
-                usedPreKey: parsed.localOneTimeKeyId
+                usedPreKey: parsed.localOneTimeKeyId,
+                usedKyberPreKeyId
             }
         }
     }

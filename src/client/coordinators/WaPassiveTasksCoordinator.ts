@@ -71,6 +71,7 @@ export class WaPassiveTasksCoordinator {
     private readonly pqPolicy: SignalPqPolicy
     private passiveTasksPromise: Promise<void> | null
     private pqUploadPromise: Promise<void> | null
+    private preKeyUploadTail: Promise<void>
     private pqReplenishPromise: Promise<void> | null
 
     public constructor(options: {
@@ -107,6 +108,7 @@ export class WaPassiveTasksCoordinator {
         this.passiveTasksPromise = null
         this.pqUploadPromise = null
         this.pqReplenishPromise = null
+        this.preKeyUploadTail = Promise.resolve()
     }
 
     /** The pre-key store when it implements the post-quantum methods, else `null`. */
@@ -244,7 +246,30 @@ export class WaPassiveTasksCoordinator {
         }
     }
 
-    private async uploadPreKeysIfMissing(
+    /**
+     * Full classic uploads and post-quantum SET/ADD calls run one at a time: a
+     * classic upload drops the server's post-quantum keys, so a call that
+     * interleaves would leave the migrated marker out of step with the server.
+     */
+    private runPreKeyUploadExclusive<T>(task: () => Promise<T>): Promise<T> {
+        const run = this.preKeyUploadTail.then(task)
+        this.preKeyUploadTail = run.then(
+            () => undefined,
+            () => undefined
+        )
+        return run
+    }
+
+    private uploadPreKeysIfMissing(
+        serverHasPreKeysHint?: boolean,
+        prefetchedLocalKeyBundle?: SignalDigestPrefetchedLocalKeyBundle | null
+    ): Promise<void> {
+        return this.runPreKeyUploadExclusive(() =>
+            this.runClassicPreKeyUpload(serverHasPreKeysHint, prefetchedLocalKeyBundle)
+        )
+    }
+
+    private async runClassicPreKeyUpload(
         serverHasPreKeysHint?: boolean,
         prefetchedLocalKeyBundle?: SignalDigestPrefetchedLocalKeyBundle | null
     ): Promise<void> {
@@ -330,7 +355,9 @@ export class WaPassiveTasksCoordinator {
         if (!pqStore || !this.pqPolicy.isKeyUploadEnabled()) {
             return Promise.resolve()
         }
-        this.pqUploadPromise ??= this.runPqUpload(pqStore).finally(() => {
+        this.pqUploadPromise ??= this.runPreKeyUploadExclusive(() =>
+            this.runPqUpload(pqStore)
+        ).finally(() => {
             this.pqUploadPromise = null
         })
         return this.pqUploadPromise
@@ -421,7 +448,10 @@ export class WaPassiveTasksCoordinator {
                     count,
                     identityPrivKey
                 )
-                if (!(await this.addStoredPqPreKeys(pqStore, keys))) {
+                const uploaded = await this.runPreKeyUploadExclusive(async () =>
+                    (await pqStore.getPqMigrated()) ? this.addStoredPqPreKeys(pqStore, keys) : false
+                )
+                if (!uploaded) {
                     break
                 }
                 added += keys.length
@@ -440,7 +470,9 @@ export class WaPassiveTasksCoordinator {
         if (!pqStore || !this.pqPolicy.isKeyUploadEnabled()) {
             return Promise.resolve()
         }
-        this.pqReplenishPromise ??= this.runPqReplenish(pqStore).finally(() => {
+        this.pqReplenishPromise ??= this.runPreKeyUploadExclusive(() =>
+            this.runPqReplenish(pqStore)
+        ).finally(() => {
             this.pqReplenishPromise = null
         })
         return this.pqReplenishPromise

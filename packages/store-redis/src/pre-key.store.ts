@@ -23,6 +23,20 @@ redis.call('ZREM', availKey, keyId)
 return data
 `
 
+const LUA_CONSUME_KYBER_PREKEY = `
+local data = redis.call('HGETALL', KEYS[1])
+if #data == 0 then
+    return nil
+end
+for i = 1, #data, 2 do
+    if data[i] == 'lastresort' and data[i + 1] == '1' then
+        return data
+    end
+end
+redis.call('DEL', KEYS[1])
+return data
+`
+
 const LUA_SET_IF_GREATER = `
 local metaKey = KEYS[1]
 local field = ARGV[1]
@@ -372,22 +386,27 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore,
         const kyberKey = this.k('signal:kyberprekey', this.sessionId, String(keyId))
         const data = await this.redis.hgetallBuffer(kyberKey)
         const record = this.decodeKyberPreKey(keyId, data)
-        if (record) await this.refreshTtl([kyberKey])
+        if (record) await this.refreshKyberTtl(kyberKey, record)
         return record
     }
 
     public async consumeKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
         const kyberKey = this.k('signal:kyberprekey', this.sessionId, String(keyId))
-        const data = await this.redis.hgetallBuffer(kyberKey)
-        const record = this.decodeKyberPreKey(keyId, data)
-        if (!record) return null
-        // Last-resort keys are reused when the one-time pool empties, so they
-        // are never consumed; refresh their TTL like any other read instead.
-        if (record.lastResort !== true) {
-            await this.redis.del(kyberKey)
-        } else {
-            await this.refreshTtl([kyberKey])
+        // One script reads the hash and deletes it unless it is a last-resort
+        // key, so concurrent callers cannot both receive a one-time key.
+        const raw = await (
+            this.redis as unknown as {
+                evalBuffer: (...args: unknown[]) => Promise<Buffer[] | null>
+            }
+        ).evalBuffer(LUA_CONSUME_KYBER_PREKEY, 1, kyberKey)
+        if (!raw || raw.length === 0) return null
+
+        const data: Record<string, Buffer> = {}
+        for (let i = 0; i < raw.length; i += 2) {
+            data[raw[i].toString()] = raw[i + 1]
         }
+        const record = this.decodeKyberPreKey(keyId, data)
+        if (record?.lastResort === true) await this.refreshKyberTtl(kyberKey, record)
         return record
     }
 
@@ -404,15 +423,18 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore,
 
     public async getLatestKyberLastResortKey(): Promise<KyberPreKeyRecord | null> {
         const lastResortKey = this.k('signal:kyberlr', this.sessionId)
-        const [latest] = await this.redis.zrevrange(lastResortKey, 0, 0)
-        if (latest === undefined) return null
-        const kyberKey = this.k('signal:kyberprekey', this.sessionId, latest)
-        const record = this.decodeKyberPreKey(
-            Number(latest),
-            await this.redis.hgetallBuffer(kyberKey)
-        )
-        if (record) await this.refreshTtl([kyberKey, lastResortKey])
-        return record
+        for (const latest of await this.redis.zrevrange(lastResortKey, 0, -1)) {
+            const kyberKey = this.k('signal:kyberprekey', this.sessionId, latest)
+            const record = this.decodeKyberPreKey(
+                Number(latest),
+                await this.redis.hgetallBuffer(kyberKey)
+            )
+            if (record) {
+                await this.refreshTtl([kyberKey, lastResortKey])
+                return record
+            }
+        }
+        return null
     }
 
     public async reserveKyberPreKeyIds(count: number): Promise<number> {
@@ -495,6 +517,15 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore,
             keyPair: { pubKey: new Uint8Array(pub), privKey: new Uint8Array(priv) },
             uploaded: uploadedRaw ? uploadedRaw.toString() === '1' : undefined
         }
+    }
+
+    /** Last-resort records are found through the index, so it lives as long as the key. */
+    private async refreshKyberTtl(kyberKey: string, record: KyberPreKeyRecord): Promise<void> {
+        await this.refreshTtl(
+            record.lastResort === true
+                ? [kyberKey, this.k('signal:kyberlr', this.sessionId)]
+                : [kyberKey]
+        )
     }
 
     private decodeKyberPreKey(

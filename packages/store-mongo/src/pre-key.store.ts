@@ -312,17 +312,12 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore,
     public async consumeKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
         await this.ensureIndexes()
         const col = this.col<KyberPreKeyDoc>('signal_kyber_prekey')
-        const doc = await col.findOne({
-            _id: { session_id: this.sessionId, key_id: keyId }
-        })
-        if (!doc) return null
+        const _id = { session_id: this.sessionId, key_id: keyId }
+        const consumed = await col.findOneAndDelete({ _id, last_resort: { $ne: true } })
+        if (consumed) return this.decodeKyberPreKeyDoc(consumed)
         // Last-resort keys are reused when the pool empties, never consumed.
-        if (doc.last_resort !== true) {
-            await col.deleteOne({
-                _id: { session_id: this.sessionId, key_id: keyId }
-            })
-        }
-        return this.decodeKyberPreKeyDoc(doc)
+        const reusable = await col.findOne({ _id, last_resort: true })
+        return reusable ? this.decodeKyberPreKeyDoc(reusable) : null
     }
 
     public async removeKyberPreKeys(keyIds: readonly number[]): Promise<void> {

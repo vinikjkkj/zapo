@@ -5,7 +5,11 @@ import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCo
 import { isMlKemSupported } from '@crypto/kem/MlKem'
 import { createNoopLogger } from '@infra/log/types'
 import { createLegacyPreKeyStore } from '@signal/__tests__/_legacy-pre-key-store'
-import { generateRegistrationInfo, generateSignedPreKey } from '@signal/registration/keygen'
+import {
+    generatePreKeyPair,
+    generateRegistrationInfo,
+    generateSignedPreKey
+} from '@signal/registration/keygen'
 import { createSignalPqPolicy, type SignalPqPolicy } from '@signal/session/pq-scope'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
@@ -40,7 +44,14 @@ interface HarnessOptions {
     readonly serverHasPreKeys?: boolean
     readonly batchSize?: number
     readonly maxKeys?: number
-    readonly respond?: (sent: Sent, index: number) => BinaryNode | Error
+    readonly respond?: (
+        sent: Sent,
+        index: number
+    ) => BinaryNode | Error | Promise<BinaryNode | Error>
+    /** Overrides the digest check result; `undefined` keeps it valid. */
+    readonly digest?: () =>
+        | { valid: false; shouldReupload: boolean; preKeyCount: number }
+        | undefined
 }
 
 async function buildHarness(options: HarnessOptions = {}) {
@@ -69,7 +80,8 @@ async function buildHarness(options: HarnessOptions = {}) {
         signalStore,
         preKeyStore: coordinatorStore,
         signalDigestSync: {
-            validateLocalKeyBundle: async () => ({ valid: true, preKeyCount: 10 })
+            validateLocalKeyBundle: async () =>
+                options.digest?.() ?? { valid: true, preKeyCount: 10 }
         } as never,
         signalRotateKey: { rotateSignedPreKey: async () => undefined } as never,
         pqPolicy: options.policyFor?.(coordinatorStore) ?? options.policy ?? ENABLED,
@@ -87,7 +99,7 @@ async function buildHarness(options: HarnessOptions = {}) {
                         (await preKeyStore.getLatestKyberLastResortKey()) === null ? 0 : 1
                     )
                 }
-                const reply = options.respond?.(entry, sent.length - 1) ?? RESULT
+                const reply = (await options.respond?.(entry, sent.length - 1)) ?? RESULT
                 if (reply instanceof Error) {
                     throw reply
                 }
@@ -120,6 +132,12 @@ async function buildHarness(options: HarnessOptions = {}) {
         releaseOffline,
         pqSent: () => sent.filter((entry) => entry.context.endsWith('.pq'))
     }
+}
+
+/** Makes the next classic upload carry one key, so it reaches the wire within milliseconds. */
+async function shrinkClassicUpload(store: WaPreKeyMemoryStore) {
+    const keys = await store.getOrGenPreKeys(1, generatePreKeyPair)
+    store.getOrGenPreKeys = async () => keys
 }
 
 async function waitFor(predicate: () => boolean | Promise<boolean>, message: string) {
@@ -276,6 +294,88 @@ test(
         const contexts = harness.sent.map((entry) => entry.context)
         assert.deepEqual(contexts, ['prekeys.upload', 'prekeys.upload.pq'])
         assert.equal(await harness.preKeyStore.getPqMigrated(), true)
+    }
+)
+
+test(
+    'a full classic upload waits for a post-quantum upload in flight and the keys are redone',
+    { skip },
+    async () => {
+        let releaseSet: () => void = () => undefined
+        const setGate = new Promise<void>((resolve) => {
+            releaseSet = resolve
+        })
+        const harness = await buildHarness({
+            batchSize: 10,
+            maxKeys: 10,
+            respond: async (_sent, index) => {
+                if (index === 0) await setGate
+                return RESULT
+            }
+        })
+        await shrinkClassicUpload(harness.preKeyStore)
+        harness.coordinator.startPassiveTasksAfterConnect()
+        await waitFor(() => harness.pqSent().length === 1, 'the first SET was not sent')
+
+        const low = harness.coordinator.handlePreKeyLowNotification()
+        await delay(50)
+        assert.deepEqual(
+            harness.sent.map((entry) => entry.context),
+            ['prekeys.upload.pq']
+        )
+
+        releaseSet()
+        await low
+        await waitFor(() => harness.pqSent().length === 2, 'the SET was not redone')
+
+        assert.deepEqual(
+            harness.sent.map((entry) => entry.context),
+            ['prekeys.upload.pq', 'prekeys.upload', 'prekeys.upload.pq']
+        )
+        assert.equal(await harness.preKeyStore.getPqMigrated(), true)
+    }
+)
+
+test(
+    'the pool fill does not add keys on top of a pool a classic upload wiped',
+    { skip },
+    async () => {
+        let releaseAdd: () => void = () => undefined
+        const addGate = new Promise<void>((resolve) => {
+            releaseAdd = resolve
+        })
+        let digestBroken = false
+        const harness = await buildHarness({
+            batchSize: 5,
+            maxKeys: 20,
+            digest: () =>
+                digestBroken ? { valid: false, shouldReupload: true, preKeyCount: 0 } : undefined,
+            respond: async (sent) => {
+                if (sent.context === 'prekeys.add.pq') await addGate
+                return RESULT
+            }
+        })
+        await shrinkClassicUpload(harness.preKeyStore)
+        harness.coordinator.startPassiveTasksAfterConnect()
+        await waitFor(() => harness.pqSent().length === 1, 'the SET was not sent')
+        harness.releaseOffline()
+        await waitFor(() => harness.pqSent().length === 2, 'the first batch was not sent')
+
+        digestBroken = true
+        const digest = harness.coordinator.handleDigestNotification()
+        await delay(50)
+        releaseAdd()
+        await digest
+        await delay(150)
+
+        const contexts = harness.sent.map((entry) => entry.context)
+        const classicAt = contexts.indexOf('prekeys.upload')
+        assert.ok(classicAt > 0)
+        assert.deepEqual(
+            contexts.slice(classicAt + 1).filter((context) => context === 'prekeys.add.pq'),
+            []
+        )
+        assert.equal(await harness.preKeyStore.getPqMigrated(), false)
     }
 )
 
