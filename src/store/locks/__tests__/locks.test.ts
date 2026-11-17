@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { createLegacyPreKeyStore } from '@signal/__tests__/_legacy-pre-key-store'
 import type { WaMessageStore, WaStoredMessageRecord } from '@store/contracts/message.store'
-import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
+import { hasPqPreKeyStore, type WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type {
     WaPrivacyTokenStore,
     WaStoredPrivacyTokenRecord
@@ -10,6 +11,7 @@ import type {
 import { withMessageLock } from '@store/locks/message.lock'
 import { withPreKeyLock } from '@store/locks/pre-key.lock'
 import { withPrivacyTokenLock } from '@store/locks/privacy-token.lock'
+import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
 import { delay } from '@util/async'
 
 async function flushMicrotasks(turns = 3): Promise<void> {
@@ -126,6 +128,14 @@ function createPreKeyStore(handlers: {
         markKeyAsUploaded: async () => undefined,
         setServerHasPreKeys: async () => undefined,
         getServerHasPreKeys: async () => false,
+        putKyberPreKeys: async () => undefined,
+        getKyberPreKeyById: async () => null,
+        consumeKyberPreKeyById: async () => null,
+        removeKyberPreKeys: async () => undefined,
+        getLatestKyberLastResortKey: async () => null,
+        reserveKyberPreKeyIds: async () => 1,
+        getPqMigrated: async () => false,
+        setPqMigrated: async () => undefined,
         clear: async () => undefined
     }
 }
@@ -288,3 +298,40 @@ test(
         await generation
     }
 )
+
+test('pre-key lock exposes the post-quantum methods only when the store has them', async () => {
+    const pqMethods = [
+        'putKyberPreKeys',
+        'getKyberPreKeyById',
+        'consumeKyberPreKeyById',
+        'removeKyberPreKeys',
+        'getLatestKyberLastResortKey',
+        'reserveKyberPreKeyIds',
+        'getPqMigrated',
+        'setPqMigrated'
+    ]
+
+    const legacy = withPreKeyLock(createLegacyPreKeyStore())
+    assert.deepEqual(
+        pqMethods.filter((method) => method in legacy),
+        []
+    )
+    assert.equal(hasPqPreKeyStore(legacy), false)
+
+    const full = withPreKeyLock(new WaPreKeyMemoryStore())
+    assert.deepEqual(
+        pqMethods.filter((method) => !(method in full)),
+        []
+    )
+    assert.equal(hasPqPreKeyStore(full), true)
+    if (hasPqPreKeyStore(full)) {
+        assert.equal(await full.reserveKyberPreKeyIds(3), 1)
+        assert.equal(await full.reserveKyberPreKeyIds(1), 4)
+        await full.setPqMigrated(true)
+        assert.equal(await full.getPqMigrated(), true)
+    }
+
+    // the classic surface still works through the wrapper
+    await legacy.setServerHasPreKeys(true)
+    assert.equal(await legacy.getServerHasPreKeys(), true)
+})

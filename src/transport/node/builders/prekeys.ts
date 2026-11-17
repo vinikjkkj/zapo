@@ -2,7 +2,12 @@ import { toRawPubKey } from '@crypto/core/keys'
 import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
 import { SIGNAL_KEY_BUNDLE_TYPE_BYTES } from '@signal/api/constants'
 import type { SignalMissingPreKeysTarget } from '@signal/api/SignalMissingPreKeysSyncApi'
-import type { PreKeyRecord, RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
+import type {
+    KyberPreKeyRecord,
+    PreKeyRecord,
+    RegistrationInfo,
+    SignedPreKeyRecord
+} from '@signal/types'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 import { intToBytes } from '@util/bytes'
@@ -78,6 +83,60 @@ export function buildPreKeyUploadIq(
     return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, children)
 }
 
+function buildKyberPreKeyNode(tag: string, record: KyberPreKeyRecord): BinaryNode {
+    return {
+        tag,
+        attrs: {},
+        content: [
+            {
+                tag: WA_NODE_TAGS.ID,
+                attrs: {},
+                content: intToBytes(3, record.keyId)
+            },
+            {
+                tag: WA_NODE_TAGS.VALUE,
+                attrs: {},
+                content: record.keyPair.pubKey
+            },
+            {
+                tag: WA_NODE_TAGS.SIGNATURE,
+                attrs: {},
+                content: record.signature
+            }
+        ]
+    }
+}
+
+function buildKyberPreKeyListNode(records: readonly KyberPreKeyRecord[]): BinaryNode {
+    return {
+        tag: WA_NODE_TAGS.PQ_LIST,
+        attrs: {},
+        content: records.map((record) => buildKyberPreKeyNode(WA_NODE_TAGS.KEY, record))
+    }
+}
+
+/**
+ * First post-quantum upload: the last-resort key followed by a `<pq_list>` of
+ * signed one-time Kyber keys. Raw 1568-byte public keys go on the wire as-is.
+ */
+export function buildKyberPreKeySetIq(
+    kyberPreKeys: readonly KyberPreKeyRecord[],
+    lastResort: KyberPreKeyRecord
+) {
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, [
+        buildKyberPreKeyNode(WA_NODE_TAGS.PQ_LAST_RESORT_KEY, lastResort),
+        buildKyberPreKeyListNode(kyberPreKeys)
+    ])
+}
+
+/** Replenishment: `<op mode="add"/>` plus a `<pq_list>` of one-time Kyber keys. */
+export function buildKyberPreKeyAddIq(kyberPreKeys: readonly KyberPreKeyRecord[]) {
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, [
+        { tag: WA_NODE_TAGS.OP, attrs: { mode: 'add' } },
+        buildKyberPreKeyListNode(kyberPreKeys)
+    ])
+}
+
 export function buildSignedPreKeyRotateIq(signedPreKey: SignedPreKeyRecord) {
     return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, [
         {
@@ -88,11 +147,14 @@ export function buildSignedPreKeyRotateIq(signedPreKey: SignedPreKeyRecord) {
     ])
 }
 
-export function buildMissingPreKeysFetchIq(users: readonly SignalMissingPreKeysTarget[]) {
+export function buildMissingPreKeysFetchIq(
+    users: readonly SignalMissingPreKeysTarget[],
+    options: { readonly pqSupport?: boolean } = {}
+) {
     return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, [
         {
             tag: WA_NODE_TAGS.KEY_FETCH,
-            attrs: {},
+            attrs: options.pqSupport === true ? { pqsupport: 'true' } : {},
             content: users.map((user) => ({
                 tag: WA_NODE_TAGS.USER,
                 attrs: {

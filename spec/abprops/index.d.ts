@@ -1267,6 +1267,13 @@ export declare const WA_ABPROPS: {
     readonly poll_result_snapshot_polltype_envelope_enabled: { readonly code: 12258; readonly type: "bool"; readonly defaultValue: false; readonly debugDefaultValue: true }
     readonly poll_tc_receiving_enabled: { readonly code: 31592; readonly type: "bool"; readonly defaultValue: false; readonly debugDefaultValue: false }
     readonly poll_tc_sending_enabled: { readonly code: 31593; readonly type: "bool"; readonly defaultValue: false; readonly debugDefaultValue: false }
+    readonly pq_1on1_message_enabled: { readonly code: 24160; readonly type: "bool"; readonly defaultValue: false; readonly debugDefaultValue: false }
+    readonly pq_1on1_messaging_killswitch: { readonly code: 35210; readonly type: "bool"; readonly defaultValue: false; readonly debugDefaultValue: false }
+    readonly pq_batch_upload_size: { readonly code: 21201; readonly type: "int"; readonly defaultValue: 10; readonly debugDefaultValue: 10 }
+    readonly pq_keys_upload: { readonly code: 21198; readonly type: "bool"; readonly defaultValue: false; readonly debugDefaultValue: false }
+    readonly pq_max_keys_on_server: { readonly code: 21200; readonly type: "int"; readonly defaultValue: 200; readonly debugDefaultValue: 200 }
+    readonly pq_session_upgrade_max_devices_per_period: { readonly code: 35305; readonly type: "int"; readonly defaultValue: 0; readonly debugDefaultValue: 0 }
+    readonly pq_session_upgrade_period_days: { readonly code: 35744; readonly type: "int"; readonly defaultValue: 0; readonly debugDefaultValue: 0 }
     readonly premium_blue_enabled: { readonly code: 5318; readonly type: "bool"; readonly defaultValue: false; readonly debugDefaultValue: false }
     readonly premium_broadcast_smb_capping_enabled: { readonly code: 13808; readonly type: "bool"; readonly defaultValue: false; readonly debugDefaultValue: true }
     readonly premium_msg_bb_campaign_sync_enabled: { readonly code: 29650; readonly type: "bool"; readonly defaultValue: false; readonly debugDefaultValue: false }
@@ -3227,6 +3234,9 @@ export declare const WA_ABPROPS_BY_CODE: {
     readonly 21139: "ai_rewrite_languages_and_tones_config"
     readonly 21156: "chatlist_prevent_autoread"
     readonly 21184: "enable_sharing_files_from_web_windows_hybrid"
+    readonly 21198: "pq_keys_upload"
+    readonly 21200: "pq_max_keys_on_server"
+    readonly 21201: "pq_batch_upload_size"
     readonly 21235: "paa_support_for_disabled_epehemerality"
     readonly 21250: "web_navigation_bar_updates_tab"
     readonly 21261: "group_history_settings"
@@ -3392,6 +3402,7 @@ export declare const WA_ABPROPS_BY_CODE: {
     readonly 24114: "biz_ai_agent_3p_store_links_enabled"
     readonly 24133: "lists_chat_list_row_pill_enabled"
     readonly 24147: "web_history_sync_worker_enabled"
+    readonly 24160: "pq_1on1_message_enabled"
     readonly 24161: "bug_reporting_using_graphql"
     readonly 24173: "wavoip_ml_transport_download_versions"
     readonly 24174: "wavoip_ml_nadl_model_download_versions"
@@ -4348,6 +4359,9 @@ export declare const WA_ABPROPS_BY_CODE: {
     readonly 34062: "br_consumer_delete_payment_info_web_enabled"
     readonly 34081: "ai_chat_threads_export_by_threads_enabled"
     readonly 34093: "enable_join_ongoing_call_refactor"
+    readonly 35210: "pq_1on1_messaging_killswitch"
+    readonly 35305: "pq_session_upgrade_max_devices_per_period"
+    readonly 35744: "pq_session_upgrade_period_days"
 }
 
 export declare const WA_GROUP_ABPROPS_BY_CODE: {

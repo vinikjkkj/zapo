@@ -1,5 +1,6 @@
 import type { WaButtonAddonKind } from '@message/encode/content'
 import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NODE_TAGS } from '@protocol/constants'
+import { SIGNAL_PQXDH_VERSION } from '@signal/constants'
 import type { BinaryNode } from '@transport/types'
 
 interface EncryptedParticipant {
@@ -51,15 +52,34 @@ type GroupRetryMessageInput = {
     readonly metaNode?: BinaryNode
 }
 
+/**
+ * `session_type` for an `<enc>` payload: `pq` when the Signal ciphertext was
+ * written by a post-quantum session (version nibble 4), otherwise `undefined`.
+ */
+export function resolveEncSessionType(
+    encType: string,
+    ciphertext: Uint8Array | undefined
+): 'pq' | undefined {
+    if (encType === 'skmsg' || !ciphertext || ciphertext.length === 0) {
+        return undefined
+    }
+    return ciphertext[0] >>> 4 === SIGNAL_PQXDH_VERSION ? 'pq' : undefined
+}
+
 function buildEncAttrs(
     encType: string,
     mediatype?: string,
     retryCount?: number,
-    decryptFail?: string
+    decryptFail?: string,
+    ciphertext?: Uint8Array
 ): Record<string, string> {
     const attrs: Record<string, string> = {
         v: WA_MESSAGE_TYPES.ENC_VERSION,
         type: encType
+    }
+    const sessionType = resolveEncSessionType(encType, ciphertext)
+    if (sessionType) {
+        attrs.session_type = sessionType
     }
     if (mediatype) {
         attrs.mediatype = mediatype
@@ -126,7 +146,7 @@ function buildEncryptedToNode(
         content: [
             {
                 tag: WA_MESSAGE_TAGS.ENC,
-                attrs: buildEncAttrs(p.encType, mediatype, undefined, decryptFail),
+                attrs: buildEncAttrs(p.encType, mediatype, undefined, decryptFail, p.ciphertext),
                 content: p.ciphertext
             }
         ]
@@ -267,7 +287,13 @@ export function buildGroupRetryMessageNode(input: GroupRetryMessageInput): Binar
     }
     content.push({
         tag: WA_MESSAGE_TAGS.ENC,
-        attrs: buildEncAttrs(input.encType, input.mediatype, input.retryCount, input.decryptFail),
+        attrs: buildEncAttrs(
+            input.encType,
+            input.mediatype,
+            input.retryCount,
+            input.decryptFail,
+            input.ciphertext
+        ),
         content: input.ciphertext
     })
     if (input.deviceIdentity) {

@@ -75,6 +75,7 @@ import type { OutboundRetryTracker } from '@retry/tracker'
 import type { WaRetryReplayPayload } from '@retry/types'
 import type { SignalDeviceSyncApi } from '@signal/api/SignalDeviceSyncApi'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
+import { deleteSessionScopes } from '@signal/session/pq-scope'
 import type { SignalResolvedSessionTarget, SignalSessionResolver } from '@signal/session/resolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress } from '@signal/types'
@@ -739,7 +740,7 @@ export class WaMessageDispatchCoordinator {
             throw new Error('syncSignalSession supports only direct chats')
         }
         if (force || reasonIdentity) {
-            await this.deps.sessionStore.deleteSession(address)
+            await deleteSessionScopes(this.deps.sessionStore, address)
         }
         await this.deps.sessionResolver.ensureSession(address, jid, undefined, reasonIdentity)
     }
@@ -1775,7 +1776,8 @@ export class WaMessageDispatchCoordinator {
         }
         const resolvedFanoutTargets = await this.deps.sessionResolver.ensureSessionsBatch(
             deviceJids,
-            expectedIdentityByJid
+            expectedIdentityByJid,
+            { oneToOne: !isBotJid(recipientJid) }
         )
         const resolvedFanoutTargetsByJid = new Map<string, SignalResolvedSessionTarget>()
         for (let index = 0; index < resolvedFanoutTargets.length; index += 1) {

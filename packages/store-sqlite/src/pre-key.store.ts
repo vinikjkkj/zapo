@@ -1,11 +1,12 @@
 import {
     decodeSignalPreKeyRow,
+    type KyberPreKeyRecord,
     type PreKeyRecord,
     type SignalMetaRow,
     type SignalPreKeyRow
 } from 'zapo-js/signal'
-import type { WaPreKeyStore as WaPreKeyStoreContract } from 'zapo-js/store'
-import { asNumber, resolvePositive, toBoolOrUndef } from 'zapo-js/util'
+import type { WaPqPreKeyStore, WaPreKeyStore as WaPreKeyStoreContract } from 'zapo-js/store'
+import { asBytes, asNumber, resolvePositive, toBoolOrUndef } from 'zapo-js/util'
 
 import { BaseSqliteStore } from './BaseSqliteStore'
 import type { WaSqliteConnection } from './connection'
@@ -20,7 +21,33 @@ interface WaPreKeySqliteStoreOptions {
     readonly preKeyBatchSize?: number
 }
 
-export class WaPreKeySqliteStore extends BaseSqliteStore implements WaPreKeyStoreContract {
+/** Kyber pre-key ids are 3 bytes on the wire; the id counter wraps just before 2^24. */
+const KYBER_PREKEY_ID_BORDER = 16_777_215
+
+interface KyberPreKeyRow extends Record<string, unknown> {
+    readonly key_id: unknown
+    readonly pub_key: unknown
+    readonly priv_key: unknown
+    readonly signature: unknown
+    readonly last_resort: unknown
+}
+
+function decodeKyberPreKeyRow(row: KyberPreKeyRow): KyberPreKeyRecord {
+    return {
+        keyId: asNumber(row.key_id, 'signal_kyber_prekey.key_id'),
+        keyPair: {
+            pubKey: asBytes(row.pub_key, 'signal_kyber_prekey.pub_key'),
+            privKey: asBytes(row.priv_key, 'signal_kyber_prekey.priv_key')
+        },
+        signature: asBytes(row.signature, 'signal_kyber_prekey.signature'),
+        lastResort: toBoolOrUndef(row.last_resort)
+    }
+}
+
+export class WaPreKeySqliteStore
+    extends BaseSqliteStore
+    implements WaPreKeyStoreContract, WaPqPreKeyStore
+{
     private readonly preKeyBatchSize: number
 
     public constructor(
@@ -235,12 +262,147 @@ export class WaPreKeySqliteStore extends BaseSqliteStore implements WaPreKeyStor
         return meta.serverHasPreKeys
     }
 
+    public async putKyberPreKeys(records: readonly KyberPreKeyRecord[]): Promise<void> {
+        if (records.length === 0) {
+            return
+        }
+        await this.withTransaction((db) => {
+            for (const record of records) {
+                db.run(
+                    `INSERT INTO signal_kyber_prekey (
+                        session_id,
+                        key_id,
+                        pub_key,
+                        priv_key,
+                        signature,
+                        last_resort
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(session_id, key_id) DO UPDATE SET
+                        pub_key=excluded.pub_key,
+                        priv_key=excluded.priv_key,
+                        signature=excluded.signature,
+                        last_resort=excluded.last_resort`,
+                    [
+                        this.options.sessionId,
+                        record.keyId,
+                        record.keyPair.pubKey,
+                        record.keyPair.privKey,
+                        record.signature,
+                        record.lastResort === true ? 1 : 0
+                    ]
+                )
+            }
+        })
+    }
+
+    public async getKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
+        const db = await this.getConnection()
+        const row = db.get<KyberPreKeyRow>(
+            `SELECT key_id, pub_key, priv_key, signature, last_resort
+             FROM signal_kyber_prekey
+             WHERE session_id = ? AND key_id = ?`,
+            [this.options.sessionId, keyId]
+        )
+        return row ? decodeKyberPreKeyRow(row) : null
+    }
+
+    public async consumeKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
+        return this.withTransaction((db) => {
+            const row = db.get<KyberPreKeyRow>(
+                `SELECT key_id, pub_key, priv_key, signature, last_resort
+                 FROM signal_kyber_prekey
+                 WHERE session_id = ? AND key_id = ?`,
+                [this.options.sessionId, keyId]
+            )
+            if (!row) {
+                return null
+            }
+            const record = decodeKyberPreKeyRow(row)
+            if (record.lastResort !== true) {
+                db.run(`DELETE FROM signal_kyber_prekey WHERE session_id = ? AND key_id = ?`, [
+                    this.options.sessionId,
+                    keyId
+                ])
+            }
+            return record
+        })
+    }
+
+    public async removeKyberPreKeys(keyIds: readonly number[]): Promise<void> {
+        if (keyIds.length === 0) {
+            return
+        }
+        await this.withTransaction((db) => {
+            for (let index = 0; index < keyIds.length; index += 1) {
+                db.run(`DELETE FROM signal_kyber_prekey WHERE session_id = ? AND key_id = ?`, [
+                    this.options.sessionId,
+                    keyIds[index]
+                ])
+            }
+        })
+    }
+
+    public async getLatestKyberLastResortKey(): Promise<KyberPreKeyRecord | null> {
+        const db = await this.getConnection()
+        const row = db.get<KyberPreKeyRow>(
+            `SELECT key_id, pub_key, priv_key, signature, last_resort
+             FROM signal_kyber_prekey
+             WHERE session_id = ? AND last_resort = 1
+             ORDER BY key_id DESC
+             LIMIT 1`,
+            [this.options.sessionId]
+        )
+        return row ? decodeKyberPreKeyRow(row) : null
+    }
+
+    public async reserveKyberPreKeyIds(count: number): Promise<number> {
+        if (!Number.isSafeInteger(count) || count <= 0) {
+            throw new Error(`invalid kyber prekey count: ${count}`)
+        }
+        return this.withTransaction((db) => {
+            this.ensureMetaRow(db)
+            const row = db.get<{ next_kyber_prekey_id: unknown }>(
+                `SELECT next_kyber_prekey_id FROM signal_meta WHERE session_id = ?`,
+                [this.options.sessionId]
+            )
+            const first = asNumber(row!.next_kyber_prekey_id, 'signal_meta.next_kyber_prekey_id')
+            db.run(`UPDATE signal_meta SET next_kyber_prekey_id = ? WHERE session_id = ?`, [
+                (first + count) % KYBER_PREKEY_ID_BORDER,
+                this.options.sessionId
+            ])
+            return first
+        })
+    }
+
+    public async getPqMigrated(): Promise<boolean> {
+        const db = await this.getConnection()
+        this.ensureMetaRow(db)
+        const row = db.get<{ pq_migrated: unknown }>(
+            `SELECT pq_migrated FROM signal_meta WHERE session_id = ?`,
+            [this.options.sessionId]
+        )
+        return toBoolOrUndef(row!.pq_migrated) === true
+    }
+
+    public async setPqMigrated(value: boolean): Promise<void> {
+        const db = await this.getConnection()
+        this.ensureMetaRow(db)
+        db.run(`UPDATE signal_meta SET pq_migrated = ? WHERE session_id = ?`, [
+            value ? 1 : 0,
+            this.options.sessionId
+        ])
+    }
+
     public async clear(): Promise<void> {
         await this.withTransaction((db) => {
             db.run('DELETE FROM signal_prekey WHERE session_id = ?', [this.options.sessionId])
+            db.run('DELETE FROM signal_kyber_prekey WHERE session_id = ?', [this.options.sessionId])
             db.run(
                 `UPDATE signal_meta
-                 SET server_has_prekeys = 0, next_prekey_id = 1
+                 SET server_has_prekeys = 0,
+                     next_prekey_id = 1,
+                     next_kyber_prekey_id = 1,
+                     pq_migrated = 0
                  WHERE session_id = ?`,
                 [this.options.sessionId]
             )

@@ -407,6 +407,24 @@ const MIGRATIONS: readonly Migration[] = [
         sql: `
             ALTER TABLE "__PREFIX__mailbox_contacts" ADD COLUMN IF NOT EXISTS username TEXT
         `
+    },
+    {
+        name: '0022_signal_kyber_prekey_schema',
+        domain: 'signal',
+        sql: `
+            CREATE TABLE IF NOT EXISTS "__PREFIX__signal_kyber_prekey" (
+                session_id TEXT NOT NULL,
+                key_id BIGINT NOT NULL,
+                pub_key BYTEA NOT NULL,
+                priv_key BYTEA NOT NULL,
+                signature BYTEA NOT NULL,
+                last_resort BOOLEAN NOT NULL DEFAULT FALSE,
+                PRIMARY KEY (session_id, key_id)
+            );
+
+            ALTER TABLE "__PREFIX__signal_meta" ADD COLUMN IF NOT EXISTS next_kyber_prekey_id BIGINT NOT NULL DEFAULT 1;
+            ALTER TABLE "__PREFIX__signal_meta" ADD COLUMN IF NOT EXISTS pq_migrated BOOLEAN NOT NULL DEFAULT FALSE
+        `
     }
 ]
 

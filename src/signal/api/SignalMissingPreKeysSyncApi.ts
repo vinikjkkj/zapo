@@ -65,10 +65,12 @@ export class SignalMissingPreKeysSyncApi {
     /**
      * Fetches prekey bundles for the requested `targets` in a single IQ.
      * Returns either a per-device bundle list or an error envelope per user.
+     * `options.pqSupport` marks the request as post-quantum capable.
      */
     public async fetchMissingPreKeys(
         targets: readonly SignalMissingPreKeysTarget[],
-        timeoutMs = this.defaultTimeoutMs
+        timeoutMs = this.defaultTimeoutMs,
+        options: { readonly pqSupport?: boolean } = {}
     ): Promise<readonly SignalMissingPreKeysUserResult[]> {
         if (targets.length === 0) {
             return []
@@ -77,7 +79,7 @@ export class SignalMissingPreKeysSyncApi {
             users: targets.length,
             timeoutMs
         })
-        const response = await this.query(buildMissingPreKeysFetchIq(targets), timeoutMs)
+        const response = await this.query(buildMissingPreKeysFetchIq(targets, options), timeoutMs)
         const parsed = this.parseFetchMissingPreKeysResponse(response, targets)
         this.logger.debug('signal fetch missing prekeys success', {
             users: parsed.length
@@ -193,7 +195,8 @@ export class SignalMissingPreKeysSyncApi {
                 regId,
                 identity: parsed.identity,
                 signedKey: parsed.signedKey,
-                ...(parsed.oneTimeKey ? { oneTimeKey: parsed.oneTimeKey } : {})
+                ...(parsed.oneTimeKey ? { oneTimeKey: parsed.oneTimeKey } : {}),
+                ...(parsed.kyberKey ? { kyberKey: parsed.kyberKey } : {})
             }
             const deviceJid = deviceId === 0 ? userJid : `${user}:${deviceId}@${server}`
             bundles[index] = parsed.deviceIdentity

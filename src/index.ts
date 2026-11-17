@@ -359,6 +359,7 @@ export type {
     WaSessionStore,
     WaSignalStore,
     WaIdentityStore,
+    WaPqPreKeyStore,
     WaPreKeyStore,
     WaStoredContactRecord,
     WaStoredMessageRecord,

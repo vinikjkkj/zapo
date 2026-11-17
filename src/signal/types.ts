@@ -1,4 +1,5 @@
 import type { SignalKeyPair } from '@crypto/curves/types'
+import type { KemKeyPair } from '@crypto/kem/types'
 import type { Proto } from '@proto'
 
 export interface RegistrationInfo {
@@ -17,6 +18,18 @@ export interface SignedPreKeyRecord {
     readonly keyPair: SignalKeyPair
     readonly signature: Uint8Array
     readonly uploaded?: boolean
+}
+
+/**
+ * A post-quantum (ML-KEM-1024) pre-key: a KEM key pair plus an XEdDSA signature
+ * over its raw public key, made with the device identity key. `lastResort`
+ * marks the single long-lived key served when the one-time pool is exhausted.
+ */
+export interface KyberPreKeyRecord {
+    readonly keyId: number
+    readonly keyPair: KemKeyPair
+    readonly signature: Uint8Array
+    readonly lastResort?: boolean
 }
 
 export interface SignalAddress {
@@ -66,6 +79,13 @@ export interface SignalInitialExchangeInfo {
     readonly remoteOneTimeId: number | null
     readonly remoteSignedId: number
     readonly localOneTimePubKey: Uint8Array
+    /**
+     * PQXDH: the id of the remote Kyber pre-key consumed, and the KEM
+     * ciphertext the initiator must carry in the first pre-key message so the
+     * responder can decapsulate. Both null on a classic (non-PQ) session.
+     */
+    readonly kyberPreKeyId?: number | null
+    readonly kemCiphertext?: Uint8Array | null
 }
 
 export interface SignalSessionSnapshot {
@@ -77,6 +97,11 @@ export interface SignalSessionSnapshot {
     readonly initialExchangeInfo: SignalInitialExchangeInfo | null
     readonly prevSendChainHighestIndex: number
     readonly aliceBaseKey: Uint8Array | null
+    /**
+     * Signal session format version, written into the message version byte
+     * while post-quantum 1:1 is on. 3 (classic) when absent; 4 for a PQXDH session.
+     */
+    readonly version?: number
 }
 
 export interface SignalSessionRecord extends SignalSessionSnapshot {
@@ -101,6 +126,12 @@ export interface SignalPreKeyBundle {
         readonly id: number
         readonly publicKey: Uint8Array
     }
+    /** PQXDH: the peer's signed ML-KEM-1024 pre-key, when the bundle carries one. */
+    readonly kyberKey?: {
+        readonly id: number
+        readonly publicKey: Uint8Array
+        readonly signature: Uint8Array
+    }
     readonly ratchetKey?: Uint8Array
 }
 
@@ -116,6 +147,13 @@ export interface ParsedPreKeySignalMessage extends ParsedSignalMessage {
     readonly sessionBaseKey: Uint8Array
     readonly localSignedPreKeyId: number
     readonly localOneTimeKeyId: number | null
+    /**
+     * PQXDH: the id of the local Kyber pre-key the initiator encapsulated
+     * against, and the KEM ciphertext to decapsulate. Both null on a classic
+     * pre-key message (v3).
+     */
+    readonly localKyberPreKeyId: number | null
+    readonly kemCiphertext: Uint8Array | null
 }
 
 export interface SenderKeyRecord {

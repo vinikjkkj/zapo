@@ -5,7 +5,7 @@ import { sha1 } from '@crypto'
 import { createNoopLogger } from '@infra/log/types'
 import { WA_IQ_TYPES, WA_NODE_TAGS } from '@protocol/constants'
 import { parseSignalAddressFromJid } from '@protocol/jid'
-import { decodeExactLength, parseUint } from '@signal/api/codec'
+import { decodeExactLength, parseSignalKeyBundleFromNode, parseUint } from '@signal/api/codec'
 import {
     SIGNAL_KEY_BUNDLE_TYPE_BYTES,
     SIGNAL_KEY_DATA_LENGTH,
@@ -1977,3 +1977,104 @@ for (const { type, status, exists } of [
         assert.equal(entry.invalid, false)
     })
 }
+
+test('parseSignalKeyBundleFromNode extracts the optional kyber pre-key', () => {
+    const bytes = (len: number, fill: number) => new Uint8Array(len).fill(fill)
+    const skey = {
+        tag: 'skey',
+        attrs: {},
+        content: [
+            { tag: 'id', attrs: {}, content: new Uint8Array([0, 0, 7]) },
+            { tag: 'value', attrs: {}, content: bytes(32, 2) },
+            { tag: 'signature', attrs: {}, content: bytes(64, 3) }
+        ]
+    }
+    const identity = { tag: 'identity', attrs: {}, content: bytes(32, 1) }
+    const pqkey = (valueLen: number) => ({
+        tag: 'pqkey',
+        attrs: {},
+        content: [
+            { tag: 'id', attrs: {}, content: new Uint8Array([0, 0, 9]) },
+            { tag: 'value', attrs: {}, content: bytes(valueLen, 4) },
+            { tag: 'signature', attrs: {}, content: bytes(64, 5) }
+        ]
+    })
+
+    const good = parseSignalKeyBundleFromNode(
+        { tag: 'bundle', attrs: {}, content: [identity, skey, pqkey(1568)] },
+        'test'
+    )
+    assert.equal(good.kyberKey?.id, 9)
+    assert.equal(good.kyberKey?.publicKey.length, 1568)
+    assert.equal(good.kyberKey?.signature.length, 64)
+
+    // malformed kyber key is ignored, the rest of the bundle still parses
+    const bad = parseSignalKeyBundleFromNode(
+        { tag: 'bundle', attrs: {}, content: [identity, skey, pqkey(10)] },
+        'test'
+    )
+    assert.equal(bad.kyberKey, undefined)
+    assert.equal(bad.signedKey.id, 7)
+
+    // no kyber key at all
+    const none = parseSignalKeyBundleFromNode(
+        { tag: 'bundle', attrs: {}, content: [identity, skey] },
+        'test'
+    )
+    assert.equal(none.kyberKey, undefined)
+})
+
+test('parseSignalKeyBundleFromNode reads the legacy pq tag only when asked to', () => {
+    const bytes = (len: number, fill: number) => new Uint8Array(len).fill(fill)
+    const bundle = (pqTag: string): BinaryNode => ({
+        tag: 'bundle',
+        attrs: {},
+        content: [
+            { tag: 'identity', attrs: {}, content: bytes(32, 1) },
+            {
+                tag: 'skey',
+                attrs: {},
+                content: [
+                    { tag: 'id', attrs: {}, content: new Uint8Array([0, 0, 7]) },
+                    { tag: 'value', attrs: {}, content: bytes(32, 2) },
+                    { tag: 'signature', attrs: {}, content: bytes(64, 3) }
+                ]
+            },
+            {
+                tag: pqTag,
+                attrs: {},
+                content: [
+                    { tag: 'id', attrs: {}, content: new Uint8Array([0, 1, 2]) },
+                    { tag: 'value', attrs: {}, content: bytes(1568, 4) },
+                    { tag: 'signature', attrs: {}, content: bytes(64, 5) }
+                ]
+            }
+        ]
+    })
+
+    assert.equal(parseSignalKeyBundleFromNode(bundle('pq'), 'test').kyberKey, undefined)
+    assert.equal(parseSignalKeyBundleFromNode(bundle('pqkey'), 'test').kyberKey?.id, 258)
+    assert.equal(
+        parseSignalKeyBundleFromNode(bundle('pq'), 'test', { pqLegacyAlias: true }).kyberKey?.id,
+        258
+    )
+})
+
+test('signal session sync api marks the key request pqsupport only when asked', async () => {
+    const requests: BinaryNode[] = []
+    const api = new SignalSessionSyncApi({
+        logger: createNoopLogger(),
+        query: async (node) => {
+            requests.push(node)
+            return iqResult([])
+        }
+    })
+    const targets = [{ jid: '5511999999999:1@lid' }]
+
+    await api.fetchKeyBundles(targets).catch(() => undefined)
+    await api.fetchKeyBundles(targets, undefined, { pqSupport: false }).catch(() => undefined)
+    await api.fetchKeyBundles(targets, undefined, { pqSupport: true }).catch(() => undefined)
+
+    const keyAttrs = requests.map((request) => (request.content as BinaryNode[])[0].attrs)
+    assert.deepEqual(keyAttrs, [{}, {}, { pqsupport: 'true' }])
+})

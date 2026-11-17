@@ -1,6 +1,8 @@
 import { parseIqError } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 export {
+    buildKyberPreKeyAddIq,
+    buildKyberPreKeySetIq,
     buildMissingPreKeysFetchIq,
     buildPreKeyUploadIq,
     buildSignedPreKeyRotateIq

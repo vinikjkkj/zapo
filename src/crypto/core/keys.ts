@@ -48,16 +48,17 @@ export function prependVersion(content: Uint8Array, version: number): Uint8Array
 export function readVersionedContent(
     versionContent: Uint8Array,
     expectedVersion: number,
-    suffixLength: number
+    suffixLength: number,
+    maxVersion: number = expectedVersion
 ): Uint8Array {
     if (versionContent.length < 1) {
         throw new Error('signal versioned content is empty')
     }
     const version = versionContent[0] >>> 4
-    if (version !== expectedVersion) {
-        if (version < expectedVersion) {
-            throw new Error('legacy signal version')
-        }
+    if (version < expectedVersion) {
+        throw new Error('legacy signal version')
+    }
+    if (version > maxVersion) {
         throw new Error(`unsupported signal version ${version}`)
     }
 

@@ -27,6 +27,7 @@ import {
 import { normalizeUsername } from '@protocol/username'
 import type { WaRetryDecryptFailureContext } from '@retry/types'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
+import { toPqSessionAddress } from '@signal/session/pq-scope'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress } from '@signal/types'
 import { buildAckNode, buildReceiptNode } from '@transport/node/builders/global'
@@ -624,6 +625,9 @@ export async function handleIncomingMessageAck(
         let skmsgFailure: DecryptEncNodeResult | null = null
         let encCount = 0
         let firstEncType: string | undefined
+        const postQuantum = nodeContent.some(
+            (child) => child.tag === WA_MESSAGE_TAGS.ENC && child.attrs.session_type === 'pq'
+        )
 
         for (const child of nodeContent) {
             if (child.tag !== WA_MESSAGE_TAGS.ENC) {
@@ -683,10 +687,14 @@ export async function handleIncomingMessageAck(
                                 options.getMeJid?.(),
                                 options.getMeLid?.()
                             )
-                            return options.signalProtocol!.decryptMessage(
+                            const sessionAddress =
                                 sessionJid === senderJid
                                     ? senderAddress
-                                    : parseSignalAddressFromJid(sessionJid),
+                                    : parseSignalAddressFromJid(sessionJid)
+                            return options.signalProtocol!.decryptMessage(
+                                postQuantum
+                                    ? (toPqSessionAddress(sessionAddress) ?? sessionAddress)
+                                    : sessionAddress,
                                 {
                                     type: encType,
                                     ciphertext

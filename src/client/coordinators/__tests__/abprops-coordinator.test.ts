@@ -102,3 +102,53 @@ test('ab props reset drops every cached override', async () => {
 
     assert.equal(coordinator.getConfigValue('group_size_limit'), 257)
 })
+
+test('ab props served for the post-quantum flags are read by name', async () => {
+    const coordinator = await syncWith([
+        { configCode: 21198, configValue: '1' },
+        { configCode: 24160, configValue: '1' },
+        { configCode: 21201, configValue: '4' },
+        { configCode: 21200, configValue: '50' }
+    ])
+
+    assert.equal(coordinator.getConfigValue<boolean>('pq_keys_upload'), true)
+    assert.equal(coordinator.getConfigValue<boolean>('pq_1on1_message_enabled'), true)
+    assert.equal(coordinator.getConfigValue<number>('pq_batch_upload_size'), 4)
+    assert.equal(coordinator.getConfigValue<number>('pq_max_keys_on_server'), 50)
+    assert.equal(
+        new WaAbPropsCoordinator({
+            logger: createNoopLogger(),
+            runtime: { queryWithContext: async () => buildAbPropsResult([]) }
+        }).getConfigValue<boolean>('pq_keys_upload'),
+        false
+    )
+})
+
+test('waitForSync settles once the sync in flight has applied its props', async () => {
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => {
+        release = resolve
+    })
+    const coordinator = new WaAbPropsCoordinator({
+        logger: createNoopLogger(),
+        runtime: {
+            queryWithContext: async () => {
+                await gate
+                return buildAbPropsResult([{ configCode: 21198, configValue: '1' }])
+            }
+        }
+    })
+
+    await coordinator.waitForSync()
+    coordinator.sync()
+    let settled = false
+    const waiting = coordinator.waitForSync().then(() => {
+        settled = true
+    })
+    await Promise.resolve()
+    assert.equal(settled, false)
+
+    release()
+    await waiting
+    assert.equal(coordinator.getConfigValue<boolean>('pq_keys_upload'), true)
+})

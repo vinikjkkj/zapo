@@ -1834,6 +1834,14 @@ function createPassiveTasksCoordinator(overrides: {
             getOrGenSinglePreKey: async () => ({}) as never,
             consumePreKeyById: async () => null,
             markKeyAsUploaded: async () => undefined,
+            putKyberPreKeys: async () => undefined,
+            getKyberPreKeyById: async () => null,
+            consumeKyberPreKeyById: async () => null,
+            removeKyberPreKeys: async () => undefined,
+            getLatestKyberLastResortKey: async () => null,
+            reserveKyberPreKeyIds: async () => 1,
+            getPqMigrated: async () => false,
+            setPqMigrated: async () => undefined,
             clear: async () => undefined
         },
         signalDigestSync: {
@@ -1857,6 +1865,9 @@ function createPassiveTasksCoordinator(overrides: {
                 overrides.requeueDanglingReceipt ?? ((node) => requeued.push(node)),
             shouldQueueDanglingReceipt: overrides.shouldQueueDanglingReceipt ?? (() => true),
             syncAbProps: () => undefined,
+            waitForAbPropsSync: async () => undefined,
+            getAbPropNumber: () => 0,
+            waitForOfflineDeliveryEnd: async () => undefined,
             sendInitialPresence: async () => undefined
         }
     })

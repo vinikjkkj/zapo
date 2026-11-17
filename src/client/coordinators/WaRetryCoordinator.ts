@@ -11,6 +11,7 @@ import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto } from '@proto'
 import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NACK_REASONS } from '@protocol/constants'
 import {
+    isBotJid,
     isGroupOrBroadcastJid,
     isHostedDeviceJid,
     normalizeDeviceJid,
@@ -37,10 +38,16 @@ import type {
 import type { SignalDeviceSyncApi } from '@signal/api/SignalDeviceSyncApi'
 import type { SignalMissingPreKeysSyncApi } from '@signal/api/SignalMissingPreKeysSyncApi'
 import { generatePreKeyPair } from '@signal/registration/keygen'
+import {
+    deleteSessionScopes,
+    SIGNAL_PQ_DISABLED,
+    type SignalPqPolicy,
+    toPqSessionAddress
+} from '@signal/session/pq-scope'
 import type { SignalSessionResolver } from '@signal/session/resolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
-import type { SignalPreKeyBundle } from '@signal/types'
-import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
+import type { KyberPreKeyRecord, SignalPreKeyBundle } from '@signal/types'
+import { hasPqPreKeyStore, type WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
 import type { WaSessionStore } from '@store/contracts/session.store'
@@ -92,6 +99,8 @@ interface WaRetryCoordinatorOptions {
      * is read; falls back to the spec default when unwired.
      */
     readonly getAbPropNumber?: (name: WaAbPropName) => number
+    /** Post-quantum gates; omitted means classic Signal only. */
+    readonly pqPolicy?: SignalPqPolicy
 }
 
 type RetryAuthorization =
@@ -196,6 +205,7 @@ function resolvePlaceholderResendSkipSubtype(node: BinaryNode): string | null {
 
 export class WaRetryCoordinator {
     private readonly deps: WaRetryCoordinatorOptions
+    private readonly pqPolicy: SignalPqPolicy
     private readonly retryTtlMs: number
     private readonly retryReplayService: WaRetryReplayService
     private readonly retryProcessingByMessageId: Map<string, Promise<void>>
@@ -208,6 +218,7 @@ export class WaRetryCoordinator {
 
     public constructor(options: WaRetryCoordinatorOptions) {
         this.deps = options
+        this.pqPolicy = options.pqPolicy ?? SIGNAL_PQ_DISABLED
         this.retryTtlMs = options.retryStore.getTtlMs?.() ?? RETRY_OUTBOUND_TTL_MS
         this.retryReplayService = new WaRetryReplayService({
             logger: options.logger,
@@ -217,7 +228,9 @@ export class WaRetryCoordinator {
             getCurrentCredentials: options.getCurrentCredentials,
             isMobilePrimary: options.isMobilePrimary,
             resolveUserIcdc: options.resolveUserIcdc,
-            resolvePrivacyTokenNode: options.resolvePrivacyTokenNode
+            resolvePrivacyTokenNode: options.resolvePrivacyTokenNode,
+            sessionStore: options.sessionStore,
+            pqPolicy: this.pqPolicy
         })
         this.retryProcessingByMessageId = new Map()
         this.retrySessionBaseKeys = new Map()
@@ -661,9 +674,10 @@ export class WaRetryCoordinator {
         identity: Uint8Array,
         logContext: { readonly stanzaId?: string; readonly from?: string }
     ): Promise<WaRetryKeyBundle | null> {
-        const [signedPreKey, preKey] = await Promise.all([
+        const [signedPreKey, preKey, kyberKey] = await Promise.all([
             this.deps.signalStore.getSignedPreKey(),
-            this.deps.preKeyStore.getOrGenSinglePreKey(generatePreKeyPair)
+            this.deps.preKeyStore.getOrGenSinglePreKey(generatePreKeyPair),
+            this.resolveRetryKyberKey(logContext.from)
         ])
         if (!signedPreKey) {
             this.deps.logger.warn('retry keys section skipped: signed prekey unavailable', {
@@ -685,10 +699,37 @@ export class WaRetryCoordinator {
                 publicKey: toRawPubKey(signedPreKey.keyPair.pubKey),
                 signature: signedPreKey.signature
             },
+            ...(kyberKey
+                ? {
+                      kyberKey: {
+                          id: kyberKey.keyId,
+                          publicKey: kyberKey.keyPair.pubKey,
+                          signature: kyberKey.signature
+                      }
+                  }
+                : {}),
             deviceIdentity: signedIdentity
                 ? proto.ADVSignedDeviceIdentity.encode(signedIdentity).finish()
                 : undefined
         }
+    }
+
+    /** The last-resort Kyber key a 1:1 retry receipt offers, once the PQ upload completed. */
+    private async resolveRetryKyberKey(
+        chatJid: string | undefined
+    ): Promise<KyberPreKeyRecord | null> {
+        const preKeyStore = this.deps.preKeyStore
+        if (
+            !this.pqPolicy.isOneToOneEnabled() ||
+            !chatJid ||
+            isGroupOrBroadcastJid(chatJid) ||
+            isBotJid(chatJid) ||
+            !hasPqPreKeyStore(preKeyStore) ||
+            !(await preKeyStore.getPqMigrated())
+        ) {
+            return null
+        }
+        return preKeyStore.getLatestKyberLastResortKey()
     }
 
     private async updateLocalSessionFromRetryRequest(
@@ -709,7 +750,7 @@ export class WaRetryCoordinator {
         const regIdMismatch =
             !!currentSession && request.regId > 0 && currentSession.remote.regId !== request.regId
         if (regIdMismatch && !request.keyBundle) {
-            await this.deps.sessionStore.deleteSession(requesterAddress)
+            await deleteSessionScopes(this.deps.sessionStore, requesterAddress)
         }
         if (request.keyBundle) {
             if (!request.keyBundle.key || !request.keyBundle.skey.signature) {
@@ -724,7 +765,7 @@ export class WaRetryCoordinator {
                             ...getRemoteRetryReasonLogFields(request.retryReason)
                         }
                     )
-                    await this.deps.sessionStore.deleteSession(requesterAddress)
+                    await deleteSessionScopes(this.deps.sessionStore, requesterAddress)
                     return false
                 }
                 if (regIdMismatch) {
@@ -735,11 +776,11 @@ export class WaRetryCoordinator {
                             ...getRemoteRetryReasonLogFields(request.retryReason)
                         }
                     )
-                    await this.deps.sessionStore.deleteSession(requesterAddress)
+                    await deleteSessionScopes(this.deps.sessionStore, requesterAddress)
                     return false
                 }
             } else if (regIdMismatch) {
-                await this.deps.sessionStore.deleteSession(requesterAddress)
+                await deleteSessionScopes(this.deps.sessionStore, requesterAddress)
             }
             await this.deps.signalProtocol.establishOutgoingSession(
                 requesterAddress,
@@ -758,6 +799,7 @@ export class WaRetryCoordinator {
                 },
                 { reuseExisting: true }
             )
+            await this.refreshPqSessionFromRetryBundle(request, requesterAddress, requestLogger)
             return this.applySessionBaseKeyPolicy(
                 request,
                 requesterJid,
@@ -794,6 +836,47 @@ export class WaRetryCoordinator {
         )
     }
 
+    /**
+     * A 1:1 retry bundle resets the post-quantum session: the old one is
+     * dropped and, when the bundle offers a Kyber key, a fresh one is built.
+     * Failures keep the classic session that was just rebuilt.
+     */
+    private async refreshPqSessionFromRetryBundle(
+        request: WaParsedRetryRequest,
+        requesterAddress: ReturnType<typeof parseSignalAddressFromJid>,
+        requestLogger: Logger
+    ): Promise<void> {
+        const bundle = request.keyBundle
+        const pqAddress =
+            bundle && this.pqPolicy.isOneToOneEnabled() && !isGroupOrBroadcastJid(request.from)
+                ? toPqSessionAddress(requesterAddress)
+                : null
+        if (!bundle || !pqAddress) {
+            return
+        }
+        try {
+            await this.deps.sessionStore.deleteSession(pqAddress)
+            if (!bundle.kyberKey || !bundle.key) {
+                return
+            }
+            await this.deps.signalProtocol.establishOutgoingSession(pqAddress, {
+                regId: request.regId,
+                identity: bundle.identity,
+                signedKey: {
+                    id: bundle.skey.id,
+                    publicKey: bundle.skey.publicKey,
+                    signature: bundle.skey.signature!
+                },
+                oneTimeKey: { id: bundle.key.id, publicKey: bundle.key.publicKey },
+                kyberKey: bundle.kyberKey
+            })
+        } catch (error) {
+            requestLogger.warn('retry request pq session rebuild failed', {
+                message: toError(error).message
+            })
+        }
+    }
+
     private async applySessionBaseKeyPolicy(
         request: WaParsedRetryRequest,
         requesterJid: string,
@@ -827,7 +910,7 @@ export class WaRetryCoordinator {
             return true
         }
 
-        await this.deps.sessionStore.deleteSession(requesterAddress)
+        await deleteSessionScopes(this.deps.sessionStore, requesterAddress)
         this.deps.logger.debug('retry request forcing session refresh due to repeated base key', {
             id: request.stanzaId,
             originalMsgId: request.originalMsgId,
@@ -882,17 +965,21 @@ export class WaRetryCoordinator {
     ): Promise<SignalPreKeyBundle | null> {
         const requesterLogger = this.deps.logger.child({ requester: requesterJid })
         try {
-            const results = await this.deps.signalMissingPreKeysSync.fetchMissingPreKeys([
-                {
-                    userJid: `${requesterAddress.user}@${requesterAddress.server}`,
-                    devices: [
-                        {
-                            deviceId: requesterAddress.device,
-                            registrationId: requesterRegistrationId
-                        }
-                    ]
-                }
-            ])
+            const results = await this.deps.signalMissingPreKeysSync.fetchMissingPreKeys(
+                [
+                    {
+                        userJid: `${requesterAddress.user}@${requesterAddress.server}`,
+                        devices: [
+                            {
+                                deviceId: requesterAddress.device,
+                                registrationId: requesterRegistrationId
+                            }
+                        ]
+                    }
+                ],
+                undefined,
+                { pqSupport: this.pqPolicy.isOneToOneEnabled() }
+            )
             const first = results[0]
             if (!first || !('devices' in first)) {
                 requesterLogger.debug('missing prekeys fetch returned user error', {

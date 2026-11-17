@@ -1,4 +1,5 @@
 export {
+    KyberPreKeyRecord,
     PreKeyRecord,
     RegistrationInfo,
     SenderKeyDistributionRecord,

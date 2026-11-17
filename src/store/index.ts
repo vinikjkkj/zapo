@@ -37,7 +37,11 @@ export type {
     WaAppStateStore
 } from '@store/contracts/appstate.store'
 export type { WaIdentityStore } from '@store/contracts/identity.store'
-export type { WaPreKeyStore } from '@store/contracts/pre-key.store'
+export {
+    hasPqPreKeyStore,
+    type WaPqPreKeyStore,
+    type WaPreKeyStore
+} from '@store/contracts/pre-key.store'
 export type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
 export type { WaSessionStore } from '@store/contracts/session.store'
 export type { WaSignalStore } from '@store/contracts/signal.store'

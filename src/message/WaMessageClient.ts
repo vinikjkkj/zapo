@@ -20,6 +20,7 @@ import {
     WA_NODE_TAGS
 } from '@protocol/constants'
 import { buildReceiptNode } from '@transport/node/builders/global'
+import { resolveEncSessionType } from '@transport/node/builders/message'
 import type { BinaryNode } from '@transport/types'
 import { delay } from '@util/async'
 import { parseOptionalInt, toError } from '@util/primitives'
@@ -222,6 +223,10 @@ export class WaMessageClient {
         const encAttrs: Record<string, string> = {
             v: WA_MESSAGE_TYPES.ENC_VERSION,
             type: input.encType
+        }
+        const sessionType = resolveEncSessionType(input.encType, input.ciphertext)
+        if (sessionType) {
+            encAttrs.session_type = sessionType
         }
         if (input.mediatype) {
             encAttrs.mediatype = input.mediatype

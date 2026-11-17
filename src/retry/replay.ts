@@ -22,8 +22,11 @@ import type {
     WaRetryOutboundMessageRecord,
     WaRetryPlaintextReplayPayload
 } from '@retry/types'
+import { type SignalPqPolicy, toPqSessionAddress } from '@signal/session/pq-scope'
 import type { SignalSessionResolver } from '@signal/session/resolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
+import type { SignalAddress } from '@signal/types'
+import type { WaSessionStore } from '@store/contracts/session.store'
 import { decodeBinaryNode } from '@transport/binary'
 import { buildGroupRetryMessageNode, buildMetaNode } from '@transport/node/builders/message'
 import { findNodeChild } from '@transport/node/helpers'
@@ -44,6 +47,12 @@ export interface WaRetryReplayServiceOptions {
      * recipients.
      */
     readonly resolvePrivacyTokenNode?: (recipientJid: string) => Promise<BinaryNode | null>
+    /**
+     * With both set, a direct resend goes through the requester's post-quantum
+     * session when one exists.
+     */
+    readonly sessionStore?: Pick<WaSessionStore, 'hasSession'>
+    readonly pqPolicy?: SignalPqPolicy
 }
 
 export type WaRetryResendResult = 'resent' | 'ineligible'
@@ -134,10 +143,13 @@ export class WaRetryReplayService {
                 logContext: 'direct'
             })) ?? payload.plaintext
 
-        await this.options.sessionResolver.ensureSession(requesterAddress, requesterJid)
+        const pqSessionAddress = await this.findPqSessionAddress(requesterAddress)
+        if (!pqSessionAddress) {
+            await this.options.sessionResolver.ensureSession(requesterAddress, requesterJid)
+        }
 
         const encrypted = await this.options.signalProtocol.encryptMessage(
-            requesterAddress,
+            pqSessionAddress ?? requesterAddress,
             plaintext
         )
         const deviceIdentity =
@@ -160,6 +172,15 @@ export class WaRetryReplayService {
             privacyTokenNode
         })
         return 'resent'
+    }
+
+    private async findPqSessionAddress(address: SignalAddress): Promise<SignalAddress | null> {
+        const { sessionStore, pqPolicy } = this.options
+        if (!sessionStore || !pqPolicy?.isOneToOneEnabled()) {
+            return null
+        }
+        const twin = toPqSessionAddress(address)
+        return twin && (await sessionStore.hasSession(twin)) ? twin : null
     }
 
     private resolveSignedDeviceIdentity(context: string): Uint8Array | undefined {

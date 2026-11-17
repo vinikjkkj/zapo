@@ -1,3 +1,4 @@
+import { ML_KEM_1024_PUBLIC_KEY_BYTES } from '@crypto/kem/constants'
 import { WA_NODE_TAGS } from '@protocol/constants'
 import {
     SIGNAL_KEY_DATA_LENGTH,
@@ -46,6 +47,11 @@ export interface ParsedSignalKeyBundleNode {
         readonly id: number
         readonly publicKey: Uint8Array
     }
+    readonly kyberKey?: {
+        readonly id: number
+        readonly publicKey: Uint8Array
+        readonly signature: Uint8Array
+    }
     readonly deviceIdentity?: Uint8Array
 }
 
@@ -57,7 +63,8 @@ export interface ParsedSignalKeyBundleNode {
  */
 export function parseSignalKeyBundleFromNode(
     node: BinaryNode,
-    fieldPrefix: string
+    fieldPrefix: string,
+    options: { readonly pqLegacyAlias?: boolean } = {}
 ): ParsedSignalKeyBundleNode {
     const [identityNode, signedKeyNode, oneTimeKeyNode, deviceIdentityNode] =
         findNodeChildrenByTags(node, [
@@ -141,5 +148,46 @@ export function parseSignalKeyBundleFromNode(
         )
     }
 
-    return { identity, signedKey, oneTimeKey, deviceIdentity }
+    // Optional post-quantum pre-key. A malformed one is ignored instead of
+    // failing the bundle. Retry bundles also accept the legacy `<pq>` tag.
+    const [pqKeyNode] = findNodeChildrenByTags(node, [WA_NODE_TAGS.PQKEY] as const)
+    const [pqAliasNode] = options.pqLegacyAlias
+        ? findNodeChildrenByTags(node, [WA_NODE_TAGS.PQ] as const)
+        : []
+    const kyberKeyNode = pqKeyNode ?? pqAliasNode
+    let kyberKey: ParsedSignalKeyBundleNode['kyberKey']
+    if (kyberKeyNode) {
+        const [kyberIdNode, kyberValueNode, kyberSignatureNode] = findNodeChildrenByTags(
+            kyberKeyNode,
+            [WA_NODE_TAGS.ID, WA_NODE_TAGS.VALUE, WA_NODE_TAGS.SIGNATURE] as const
+        )
+        if (kyberIdNode && kyberValueNode && kyberSignatureNode) {
+            try {
+                kyberKey = {
+                    id: parseUint(
+                        decodeExactLength(
+                            kyberIdNode.content,
+                            `${fieldPrefix}.pqkey.id`,
+                            SIGNAL_KEY_ID_LENGTH
+                        ),
+                        `${fieldPrefix}.pqkey.id`
+                    ),
+                    publicKey: decodeExactLength(
+                        kyberValueNode.content,
+                        `${fieldPrefix}.pqkey.value`,
+                        ML_KEM_1024_PUBLIC_KEY_BYTES
+                    ),
+                    signature: decodeExactLength(
+                        kyberSignatureNode.content,
+                        `${fieldPrefix}.pqkey.signature`,
+                        SIGNAL_SIGNATURE_LENGTH
+                    )
+                }
+            } catch {
+                kyberKey = undefined
+            }
+        }
+    }
+
+    return { identity, signedKey, oneTimeKey, kyberKey, deviceIdentity }
 }
