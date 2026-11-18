@@ -160,7 +160,7 @@
         "typecheck:bench": "tsc -p bench/tsconfig.json",
         "typecheck:packages": "turbo run typecheck",
         "typecheck:all": "npm run typecheck && npm run typecheck:examples && npm run typecheck:bench && npm run typecheck:packages",
-        "lint": "eslint . --ext .ts,.js,.cjs",
+        "lint": "node --max-old-space-size=8192 ./node_modules/eslint/bin/eslint.js . --ext .ts,.js,.cjs",
         "lint:fix": "eslint . --ext .ts,.js,.cjs --fix",
         "format": "prettier . --write",
         "format:check": "prettier . --check"
