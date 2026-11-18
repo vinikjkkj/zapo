@@ -3,6 +3,7 @@ import {
     decodeEnumValue,
     decodeIndexArgsFromSchema,
     getAppstateSchemaByActionName,
+    WA_APPSTATE_LEGACY_INDEX_ARGS,
     type WaAppstateSchema
 } from '@appstate-spec'
 import type { WaAppStateMutationEvent } from '@client/types'
@@ -19,10 +20,12 @@ export function parseAppStateMutationEvent(
     if (!resolved) {
         return null
     }
-    const indexArgs = decodeIndexArgsFromSchema(resolved.schema, parts)
-    if (!indexArgs) {
+    const decoded = decodeIndexArgsFromSchema(resolved.schema, parts)
+    if (!decoded) {
         return null
     }
+    const legacy = WA_APPSTATE_LEGACY_INDEX_ARGS[resolved.key]
+    const indexArgs = legacy ? withLegacyIndexArgs(decoded, legacy) : decoded
     const valueRaw: Proto.ISyncActionValue | null = mutation.value ?? null
 
     const base = {
@@ -50,6 +53,17 @@ export function parseAppStateMutationEvent(
         ...(data ?? {}),
         ...base
     } as WaAppStateMutationEvent
+}
+
+function withLegacyIndexArgs(
+    args: Readonly<Record<string, string | boolean | null>>,
+    legacy: Readonly<Record<string, string>>
+): Readonly<Record<string, string | boolean | null>> {
+    const out: Record<string, string | boolean | null> = { ...args }
+    for (const legacyName of Object.keys(legacy)) {
+        out[legacyName] = args[legacy[legacyName]]
+    }
+    return out
 }
 
 function unwrapData(
@@ -111,18 +125,30 @@ function applyDecodeAtPath(
         }
         return
     }
+    // Copy each container on the path: the input objects are shared with `_raw.value`.
     const next = obj[head]
     if (Array.isArray(next)) {
-        for (const item of next) {
-            if (item && typeof item === 'object') {
-                applyDecodeAtPath(item as Record<string, unknown>, rest, transform)
-            }
-        }
+        obj[head] = next.map((item) => {
+            if (!item || typeof item !== 'object') return item
+            const copy = cloneMessage(item as Record<string, unknown>)
+            applyDecodeAtPath(copy, rest, transform)
+            return copy
+        })
         return
     }
     if (next && typeof next === 'object') {
-        applyDecodeAtPath(next as Record<string, unknown>, rest, transform)
+        const copy = cloneMessage(next as Record<string, unknown>)
+        obj[head] = copy
+        applyDecodeAtPath(copy, rest, transform)
     }
+}
+
+/** Shallow copy that keeps the generated message prototype (field defaults) and every own property. */
+function cloneMessage(value: Record<string, unknown>): Record<string, unknown> {
+    return Object.create(
+        Object.getPrototypeOf(value) as object | null,
+        Object.getOwnPropertyDescriptors(value)
+    ) as Record<string, unknown>
 }
 
 function parseIndexParts(index: string): readonly string[] | null {

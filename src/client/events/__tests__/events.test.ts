@@ -48,6 +48,55 @@ test('appstate mutation parser decodes Mute schema', () => {
     }
 })
 
+test('appstate mutation parser sets the legacy index arg name next to the renamed one', () => {
+    const parsed = parseAppStateMutationEvent({
+        collection: 'regular',
+        operation: 'set',
+        source: 'patch',
+        index: JSON.stringify(['label_edit', '7']),
+        value: { labelEditAction: { name: 'Pendente', color: 2 } },
+        version: 3,
+        indexMac: new Uint8Array(),
+        valueMac: new Uint8Array(),
+        keyId: new Uint8Array(),
+        timestamp: 10
+    })
+
+    assert.ok(parsed && parsed.schema === 'LabelEdit' && parsed.operation === 'set')
+    if (parsed?.schema === 'LabelEdit' && parsed.operation === 'set') {
+        assert.equal(parsed.labelId, '7')
+        assert.equal(parsed.id, '7')
+        assert.equal(parsed.name, 'Pendente')
+    }
+})
+
+test('appstate mutation parser decodes nested enums without touching the raw value', () => {
+    const value = proto.SyncActionValue.decode(
+        proto.SyncActionValue.encode({
+            wasaRootSecretAction: { secrets: [{ id: 's1', status: 1 }] }
+        }).finish()
+    )
+    const parsed = parseAppStateMutationEvent({
+        collection: 'regular_high',
+        operation: 'set',
+        source: 'patch',
+        index: JSON.stringify(['wasa_root_secret', '5511@s.whatsapp.net']),
+        value,
+        version: 1,
+        indexMac: new Uint8Array(),
+        valueMac: new Uint8Array(),
+        keyId: new Uint8Array(),
+        timestamp: 10
+    })
+
+    assert.ok(parsed && parsed.schema === 'WasaRootSecret' && parsed.operation === 'set')
+    if (parsed?.schema === 'WasaRootSecret' && parsed.operation === 'set') {
+        assert.equal(parsed.secrets?.[0]?.status, 'ACTIVE')
+        assert.equal(parsed.secrets?.[0]?.epoch, null)
+        assert.equal(parsed._raw.value?.wasaRootSecretAction?.secrets?.[0]?.status, 1)
+    }
+})
+
 test('appstate mutation parser decodes Star schema (message scope, boolString + jidOrZero)', () => {
     const parsed = parseAppStateMutationEvent({
         collection: 'regular_high',

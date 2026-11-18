@@ -33,6 +33,31 @@ test('decodes a captured FetchReachoutTimelock argo payload', () => {
     assert.deepEqual(decoded.errors, [])
 })
 
+test('decodes a captured FetchNewChatMessageCappingInfo argo payload with subscription_status', () => {
+    // Real `format="argo"` result for the web document that selects
+    // subscription_status; without that field in the wire type the decode fails.
+    const captured = base64ToBytes(
+        'BAQBADwxNzkzNTA1NjAwMTc5NjA5NzU5OTE3OTUwMTg4ODUYTk9UX0VMSUdJQkxFGE5PVF9FTElHSUJMRQhOT05FGE5PVF9FTElHSUJMRQhNUDRCGgAAFBQUGBgIABgIAwM='
+    )
+
+    const decoded = decodeMexArgoResponse(captured, wireOf('FetchNewChatMessageCappingInfo'))
+
+    assert.deepEqual(decoded.data, {
+        xwa2_message_capping_info: {
+            total_quota: -1,
+            used_quota: 0,
+            cycle_start_timestamp: '1793505600',
+            cycle_end_timestamp: '1796097599',
+            server_sent_timestamp: '1795018885',
+            ote_status: 'NOT_ELIGIBLE',
+            mv_status: 'NOT_ELIGIBLE',
+            capping_status: 'NONE',
+            subscription_status: { name: 'MP4B', status: 'NOT_ELIGIBLE' }
+        }
+    })
+    assert.deepEqual(decoded.errors, [])
+})
+
 test('decodes typed errors, int block values and resolved paths', () => {
     // Real argo error response for WWWGetCertificates (`use_case=CANONICAL`).
     const captured = base64ToBytes(

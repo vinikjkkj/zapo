@@ -71,6 +71,87 @@ export namespace waproto {
 		IMAGE_GEN = 2,
 		VIDEO_GEN = 3
 	}
+	enum ARMADILLO_APPLICATION_DATA_METADATA_SYNC_ACTION_SYNC_ATTACHMENT_INTERVENTION_ACTION_INTERVENTION_TYPE {
+		UNKNOWN = 0,
+		NUDE = 1,
+		NOT_NUDE = 2
+	}
+	enum ARMADILLO_APPLICATION_DATA_METADATA_SYNC_ACTION_SYNC_SPECTRA_ACTION_SPECTRA_ACTION_TYPE {
+		TAKEDOWN = 0,
+		RESTORE = 1
+	}
+	enum ARMADILLO_CONTENT_COMMON_STICKER_STICKER_TYPE {
+		SMALL_LIKE = 1,
+		MEDIUM_LIKE = 2,
+		LARGE_LIKE = 3
+	}
+	enum ARMADILLO_CONTENT_HOMEBASE_SHARING_CONTROL_HOMEBASE_SHARING_CONTROL_OPERATION {
+		OPERATION_UNSPECIFIED = 0,
+		AUTHORIZE = 1,
+		REVOKE = 2
+	}
+	enum ARMADILLO_CONTENT_HOMEBASE_SHARING_CONTROL_HOMEBASE_SHARING_CONTROL_REASON {
+		REASON_UNSPECIFIED = 0,
+		AUTHORIZE_NEWLY_ENABLED = 1,
+		AUTHORIZE_REAUTHORIZED = 2,
+		REVOKE_USER_REQUESTED = 3,
+		REVOKE_STATE_LOST = 4,
+		REVOKE_DISAPPEARING_MESSAGES_ENABLED = 5,
+		REVOKE_MESSAGE_SHARING_PERMISSIONS_DISABLED = 6,
+		REVOKE_FEATURE_TURNED_OFF = 7
+	}
+	enum ARMADILLO_CONTENT_PAYMENTS_TRANSACTION_MESSAGE_PAYMENT_STATUS {
+		PAYMENT_UNKNOWN = -1,
+		REQUEST_INITED = 4,
+		REQUEST_DECLINED = 5,
+		REQUEST_TRANSFER_INITED = 6,
+		REQUEST_TRANSFER_COMPLETED = 7,
+		REQUEST_TRANSFER_FAILED = 8,
+		REQUEST_CANCELED = 9,
+		REQUEST_EXPIRED = 10,
+		TRANSFER_INITED = 11,
+		TRANSFER_PENDING = 12,
+		TRANSFER_PENDING_RECIPIENT_VERIFICATION = 13,
+		TRANSFER_CANCELED = 14,
+		TRANSFER_COMPLETED = 15,
+		TRANSFER_NO_RECEIVER_CREDENTIAL_NO_RTS_PENDING_CANCELED = 16,
+		TRANSFER_NO_RECEIVER_CREDENTIAL_NO_RTS_PENDING_OTHER = 17,
+		TRANSFER_REFUNDED = 18,
+		TRANSFER_PARTIAL_REFUND = 19,
+		TRANSFER_CHARGED_BACK = 20,
+		TRANSFER_EXPIRED = 21,
+		TRANSFER_DECLINED = 22,
+		TRANSFER_UNAVAILABLE = 23
+	}
+	enum ARMADILLO_CONTENT_RAVEN_ACTION_NOTIF_MESSAGE_ACTION_TYPE {
+		PLAYED = 0,
+		SCREENSHOT = 1,
+		FORCE_DISABLE = 2
+	}
+	enum ARMADILLO_CONTENT_RAVEN_MESSAGE_EPHEMERAL_TYPE {
+		VIEW_ONCE = 0,
+		ALLOW_REPLAY = 1,
+		KEEP_IN_CHAT = 2
+	}
+	enum ARMADILLO_CONTENT_SCREENSHOT_ACTION_SCREENSHOT_TYPE {
+		SCREENSHOT_IMAGE = 1,
+		SCREEN_RECORDING = 2
+	}
+	enum ARMADILLO_SIGNAL_ENCRYPTED_BACKUPS_SECRETS_EPOCH_EPOCH_STATUS {
+		ES_OPEN = 1,
+		ES_CLOSE = 2
+	}
+	enum AUDIO_TRANSPORT_ANCILLARY_AVATAR_AUDIO_ANIMATIONS_TYPE {
+		TALKING_A = 0,
+		IDLE_A = 1,
+		TALKING_B = 2,
+		IDLE_B = 3,
+		BACKGROUND = 4
+	}
+	enum AUDIO_TRANSPORT_INTEGRAL_AUDIO_FORMAT {
+		UNKNOWN = 0,
+		OPUS = 1
+	}
 	enum BotMetricsEntryPoint {
 		UNDEFINED_ENTRY_POINT = 0,
 		FAVICON = 1,
@@ -119,7 +200,11 @@ export namespace waproto {
 		WEB_NAVIGATION_BAR = 47,
 		GROUP_MEMBER = 54,
 		CHATLIST_SEARCH = 55,
-		NEW_CHAT_LIST = 56
+		NEW_CHAT_LIST = 56,
+		CONTACTS_TAB = 57,
+		NEW_3P_AGENT_CREATION = 58,
+		SHARE = 59,
+		BIRTHDAY_BANNER = 60
 	}
 	enum BotMetricsThreadEntryPoint {
 		AI_TAB_THREAD = 1,
@@ -169,14 +254,149 @@ export namespace waproto {
 		CRITICAL_BLOCK = 4,
 		CRITICAL_UNBLOCK_LOW = 5
 	}
+	enum DYI_BATCH_TABLE_SCHEMA_PROTO_QPL_FLOW_DESCRIPTOR {
+		BACKUP_RESTORE = 0,
+		E2E_DYI = 1
+	}
+	enum EXTENDED_CONTENT_MESSAGE_CTA_BUTTON_TYPE {
+		OPEN_NATIVE = 11
+	}
+	enum EXTENDED_CONTENT_MESSAGE_EXTENDED_CONTENT_TYPE {
+		UNSUPPORTED = -1,
+		IG_STORY_PHOTO_MENTION = 4,
+		IG_SINGLE_IMAGE_POST_SHARE = 9,
+		IG_MULTIPOST_SHARE = 10,
+		IG_SINGLE_VIDEO_POST_SHARE = 11,
+		IG_STORY_PHOTO_SHARE = 12,
+		IG_STORY_VIDEO_SHARE = 13,
+		IG_CLIPS_SHARE = 14,
+		IG_IGTV_SHARE = 15,
+		IG_SHOP_SHARE = 16,
+		IG_PROFILE_SHARE = 19,
+		IG_STORY_PHOTO_HIGHLIGHT_SHARE = 20,
+		IG_STORY_VIDEO_HIGHLIGHT_SHARE = 21,
+		IG_STORY_REPLY = 22,
+		IG_STORY_REACTION = 23,
+		IG_STORY_VIDEO_MENTION = 24,
+		IG_STORY_HIGHLIGHT_REPLY = 25,
+		IG_STORY_HIGHLIGHT_REACTION = 26,
+		IG_EXTERNAL_LINK = 27,
+		IG_RECEIVER_FETCH = 28,
+		FB_FEED_SHARE = 1000,
+		FB_STORY_REPLY = 1001,
+		FB_STORY_SHARE = 1002,
+		FB_STORY_MENTION = 1003,
+		FB_FEED_VIDEO_SHARE = 1004,
+		FB_GAMING_CUSTOM_UPDATE = 1005,
+		FB_PRODUCER_STORY_REPLY = 1006,
+		FB_EVENT = 1007,
+		FB_FEED_POST_PRIVATE_REPLY = 1008,
+		FB_SHORT = 1009,
+		FB_COMMENT_MENTION_SHARE = 1010,
+		FB_POST_MENTION = 1011,
+		FB_PROFILE_DIRECTORY_ITEM = 1013,
+		FB_FEED_POST_REACTION_REPLY = 1014,
+		FB_QUICKSNAP_REPLY = 1015,
+		MSG_STATUS_REPLY = 1016,
+		FB_GROUP_POST = 1017,
+		FB_DAILY_GAME_CHALLENGE = 1018,
+		FB_QUICKSNAP_REACTION_REPLY = 1019,
+		MSG_EXTERNAL_LINK_SHARE = 2000,
+		MSG_P2P_PAYMENT = 2001,
+		MSG_LOCATION_SHARING = 2002,
+		MSG_LOCATION_SHARING_V2 = 2003,
+		MSG_HIGHLIGHTS_TAB_FRIEND_UPDATES_REPLY = 2004,
+		MSG_HIGHLIGHTS_TAB_LOCAL_EVENT_REPLY = 2005,
+		MSG_RECEIVER_FETCH = 2006,
+		MSG_IG_MEDIA_SHARE = 2007,
+		MSG_GEN_AI_SEARCH_PLUGIN_RESPONSE = 2008,
+		MSG_REELS_LIST = 2009,
+		MSG_CONTACT = 2010,
+		MSG_THREADS_POST_SHARE = 2011,
+		MSG_FILE = 2012,
+		MSG_AVATAR_DETAILS = 2013,
+		MSG_AI_CONTACT = 2014,
+		MSG_MEMORIES_SHARE = 2015,
+		MSG_SHARED_ALBUM_REPLY = 2016,
+		MSG_SHARED_ALBUM = 2017,
+		MSG_OCCAMADILLO_XMA = 2018,
+		MSG_GEN_AI_SUBSCRIPTION = 2021,
+		MSG_GEN_AI_REMINDER = 2022,
+		MSG_GEN_AI_MEMU_ONBOARDING_RESPONSE = 2023,
+		MSG_NOTE_REPLY = 2024,
+		MSG_NOTE_MENTION = 2025,
+		GEN_AI_ENTITY = 2026,
+		MSG_OPG_P2P_PAYMENT = 2027,
+		GEN_AI_RICH_RESPONSE = 2028,
+		MSG_MUSIC_STICKER = 2029,
+		MSG_PHONE_NUMBER = 2030,
+		AI_ACTIVITY_SHARE = 2031,
+		MSG_PRIVATE_XMA = 2032,
+		MSG_SOCIAL_CUE_MEMORIES = 2033,
+		MSG_MANUS_GROWTH_REFERRAL = 2060,
+		MSG_MOMENT_LINK = 2061,
+		MSG_HORIZON_WEEL = 2062,
+		MSG_MOMENT_ADDED = 2063,
+		MSG_STORYTELLING_PROMPT = 2067,
+		MSG_SUPERVISION_INVITE = 2068,
+		MSG_SOCIAL_CUE_MLE = 2069,
+		MSG_SOCIAL_CUE_POST = 2070,
+		RTC_AUDIO_CALL = 3000,
+		RTC_VIDEO_CALL = 3001,
+		RTC_MISSED_AUDIO_CALL = 3002,
+		RTC_MISSED_VIDEO_CALL = 3003,
+		RTC_GROUP_AUDIO_CALL = 3004,
+		RTC_GROUP_VIDEO_CALL = 3005,
+		RTC_MISSED_GROUP_AUDIO_CALL = 3006,
+		RTC_MISSED_GROUP_VIDEO_CALL = 3007,
+		RTC_ONGOING_AUDIO_CALL = 3008,
+		RTC_ONGOING_VIDEO_CALL = 3009,
+		MSG_RECEIVER_FETCH_FALLBACK = 3025,
+		DATACLASS_SENDER_COPY = 4000
+	}
+	enum EXTENDED_CONTENT_MESSAGE_OVERLAY_ICON_GLYPH {
+		INFO = 0,
+		EYE_OFF = 1,
+		NEWS_OFF = 2,
+		WARNING = 3,
+		PRIVATE = 4,
+		NONE = 5,
+		MEDIA_LABEL = 6,
+		POST_COVER = 7,
+		POST_LABEL = 8,
+		WARNING_SCREENS = 9
+	}
+	enum EXTENDED_CONTENT_MESSAGE_XMA_DATACLASS_TYPE {
+		SENDER_COPY = 0,
+		SERVER = 1,
+		SIGNED_CLIENT = 2
+	}
+	enum EXTENDED_CONTENT_MESSAGE_XMA_LAYOUT_TYPE {
+		SINGLE = 0,
+		HSCROLL = 1,
+		PORTRAIT = 3,
+		STANDARD_DXMA = 12,
+		LIST_DXMA = 15,
+		GRID = 16
+	}
 	enum FUTURE_PROOF_BEHAVIOR {
 		PLACEHOLDER = 0,
 		NO_PLACEHOLDER = 1,
 		IGNORE = 2
 	}
+	enum HD_TYPE {
+		NONE = 0,
+		LQ_4K = 1,
+		HQ_4K = 2
+	}
 	enum HostedState {
 		E2EE = 0,
 		HOSTED = 1
+	}
+	enum IMAGE_TRANSPORT_ANCILLARY_HD_TYPE {
+		NONE = 0,
+		LQ_4K = 1,
+		HQ_4K = 2
 	}
 	enum KeepType {
 		UNKNOWN = 0,
@@ -185,6 +405,23 @@ export namespace waproto {
 	}
 	enum MENTION_MENTION_TYPE {
 		PROFILE = 0
+	}
+	enum MESSAGE_APPLICATION_EPHEMERAL_SETTING_EPHEMERALITY_TYPE {
+		UNKNOWN = 0,
+		SEEN_ONCE = 1,
+		SEEN_BASED_WITH_TIMER = 2,
+		SEND_BASED_WITH_TIMER = 3
+	}
+	enum MESSAGE_APPLICATION_METADATA_THREAD_TYPE {
+		DEFAULT = 0,
+		VANISH_MODE = 1,
+		DISAPPEARING_MESSAGES = 2
+	}
+	enum MESSAGE_TRANSPORT_PROTOCOL_ANCILLARY_BACKUP_DIRECTIVE_ACTION_TYPE {
+		NOOP = 0,
+		UPSERT = 1,
+		DELETE = 2,
+		UPSERT_AND_DELETE = 3
 	}
 	enum MediaKeyDomain {
 		MEDIA_KEY_DOMAIN_UNKNOWN = 0,
@@ -281,22 +518,84 @@ export namespace waproto {
 		COEX_V2_VERSION_ACTION = 88,
 		WASA_ROOT_SECRET_ACTION = 89,
 		BUBBLE_LOCK_MESSAGE_ACTION = 90,
+		LABEL_SUBLIST_ACTION = 91,
+		DEVICE_CAPABILITIES_V2 = 92,
+		CTWA_MESSAGE_RECEIVED_ACTION = 93,
+		SHARED_DEVICE_ALLOWLIST_ACTION = 94,
+		CONTACT_MANAGER_METADATA_ACTION = 95,
+		BUSINESS_FOLDER_ACTIVATION_ACTION = 96,
+		GROUP_HISTORY_TOGGLE_ACTION = 97,
+		BB_PRO_PENDING_CUSTOMER_BASE_ACTION = 98,
+		COMMUNITY_NESTING_STATE_ACTION = 99,
+		SHARED_DEVICE_SECRET_ACTION = 100,
+		HATCH_CVM_SECRET_ACTION = 101,
 		SHARE_OWN_PN = 10001,
 		BUSINESS_BROADCAST_ACTION = 10002,
 		AI_THREAD_DELETE_ACTION = 10003
+	}
+	enum POLL_STATE {
+		OPEN = 0,
+		FROZEN = 1
 	}
 	enum PrivacySystemMessage {
 		E2EE_MSG = 1,
 		NE2EE_SELF = 2,
 		NE2EE_OTHER = 3
 	}
+	enum SYNCD_MUTATION_SYNCD_OPERATION {
+		SET = 0,
+		REMOVE = 1
+	}
 	enum SessionTransparencyType {
 		UNKNOWN_TYPE = 0,
 		NY_AI_SAFETY_DISCLAIMER = 1
 	}
+	enum VIDEO_TRANSPORT_ANCILLARY_ATTRIBUTION {
+		NONE = 0,
+		GIPHY = 1,
+		TENOR = 2
+	}
 	enum WebLinkRenderConfig {
 		WEBVIEW = 0,
 		SYSTEM = 1
+	}
+	interface IAAD extends waproto.AAD.$Properties {
+	}
+	class AAD {
+		constructor(p?: waproto.AAD.$Properties)
+		$unknowns?: Uint8Array[]
+		timestamp?: (number|Long|null)
+		static encode(m: waproto.AAD.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.AAD & waproto.AAD.$Shape
+	}
+	namespace AAD {
+		interface $Properties {
+			timestamp?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.AAD.$Properties
+	}
+	interface IACP2Setting extends waproto.ACP2Setting.$Properties {
+	}
+	class ACP2Setting {
+		constructor(p?: waproto.ACP2Setting.$Properties)
+		$unknowns?: Uint8Array[]
+		enabled?: (boolean|null)
+		trigger?: (waproto.LimitSharing.Trigger|null)
+		settingTimestamp?: (number|Long|null)
+		initiatedByMe?: (boolean|null)
+		static encode(m: waproto.ACP2Setting.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ACP2Setting & waproto.ACP2Setting.$Shape
+	}
+	namespace ACP2Setting {
+		interface $Properties {
+			enabled?: (boolean|null)
+			trigger?: (waproto.LimitSharing.Trigger|null)
+			settingTimestamp?: (number|Long|null)
+			initiatedByMe?: (boolean|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ACP2Setting.$Properties
 	}
 	interface IADVDeviceIdentity extends waproto.ADVDeviceIdentity.$Properties {
 	}
@@ -510,15 +809,21 @@ export namespace waproto {
 		constructor(p?: waproto.AIMetadataOperation.$Properties)
 		$unknowns?: Uint8Array[]
 		hatchMetadataSync?: (waproto.HatchMetadataSync.$Properties|null)
+		bizAiMetadataSync?: (waproto.BizAIMetadataSync.$Properties|null)
 		static encode(m: waproto.AIMetadataOperation.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIMetadataOperation & waproto.AIMetadataOperation.$Shape
 	}
 	namespace AIMetadataOperation {
 		interface $Properties {
 			hatchMetadataSync?: (waproto.HatchMetadataSync.$Properties|null)
+			bizAiMetadataSync?: (waproto.BizAIMetadataSync.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.AIMetadataOperation.$Properties
+		type $Shape = {
+  hatchMetadataSync?: waproto.HatchMetadataSync.$Shape|null
+  bizAiMetadataSync?: waproto.BizAIMetadataSync.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface IAIProvenance extends waproto.AIProvenance.$Properties {
 	}
@@ -574,7 +879,12 @@ export namespace waproto {
 			timestamp?: (number|Long|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.AIQueryFanout.$Properties
+		type $Shape = {
+  messageKey?: waproto.MessageKey.$Shape|null
+  message?: waproto.Message.$Shape|null
+  timestamp?: number|Long|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface IAIRegenerateMetadata extends waproto.AIRegenerateMetadata.$Properties {
 	}
@@ -654,7 +964,11 @@ export namespace waproto {
 			contentType?: (waproto.AIRichResponseContentItemsMetadata.ContentType|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.AIRichResponseContentItemsMetadata.$Properties
+		type $Shape = {
+  itemsMetadata?: waproto.AIRichResponseContentItemsMetadata.AIRichResponseContentItemMetadata.$Shape[]|null
+  contentType?: waproto.AIRichResponseContentItemsMetadata.ContentType|null
+  $unknowns?: Uint8Array[]
+}
 		enum ContentType {
 			DEFAULT = 0,
 			CAROUSEL = 1
@@ -665,15 +979,22 @@ export namespace waproto {
 			constructor(p?: waproto.AIRichResponseContentItemsMetadata.AIRichResponseContentItemMetadata.$Properties)
 			$unknowns?: Uint8Array[]
 			reelItem?: (waproto.AIRichResponseContentItemsMetadata.AIRichResponseReelItem.$Properties|null)
+			aiRichResponseContentItem?: "reelItem"
 			static encode(m: waproto.AIRichResponseContentItemsMetadata.AIRichResponseContentItemMetadata.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseContentItemsMetadata.AIRichResponseContentItemMetadata & waproto.AIRichResponseContentItemsMetadata.AIRichResponseContentItemMetadata.$Shape
 		}
 		namespace AIRichResponseContentItemMetadata {
 			interface $Properties {
 				reelItem?: (waproto.AIRichResponseContentItemsMetadata.AIRichResponseReelItem.$Properties|null)
+				aiRichResponseContentItem?: "reelItem"
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.AIRichResponseContentItemsMetadata.AIRichResponseContentItemMetadata.$Properties
+			type $Shape = {
+  reelItem?: waproto.AIRichResponseContentItemsMetadata.AIRichResponseReelItem.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ aiRichResponseContentItem?: undefined; reelItem?: null }|{ aiRichResponseContentItem?: "reelItem"; reelItem: waproto.AIRichResponseContentItemsMetadata.AIRichResponseReelItem.$Shape })
+)
 		}
 		interface IAIRichResponseReelItem extends waproto.AIRichResponseContentItemsMetadata.AIRichResponseReelItem.$Properties {
 		}
@@ -899,6 +1220,7 @@ export namespace waproto {
 		submessages: waproto.AIRichResponseSubMessage.$Properties[]
 		unifiedResponse?: (waproto.AIRichResponseUnifiedResponse.$Properties|null)
 		contextInfo?: (waproto.ContextInfo.$Properties|null)
+		originalRecipientMetadata?: (waproto.AIRichResponseUnifiedResponse.$Properties|null)
 		static encode(m: waproto.AIRichResponseMessage.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseMessage & waproto.AIRichResponseMessage.$Shape
 	}
@@ -908,9 +1230,17 @@ export namespace waproto {
 			submessages?: (waproto.AIRichResponseSubMessage.$Properties[]|null)
 			unifiedResponse?: (waproto.AIRichResponseUnifiedResponse.$Properties|null)
 			contextInfo?: (waproto.ContextInfo.$Properties|null)
+			originalRecipientMetadata?: (waproto.AIRichResponseUnifiedResponse.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.AIRichResponseMessage.$Properties
+		type $Shape = {
+  messageType?: waproto.AIRichResponseMessageType|null
+  submessages?: waproto.AIRichResponseSubMessage.$Shape[]|null
+  unifiedResponse?: waproto.AIRichResponseUnifiedResponse.$Shape|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  originalRecipientMetadata?: waproto.AIRichResponseUnifiedResponse.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface IAIRichResponseSubMessage extends waproto.AIRichResponseSubMessage.$Properties {
 	}
@@ -944,7 +1274,19 @@ export namespace waproto {
 			contentItemsMetadata?: (waproto.AIRichResponseContentItemsMetadata.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.AIRichResponseSubMessage.$Properties
+		type $Shape = {
+  messageType?: waproto.AIRichResponseSubMessageType|null
+  gridImageMetadata?: waproto.AIRichResponseGridImageMetadata.$Shape|null
+  messageText?: string|null
+  imageMetadata?: waproto.AIRichResponseInlineImageMetadata.$Shape|null
+  codeMetadata?: waproto.AIRichResponseCodeMetadata.$Shape|null
+  tableMetadata?: waproto.AIRichResponseTableMetadata.$Shape|null
+  dynamicMetadata?: waproto.AIRichResponseDynamicMetadata.$Shape|null
+  latexMetadata?: waproto.AIRichResponseLatexMetadata.$Shape|null
+  mapMetadata?: waproto.AIRichResponseMapMetadata.$Shape|null
+  contentItemsMetadata?: waproto.AIRichResponseContentItemsMetadata.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface IAIRichResponseTableMetadata extends waproto.AIRichResponseTableMetadata.$Properties {
 	}
@@ -1052,7 +1394,8 @@ export namespace waproto {
 				UNKNOWN = 0,
 				DEFAULT = 1,
 				INCOGNITO = 2,
-				SIDE_CHAT = 3
+				SIDE_CHAT = 3,
+				PRIVATE_SEARCH_CHAT = 4
 			}
 		}
 		interface IAIThreadServerInfo extends waproto.AIThreadInfo.AIThreadServerInfo.$Properties {
@@ -1081,6 +1424,7 @@ export namespace waproto {
 		username?: (string|null)
 		countryCode?: (string|null)
 		isUsernameDeleted?: (boolean|null)
+		pnLearnState?: (waproto.Account.PnLearnState|null)
 		static encode(m: waproto.Account.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.Account & waproto.Account.$Shape
 	}
@@ -1090,9 +1434,15 @@ export namespace waproto {
 			username?: (string|null)
 			countryCode?: (string|null)
 			isUsernameDeleted?: (boolean|null)
+			pnLearnState?: (waproto.Account.PnLearnState|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.Account.$Properties
+		enum PnLearnState {
+			UNSET = 0,
+			SHARED = 1,
+			HIDDEN = 2
+		}
 	}
 	interface IAccountLinkingOpaqueData extends waproto.AccountLinkingOpaqueData.$Properties {
 	}
@@ -1134,6 +1484,1047 @@ export namespace waproto {
 		}
 		type $Shape = waproto.ActionLink.$Properties
 	}
+	interface IAddDeviceKeysOutput extends waproto.AddDeviceKeysOutput.$Properties {
+	}
+	class AddDeviceKeysOutput {
+		constructor(p?: waproto.AddDeviceKeysOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		devicePublicKey?: (Uint8Array|null)
+		epochAuthPublicKey?: (Uint8Array|null)
+		epochAuthPublicKeySig?: (Uint8Array|null)
+		epochStoragePublicKey?: (Uint8Array|null)
+		epochStoragePublicKeySig?: (Uint8Array|null)
+		epochStoragePrivateKey?: (Uint8Array|null)
+		orfClientState?: (Uint8Array|null)
+		static encode(m: waproto.AddDeviceKeysOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.AddDeviceKeysOutput & waproto.AddDeviceKeysOutput.$Shape
+	}
+	namespace AddDeviceKeysOutput {
+		interface $Properties {
+			devicePublicKey?: (Uint8Array|null)
+			epochAuthPublicKey?: (Uint8Array|null)
+			epochAuthPublicKeySig?: (Uint8Array|null)
+			epochStoragePublicKey?: (Uint8Array|null)
+			epochStoragePublicKeySig?: (Uint8Array|null)
+			epochStoragePrivateKey?: (Uint8Array|null)
+			orfClientState?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.AddDeviceKeysOutput.$Properties
+	}
+	interface IAddDeviceSyncEpochInput extends waproto.AddDeviceSyncEpochInput.$Properties {
+	}
+	class AddDeviceSyncEpochInput {
+		constructor(p?: waproto.AddDeviceSyncEpochInput.$Properties)
+		$unknowns?: Uint8Array[]
+		epochId?: (number|Long|null)
+		epochAnonId?: (number|null)
+		encryptedEpochKey?: (Uint8Array|null)
+		senderAuthPubKey?: (Uint8Array|null)
+		nextEpochId?: (number|Long|null)
+		static encode(m: waproto.AddDeviceSyncEpochInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.AddDeviceSyncEpochInput & waproto.AddDeviceSyncEpochInput.$Shape
+	}
+	namespace AddDeviceSyncEpochInput {
+		interface $Properties {
+			epochId?: (number|Long|null)
+			epochAnonId?: (number|null)
+			encryptedEpochKey?: (Uint8Array|null)
+			senderAuthPubKey?: (Uint8Array|null)
+			nextEpochId?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.AddDeviceSyncEpochInput.$Properties
+	}
+	interface IAppDataProto extends waproto.AppDataProto.$Properties {
+	}
+	class AppDataProto {
+		constructor(p?: waproto.AppDataProto.$Properties)
+		$unknowns?: Uint8Array[]
+		type?: (string|null)
+		actions: waproto.MetaSyncActionProto.$Properties[]
+		encryptedBackupsSecrets?: (waproto.EncryptedBackupsSecretsProto.$Properties|null)
+		syncKeyShare?: (waproto.SyncKeyShareProto.$Properties|null)
+		syncKeyRequest?: (waproto.SyncKeyRequestProto.$Properties|null)
+		static encode(m: waproto.AppDataProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.AppDataProto & waproto.AppDataProto.$Shape
+	}
+	namespace AppDataProto {
+		interface $Properties {
+			type?: (string|null)
+			actions?: (waproto.MetaSyncActionProto.$Properties[]|null)
+			encryptedBackupsSecrets?: (waproto.EncryptedBackupsSecretsProto.$Properties|null)
+			syncKeyShare?: (waproto.SyncKeyShareProto.$Properties|null)
+			syncKeyRequest?: (waproto.SyncKeyRequestProto.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  type?: string|null
+  actions?: waproto.MetaSyncActionProto.$Shape[]|null
+  encryptedBackupsSecrets?: waproto.EncryptedBackupsSecretsProto.$Shape|null
+  syncKeyShare?: waproto.SyncKeyShareProto.$Shape|null
+  syncKeyRequest?: waproto.SyncKeyRequestProto.$Shape|null
+  $unknowns?: Uint8Array[]
+}
+	}
+	interface IAppDataTableSchemaProto extends waproto.AppDataTableSchemaProto.$Properties {
+	}
+	class AppDataTableSchemaProto {
+		constructor(p?: waproto.AppDataTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		externalId?: (string|null)
+		ts?: (number|Long|null)
+		contents?: (waproto.AppDataProto.$Properties|null)
+		permittedIdentitiesPerDevice: waproto.IdentitiesPerDeviceProto.$Properties[]
+		ack?: (number|null)
+		appDataId?: (number|null)
+		recipientDevices: string[]
+		sendPartial?: (boolean|null)
+		static encode(m: waproto.AppDataTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.AppDataTableSchemaProto & waproto.AppDataTableSchemaProto.$Shape
+	}
+	namespace AppDataTableSchemaProto {
+		interface $Properties {
+			externalId?: (string|null)
+			ts?: (number|Long|null)
+			contents?: (waproto.AppDataProto.$Properties|null)
+			permittedIdentitiesPerDevice?: (waproto.IdentitiesPerDeviceProto.$Properties[]|null)
+			ack?: (number|null)
+			appDataId?: (number|null)
+			recipientDevices?: (string[]|null)
+			sendPartial?: (boolean|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  externalId?: string|null
+  ts?: number|Long|null
+  contents?: waproto.AppDataProto.$Shape|null
+  permittedIdentitiesPerDevice?: waproto.IdentitiesPerDeviceProto.$Shape[]|null
+  ack?: number|null
+  appDataId?: number|null
+  recipientDevices?: string[]|null
+  sendPartial?: boolean|null
+  $unknowns?: Uint8Array[]
+}
+	}
+	interface IAppMetaTableSchemaProto extends waproto.AppMetaTableSchemaProto.$Properties {
+	}
+	class AppMetaTableSchemaProto {
+		constructor(p?: waproto.AppMetaTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		key?: (string|null)
+		value?: (waproto.DbAppMetaValuesProto.$Properties|null)
+		static encode(m: waproto.AppMetaTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.AppMetaTableSchemaProto & waproto.AppMetaTableSchemaProto.$Shape
+	}
+	namespace AppMetaTableSchemaProto {
+		interface $Properties {
+			key?: (string|null)
+			value?: (waproto.DbAppMetaValuesProto.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.AppMetaTableSchemaProto.$Properties
+	}
+	interface IArmadillo extends waproto.Armadillo.$Properties {
+	}
+	class Armadillo {
+		constructor(p?: waproto.Armadillo.$Properties)
+		$unknowns?: Uint8Array[]
+		payload?: (waproto.Armadillo.Payload.$Properties|null)
+		metadata?: (waproto.Armadillo.Metadata.$Properties|null)
+		static encode(m: waproto.Armadillo.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo & waproto.Armadillo.$Shape
+	}
+	namespace Armadillo {
+		interface $Properties {
+			payload?: (waproto.Armadillo.Payload.$Properties|null)
+			metadata?: (waproto.Armadillo.Metadata.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  payload?: waproto.Armadillo.Payload.$Shape|null
+  metadata?: waproto.Armadillo.Metadata.$Shape|null
+  $unknowns?: Uint8Array[]
+}
+		interface IMetadata extends waproto.Armadillo.Metadata.$Properties {
+		}
+		class Metadata {
+			constructor(p?: waproto.Armadillo.Metadata.$Properties)
+			$unknowns?: Uint8Array[]
+			static encode(m: waproto.Armadillo.Metadata.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Metadata & waproto.Armadillo.Metadata.$Shape
+		}
+		namespace Metadata {
+			interface $Properties {
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.Armadillo.Metadata.$Properties
+		}
+		interface IPayload extends waproto.Armadillo.Payload.$Properties {
+		}
+		class Payload {
+			constructor(p?: waproto.Armadillo.Payload.$Properties)
+			$unknowns?: Uint8Array[]
+			content?: (waproto.Armadillo.Content.$Properties|null)
+			applicationData?: (waproto.Armadillo.ApplicationData.$Properties|null)
+			signal?: (waproto.Armadillo.Signal.$Properties|null)
+			subProtocol?: (waproto.Armadillo.SubProtocolPayload.$Properties|null)
+			payload?: ("content"|"applicationData"|"signal"|"subProtocol")
+			static encode(m: waproto.Armadillo.Payload.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Payload & waproto.Armadillo.Payload.$Shape
+		}
+		namespace Payload {
+			interface $Properties {
+				content?: (waproto.Armadillo.Content.$Properties|null)
+				applicationData?: (waproto.Armadillo.ApplicationData.$Properties|null)
+				signal?: (waproto.Armadillo.Signal.$Properties|null)
+				subProtocol?: (waproto.Armadillo.SubProtocolPayload.$Properties|null)
+				payload?: ("content"|"applicationData"|"signal"|"subProtocol")
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  content?: waproto.Armadillo.Content.$Shape|null
+  applicationData?: waproto.Armadillo.ApplicationData.$Shape|null
+  signal?: waproto.Armadillo.Signal.$Shape|null
+  subProtocol?: waproto.Armadillo.SubProtocolPayload.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ payload?: undefined; content?: null; applicationData?: null; signal?: null; subProtocol?: null }|{ payload?: "content"; content: waproto.Armadillo.Content.$Shape; applicationData?: null; signal?: null; subProtocol?: null }|{ payload?: "applicationData"; content?: null; applicationData: waproto.Armadillo.ApplicationData.$Shape; signal?: null; subProtocol?: null }|{ payload?: "signal"; content?: null; applicationData?: null; signal: waproto.Armadillo.Signal.$Shape; subProtocol?: null }|{ payload?: "subProtocol"; content?: null; applicationData?: null; signal?: null; subProtocol: waproto.Armadillo.SubProtocolPayload.$Shape })
+)
+		}
+		interface ISubProtocolPayload extends waproto.Armadillo.SubProtocolPayload.$Properties {
+		}
+		class SubProtocolPayload {
+			constructor(p?: waproto.Armadillo.SubProtocolPayload.$Properties)
+			$unknowns?: Uint8Array[]
+			futureProof?: (waproto.FUTURE_PROOF_BEHAVIOR|null)
+			static encode(m: waproto.Armadillo.SubProtocolPayload.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.SubProtocolPayload & waproto.Armadillo.SubProtocolPayload.$Shape
+		}
+		namespace SubProtocolPayload {
+			interface $Properties {
+				futureProof?: (waproto.FUTURE_PROOF_BEHAVIOR|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.Armadillo.SubProtocolPayload.$Properties
+		}
+		interface ISignal extends waproto.Armadillo.Signal.$Properties {
+		}
+		class Signal {
+			constructor(p?: waproto.Armadillo.Signal.$Properties)
+			$unknowns?: Uint8Array[]
+			encryptedBackupsSecrets?: (waproto.Armadillo.Signal.EncryptedBackupsSecrets.$Properties|null)
+			signal?: "encryptedBackupsSecrets"
+			static encode(m: waproto.Armadillo.Signal.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Signal & waproto.Armadillo.Signal.$Shape
+		}
+		namespace Signal {
+			interface $Properties {
+				encryptedBackupsSecrets?: (waproto.Armadillo.Signal.EncryptedBackupsSecrets.$Properties|null)
+				signal?: "encryptedBackupsSecrets"
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  encryptedBackupsSecrets?: waproto.Armadillo.Signal.EncryptedBackupsSecrets.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ signal?: undefined; encryptedBackupsSecrets?: null }|{ signal?: "encryptedBackupsSecrets"; encryptedBackupsSecrets: waproto.Armadillo.Signal.EncryptedBackupsSecrets.$Shape })
+)
+			interface IEncryptedBackupsSecrets extends waproto.Armadillo.Signal.EncryptedBackupsSecrets.$Properties {
+			}
+			class EncryptedBackupsSecrets {
+				constructor(p?: waproto.Armadillo.Signal.EncryptedBackupsSecrets.$Properties)
+				$unknowns?: Uint8Array[]
+				backupId?: (number|Long|null)
+				serverDataId?: (number|Long|null)
+				epoch: waproto.Armadillo.Signal.EncryptedBackupsSecrets.Epoch.$Properties[]
+				tempOcmfClientState?: (Uint8Array|null)
+				mailboxRootKey?: (Uint8Array|null)
+				obliviousValidationToken?: (Uint8Array|null)
+				static encode(m: waproto.Armadillo.Signal.EncryptedBackupsSecrets.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Signal.EncryptedBackupsSecrets & waproto.Armadillo.Signal.EncryptedBackupsSecrets.$Shape
+			}
+			namespace EncryptedBackupsSecrets {
+				interface $Properties {
+					backupId?: (number|Long|null)
+					serverDataId?: (number|Long|null)
+					epoch?: (waproto.Armadillo.Signal.EncryptedBackupsSecrets.Epoch.$Properties[]|null)
+					tempOcmfClientState?: (Uint8Array|null)
+					mailboxRootKey?: (Uint8Array|null)
+					obliviousValidationToken?: (Uint8Array|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.Signal.EncryptedBackupsSecrets.$Properties
+				interface IEpoch extends waproto.Armadillo.Signal.EncryptedBackupsSecrets.Epoch.$Properties {
+				}
+				class Epoch {
+					constructor(p?: waproto.Armadillo.Signal.EncryptedBackupsSecrets.Epoch.$Properties)
+					$unknowns?: Uint8Array[]
+					id?: (number|Long|null)
+					anonId?: (Uint8Array|null)
+					rootKey?: (Uint8Array|null)
+					status?: (waproto.ARMADILLO_SIGNAL_ENCRYPTED_BACKUPS_SECRETS_EPOCH_EPOCH_STATUS|null)
+					static encode(m: waproto.Armadillo.Signal.EncryptedBackupsSecrets.Epoch.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Signal.EncryptedBackupsSecrets.Epoch & waproto.Armadillo.Signal.EncryptedBackupsSecrets.Epoch.$Shape
+				}
+				namespace Epoch {
+					interface $Properties {
+						id?: (number|Long|null)
+						anonId?: (Uint8Array|null)
+						rootKey?: (Uint8Array|null)
+						status?: (waproto.ARMADILLO_SIGNAL_ENCRYPTED_BACKUPS_SECRETS_EPOCH_EPOCH_STATUS|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.Armadillo.Signal.EncryptedBackupsSecrets.Epoch.$Properties
+				}
+			}
+		}
+		interface IApplicationData extends waproto.Armadillo.ApplicationData.$Properties {
+		}
+		class ApplicationData {
+			constructor(p?: waproto.Armadillo.ApplicationData.$Properties)
+			$unknowns?: Uint8Array[]
+			metadataSync?: (waproto.Armadillo.ApplicationData.MetadataSyncNotification.$Properties|null)
+			aiBotResponse?: (waproto.Armadillo.ApplicationData.AIBotResponseMessage.$Properties|null)
+			messageHistoryDocumentMessage?: (waproto.Armadillo.ApplicationData.MessageHistoryDocumentMessage.$Properties|null)
+			applicationData?: ("metadataSync"|"aiBotResponse"|"messageHistoryDocumentMessage")
+			static encode(m: waproto.Armadillo.ApplicationData.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData & waproto.Armadillo.ApplicationData.$Shape
+		}
+		namespace ApplicationData {
+			interface $Properties {
+				metadataSync?: (waproto.Armadillo.ApplicationData.MetadataSyncNotification.$Properties|null)
+				aiBotResponse?: (waproto.Armadillo.ApplicationData.AIBotResponseMessage.$Properties|null)
+				messageHistoryDocumentMessage?: (waproto.Armadillo.ApplicationData.MessageHistoryDocumentMessage.$Properties|null)
+				applicationData?: ("metadataSync"|"aiBotResponse"|"messageHistoryDocumentMessage")
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  metadataSync?: waproto.Armadillo.ApplicationData.MetadataSyncNotification.$Shape|null
+  aiBotResponse?: waproto.Armadillo.ApplicationData.AIBotResponseMessage.$Shape|null
+  messageHistoryDocumentMessage?: waproto.Armadillo.ApplicationData.MessageHistoryDocumentMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ applicationData?: undefined; metadataSync?: null; aiBotResponse?: null; messageHistoryDocumentMessage?: null }|{ applicationData?: "metadataSync"; metadataSync: waproto.Armadillo.ApplicationData.MetadataSyncNotification.$Shape; aiBotResponse?: null; messageHistoryDocumentMessage?: null }|{ applicationData?: "aiBotResponse"; metadataSync?: null; aiBotResponse: waproto.Armadillo.ApplicationData.AIBotResponseMessage.$Shape; messageHistoryDocumentMessage?: null }|{ applicationData?: "messageHistoryDocumentMessage"; metadataSync?: null; aiBotResponse?: null; messageHistoryDocumentMessage: waproto.Armadillo.ApplicationData.MessageHistoryDocumentMessage.$Shape })
+)
+			interface IMessageHistoryDocumentMessage extends waproto.Armadillo.ApplicationData.MessageHistoryDocumentMessage.$Properties {
+			}
+			class MessageHistoryDocumentMessage {
+				constructor(p?: waproto.Armadillo.ApplicationData.MessageHistoryDocumentMessage.$Properties)
+				$unknowns?: Uint8Array[]
+				document?: (waproto.SubProtocol.$Properties|null)
+				static encode(m: waproto.Armadillo.ApplicationData.MessageHistoryDocumentMessage.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MessageHistoryDocumentMessage & waproto.Armadillo.ApplicationData.MessageHistoryDocumentMessage.$Shape
+			}
+			namespace MessageHistoryDocumentMessage {
+				interface $Properties {
+					document?: (waproto.SubProtocol.$Properties|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.ApplicationData.MessageHistoryDocumentMessage.$Properties
+			}
+			interface IAIBotResponseMessage extends waproto.Armadillo.ApplicationData.AIBotResponseMessage.$Properties {
+			}
+			class AIBotResponseMessage {
+				constructor(p?: waproto.Armadillo.ApplicationData.AIBotResponseMessage.$Properties)
+				$unknowns?: Uint8Array[]
+				summonToken?: (string|null)
+				messageText?: (string|null)
+				serializedExtras?: (string|null)
+				static encode(m: waproto.Armadillo.ApplicationData.AIBotResponseMessage.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.AIBotResponseMessage & waproto.Armadillo.ApplicationData.AIBotResponseMessage.$Shape
+			}
+			namespace AIBotResponseMessage {
+				interface $Properties {
+					summonToken?: (string|null)
+					messageText?: (string|null)
+					serializedExtras?: (string|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.ApplicationData.AIBotResponseMessage.$Properties
+			}
+			interface IMetadataSyncAction extends waproto.Armadillo.ApplicationData.MetadataSyncAction.$Properties {
+			}
+			class MetadataSyncAction {
+				constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncAction.$Properties)
+				$unknowns?: Uint8Array[]
+				actionTimestamp?: (number|Long|null)
+				chatAction?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.$Properties|null)
+				messageAction?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.$Properties|null)
+				spectraAction?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncSpectraAction.$Properties|null)
+				attachmentInterventionAction?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncAttachmentInterventionAction.$Properties|null)
+				actionType?: ("chatAction"|"messageAction"|"spectraAction"|"attachmentInterventionAction")
+				static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncAction.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncAction & waproto.Armadillo.ApplicationData.MetadataSyncAction.$Shape
+			}
+			namespace MetadataSyncAction {
+				interface $Properties {
+					actionTimestamp?: (number|Long|null)
+					chatAction?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.$Properties|null)
+					messageAction?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.$Properties|null)
+					spectraAction?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncSpectraAction.$Properties|null)
+					attachmentInterventionAction?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncAttachmentInterventionAction.$Properties|null)
+					actionType?: ("chatAction"|"messageAction"|"spectraAction"|"attachmentInterventionAction")
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = {
+  actionTimestamp?: number|Long|null
+  chatAction?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.$Shape|null
+  messageAction?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.$Shape|null
+  spectraAction?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncSpectraAction.$Shape|null
+  attachmentInterventionAction?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncAttachmentInterventionAction.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ actionType?: undefined; chatAction?: null; messageAction?: null; spectraAction?: null; attachmentInterventionAction?: null }|{ actionType?: "chatAction"; chatAction: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.$Shape; messageAction?: null; spectraAction?: null; attachmentInterventionAction?: null }|{ actionType?: "messageAction"; chatAction?: null; messageAction: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.$Shape; spectraAction?: null; attachmentInterventionAction?: null }|{ actionType?: "spectraAction"; chatAction?: null; messageAction?: null; spectraAction: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncSpectraAction.$Shape; attachmentInterventionAction?: null }|{ actionType?: "attachmentInterventionAction"; chatAction?: null; messageAction?: null; spectraAction?: null; attachmentInterventionAction: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncAttachmentInterventionAction.$Shape })
+)
+				interface ISyncAttachmentInterventionAction extends waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncAttachmentInterventionAction.$Properties {
+				}
+				class SyncAttachmentInterventionAction {
+					constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncAttachmentInterventionAction.$Properties)
+					$unknowns?: Uint8Array[]
+					messageKey?: (waproto.MessageKey.$Properties|null)
+					interventionType?: (waproto.ARMADILLO_APPLICATION_DATA_METADATA_SYNC_ACTION_SYNC_ATTACHMENT_INTERVENTION_ACTION_INTERVENTION_TYPE|null)
+					static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncAttachmentInterventionAction.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncAttachmentInterventionAction & waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncAttachmentInterventionAction.$Shape
+				}
+				namespace SyncAttachmentInterventionAction {
+					interface $Properties {
+						messageKey?: (waproto.MessageKey.$Properties|null)
+						interventionType?: (waproto.ARMADILLO_APPLICATION_DATA_METADATA_SYNC_ACTION_SYNC_ATTACHMENT_INTERVENTION_ACTION_INTERVENTION_TYPE|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncAttachmentInterventionAction.$Properties
+				}
+				interface ISyncSpectraAction extends waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncSpectraAction.$Properties {
+				}
+				class SyncSpectraAction {
+					constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncSpectraAction.$Properties)
+					$unknowns?: Uint8Array[]
+					key?: (waproto.MessageKey.$Properties|null)
+					actionType?: (waproto.ARMADILLO_APPLICATION_DATA_METADATA_SYNC_ACTION_SYNC_SPECTRA_ACTION_SPECTRA_ACTION_TYPE|null)
+					takedownActionId?: (number|Long|null)
+					config?: (string|null)
+					static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncSpectraAction.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncSpectraAction & waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncSpectraAction.$Shape
+				}
+				namespace SyncSpectraAction {
+					interface $Properties {
+						key?: (waproto.MessageKey.$Properties|null)
+						actionType?: (waproto.ARMADILLO_APPLICATION_DATA_METADATA_SYNC_ACTION_SYNC_SPECTRA_ACTION_SPECTRA_ACTION_TYPE|null)
+						takedownActionId?: (number|Long|null)
+						config?: (string|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncSpectraAction.$Properties
+				}
+				interface ISyncMessageAction extends waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.$Properties {
+				}
+				class SyncMessageAction {
+					constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.$Properties)
+					$unknowns?: Uint8Array[]
+					key?: (waproto.MessageKey.$Properties|null)
+					messageDelete?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.ActionMessageDelete.$Properties|null)
+					action?: "messageDelete"
+					static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction & waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.$Shape
+				}
+				namespace SyncMessageAction {
+					interface $Properties {
+						key?: (waproto.MessageKey.$Properties|null)
+						messageDelete?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.ActionMessageDelete.$Properties|null)
+						action?: "messageDelete"
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = {
+  key?: waproto.MessageKey.$Shape|null
+  messageDelete?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.ActionMessageDelete.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ action?: undefined; messageDelete?: null }|{ action?: "messageDelete"; messageDelete: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.ActionMessageDelete.$Shape })
+)
+					interface IActionMessageDelete extends waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.ActionMessageDelete.$Properties {
+					}
+					class ActionMessageDelete {
+						constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.ActionMessageDelete.$Properties)
+						$unknowns?: Uint8Array[]
+						static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.ActionMessageDelete.$Properties, w?: PbWriter): PbWriter
+						static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.ActionMessageDelete & waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.ActionMessageDelete.$Shape
+					}
+					namespace ActionMessageDelete {
+						interface $Properties {
+							$unknowns?: Uint8Array[]
+						}
+						type $Shape = waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncMessageAction.ActionMessageDelete.$Properties
+					}
+				}
+				interface ISyncChatAction extends waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.$Properties {
+				}
+				class SyncChatAction {
+					constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.$Properties)
+					$unknowns?: Uint8Array[]
+					chatId?: (string|null)
+					chatArchive?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatArchive.$Properties|null)
+					chatDelete?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatDelete.$Properties|null)
+					chatRead?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatRead.$Properties|null)
+					action?: ("chatArchive"|"chatDelete"|"chatRead")
+					static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction & waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.$Shape
+				}
+				namespace SyncChatAction {
+					interface $Properties {
+						chatId?: (string|null)
+						chatArchive?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatArchive.$Properties|null)
+						chatDelete?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatDelete.$Properties|null)
+						chatRead?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatRead.$Properties|null)
+						action?: ("chatArchive"|"chatDelete"|"chatRead")
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = {
+  chatId?: string|null
+  chatArchive?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatArchive.$Shape|null
+  chatDelete?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatDelete.$Shape|null
+  chatRead?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatRead.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ action?: undefined; chatArchive?: null; chatDelete?: null; chatRead?: null }|{ action?: "chatArchive"; chatArchive: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatArchive.$Shape; chatDelete?: null; chatRead?: null }|{ action?: "chatDelete"; chatArchive?: null; chatDelete: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatDelete.$Shape; chatRead?: null }|{ action?: "chatRead"; chatArchive?: null; chatDelete?: null; chatRead: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatRead.$Shape })
+)
+					interface IActionChatRead extends waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatRead.$Properties {
+					}
+					class ActionChatRead {
+						constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatRead.$Properties)
+						$unknowns?: Uint8Array[]
+						messageRange?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange.$Properties|null)
+						read?: (boolean|null)
+						static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatRead.$Properties, w?: PbWriter): PbWriter
+						static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatRead & waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatRead.$Shape
+					}
+					namespace ActionChatRead {
+						interface $Properties {
+							messageRange?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange.$Properties|null)
+							read?: (boolean|null)
+							$unknowns?: Uint8Array[]
+						}
+						type $Shape = waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatRead.$Properties
+					}
+					interface IActionChatDelete extends waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatDelete.$Properties {
+					}
+					class ActionChatDelete {
+						constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatDelete.$Properties)
+						$unknowns?: Uint8Array[]
+						messageRange?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange.$Properties|null)
+						static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatDelete.$Properties, w?: PbWriter): PbWriter
+						static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatDelete & waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatDelete.$Shape
+					}
+					namespace ActionChatDelete {
+						interface $Properties {
+							messageRange?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange.$Properties|null)
+							$unknowns?: Uint8Array[]
+						}
+						type $Shape = waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatDelete.$Properties
+					}
+					interface IActionChatArchive extends waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatArchive.$Properties {
+					}
+					class ActionChatArchive {
+						constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatArchive.$Properties)
+						$unknowns?: Uint8Array[]
+						messageRange?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange.$Properties|null)
+						archived?: (boolean|null)
+						static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatArchive.$Properties, w?: PbWriter): PbWriter
+						static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatArchive & waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatArchive.$Shape
+					}
+					namespace ActionChatArchive {
+						interface $Properties {
+							messageRange?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange.$Properties|null)
+							archived?: (boolean|null)
+							$unknowns?: Uint8Array[]
+						}
+						type $Shape = waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncChatAction.ActionChatArchive.$Properties
+					}
+				}
+				interface ISyncActionMessage extends waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessage.$Properties {
+				}
+				class SyncActionMessage {
+					constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessage.$Properties)
+					$unknowns?: Uint8Array[]
+					key?: (waproto.MessageKey.$Properties|null)
+					timestamp?: (number|Long|null)
+					static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessage.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessage & waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessage.$Shape
+				}
+				namespace SyncActionMessage {
+					interface $Properties {
+						key?: (waproto.MessageKey.$Properties|null)
+						timestamp?: (number|Long|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessage.$Properties
+				}
+				interface ISyncActionMessageRange extends waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange.$Properties {
+				}
+				class SyncActionMessageRange {
+					constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange.$Properties)
+					$unknowns?: Uint8Array[]
+					lastMessageTimestamp?: (number|Long|null)
+					lastSystemMessageTimestamp?: (number|Long|null)
+					messages: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessage.$Properties[]
+					static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange & waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange.$Shape
+				}
+				namespace SyncActionMessageRange {
+					interface $Properties {
+						lastMessageTimestamp?: (number|Long|null)
+						lastSystemMessageTimestamp?: (number|Long|null)
+						messages?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessage.$Properties[]|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.Armadillo.ApplicationData.MetadataSyncAction.SyncActionMessageRange.$Properties
+				}
+			}
+			interface IMetadataSyncNotification extends waproto.Armadillo.ApplicationData.MetadataSyncNotification.$Properties {
+			}
+			class MetadataSyncNotification {
+				constructor(p?: waproto.Armadillo.ApplicationData.MetadataSyncNotification.$Properties)
+				$unknowns?: Uint8Array[]
+				actions: waproto.Armadillo.ApplicationData.MetadataSyncAction.$Properties[]
+				static encode(m: waproto.Armadillo.ApplicationData.MetadataSyncNotification.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.ApplicationData.MetadataSyncNotification & waproto.Armadillo.ApplicationData.MetadataSyncNotification.$Shape
+			}
+			namespace MetadataSyncNotification {
+				interface $Properties {
+					actions?: (waproto.Armadillo.ApplicationData.MetadataSyncAction.$Properties[]|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = {
+  actions?: waproto.Armadillo.ApplicationData.MetadataSyncAction.$Shape[]|null
+  $unknowns?: Uint8Array[]
+}
+			}
+		}
+		interface IContent extends waproto.Armadillo.Content.$Properties {
+		}
+		class Content {
+			constructor(p?: waproto.Armadillo.Content.$Properties)
+			$unknowns?: Uint8Array[]
+			commonSticker?: (waproto.Armadillo.Content.CommonSticker.$Properties|null)
+			screenshotAction?: (waproto.Armadillo.Content.ScreenshotAction.$Properties|null)
+			extendedContentMessage?: (waproto.ExtendedContentMessage.$Properties|null)
+			ravenMessage?: (waproto.Armadillo.Content.RavenMessage.$Properties|null)
+			ravenActionNotifMessage?: (waproto.Armadillo.Content.RavenActionNotifMessage.$Properties|null)
+			extendedMessageContentWithSear?: (waproto.Armadillo.Content.ExtendedContentMessageWithSear.$Properties|null)
+			imageGalleryMessage?: (waproto.Armadillo.Content.ImageGalleryMessage.$Properties|null)
+			paymentsTransactionMessage?: (waproto.Armadillo.Content.PaymentsTransactionMessage.$Properties|null)
+			bumpExistingMessage?: (waproto.Armadillo.Content.BumpExistingMessage.$Properties|null)
+			noteReplyMessage?: (waproto.Armadillo.Content.NoteReplyMessage.$Properties|null)
+			ravenMessageMsgr?: (waproto.Armadillo.Content.RavenMessage.$Properties|null)
+			networkVerificationMessage?: (waproto.Armadillo.Content.NetworkVerificationMessage.$Properties|null)
+			homebaseSharingControl?: (waproto.Armadillo.Content.HomebaseSharingControl.$Properties|null)
+			content?: ("commonSticker"|"screenshotAction"|"extendedContentMessage"|"ravenMessage"|"ravenActionNotifMessage"|"extendedMessageContentWithSear"|"imageGalleryMessage"|"paymentsTransactionMessage"|"bumpExistingMessage"|"noteReplyMessage"|"ravenMessageMsgr"|"networkVerificationMessage"|"homebaseSharingControl")
+			static encode(m: waproto.Armadillo.Content.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content & waproto.Armadillo.Content.$Shape
+		}
+		namespace Content {
+			interface $Properties {
+				commonSticker?: (waproto.Armadillo.Content.CommonSticker.$Properties|null)
+				screenshotAction?: (waproto.Armadillo.Content.ScreenshotAction.$Properties|null)
+				extendedContentMessage?: (waproto.ExtendedContentMessage.$Properties|null)
+				ravenMessage?: (waproto.Armadillo.Content.RavenMessage.$Properties|null)
+				ravenActionNotifMessage?: (waproto.Armadillo.Content.RavenActionNotifMessage.$Properties|null)
+				extendedMessageContentWithSear?: (waproto.Armadillo.Content.ExtendedContentMessageWithSear.$Properties|null)
+				imageGalleryMessage?: (waproto.Armadillo.Content.ImageGalleryMessage.$Properties|null)
+				paymentsTransactionMessage?: (waproto.Armadillo.Content.PaymentsTransactionMessage.$Properties|null)
+				bumpExistingMessage?: (waproto.Armadillo.Content.BumpExistingMessage.$Properties|null)
+				noteReplyMessage?: (waproto.Armadillo.Content.NoteReplyMessage.$Properties|null)
+				ravenMessageMsgr?: (waproto.Armadillo.Content.RavenMessage.$Properties|null)
+				networkVerificationMessage?: (waproto.Armadillo.Content.NetworkVerificationMessage.$Properties|null)
+				homebaseSharingControl?: (waproto.Armadillo.Content.HomebaseSharingControl.$Properties|null)
+				content?: ("commonSticker"|"screenshotAction"|"extendedContentMessage"|"ravenMessage"|"ravenActionNotifMessage"|"extendedMessageContentWithSear"|"imageGalleryMessage"|"paymentsTransactionMessage"|"bumpExistingMessage"|"noteReplyMessage"|"ravenMessageMsgr"|"networkVerificationMessage"|"homebaseSharingControl")
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  commonSticker?: waproto.Armadillo.Content.CommonSticker.$Shape|null
+  screenshotAction?: waproto.Armadillo.Content.ScreenshotAction.$Shape|null
+  extendedContentMessage?: waproto.ExtendedContentMessage.$Shape|null
+  ravenMessage?: waproto.Armadillo.Content.RavenMessage.$Shape|null
+  ravenActionNotifMessage?: waproto.Armadillo.Content.RavenActionNotifMessage.$Shape|null
+  extendedMessageContentWithSear?: waproto.Armadillo.Content.ExtendedContentMessageWithSear.$Shape|null
+  imageGalleryMessage?: waproto.Armadillo.Content.ImageGalleryMessage.$Shape|null
+  paymentsTransactionMessage?: waproto.Armadillo.Content.PaymentsTransactionMessage.$Shape|null
+  bumpExistingMessage?: waproto.Armadillo.Content.BumpExistingMessage.$Shape|null
+  noteReplyMessage?: waproto.Armadillo.Content.NoteReplyMessage.$Shape|null
+  ravenMessageMsgr?: waproto.Armadillo.Content.RavenMessage.$Shape|null
+  networkVerificationMessage?: waproto.Armadillo.Content.NetworkVerificationMessage.$Shape|null
+  homebaseSharingControl?: waproto.Armadillo.Content.HomebaseSharingControl.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ content?: undefined; commonSticker?: null; screenshotAction?: null; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "commonSticker"; commonSticker: waproto.Armadillo.Content.CommonSticker.$Shape; screenshotAction?: null; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "screenshotAction"; commonSticker?: null; screenshotAction: waproto.Armadillo.Content.ScreenshotAction.$Shape; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "extendedContentMessage"; commonSticker?: null; screenshotAction?: null; extendedContentMessage: waproto.ExtendedContentMessage.$Shape; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "ravenMessage"; commonSticker?: null; screenshotAction?: null; extendedContentMessage?: null; ravenMessage: waproto.Armadillo.Content.RavenMessage.$Shape; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "ravenActionNotifMessage"; commonSticker?: null; screenshotAction?: null; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage: waproto.Armadillo.Content.RavenActionNotifMessage.$Shape; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "extendedMessageContentWithSear"; commonSticker?: null; screenshotAction?: null; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear: waproto.Armadillo.Content.ExtendedContentMessageWithSear.$Shape; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "imageGalleryMessage"; commonSticker?: null; screenshotAction?: null; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage: waproto.Armadillo.Content.ImageGalleryMessage.$Shape; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "paymentsTransactionMessage"; commonSticker?: null; screenshotAction?: null; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage: waproto.Armadillo.Content.PaymentsTransactionMessage.$Shape; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "bumpExistingMessage"; commonSticker?: null; screenshotAction?: null; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage: waproto.Armadillo.Content.BumpExistingMessage.$Shape; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "noteReplyMessage"; commonSticker?: null; screenshotAction?: null; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage: waproto.Armadillo.Content.NoteReplyMessage.$Shape; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "ravenMessageMsgr"; commonSticker?: null; screenshotAction?: null; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr: waproto.Armadillo.Content.RavenMessage.$Shape; networkVerificationMessage?: null; homebaseSharingControl?: null }|{ content?: "networkVerificationMessage"; commonSticker?: null; screenshotAction?: null; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage: waproto.Armadillo.Content.NetworkVerificationMessage.$Shape; homebaseSharingControl?: null }|{ content?: "homebaseSharingControl"; commonSticker?: null; screenshotAction?: null; extendedContentMessage?: null; ravenMessage?: null; ravenActionNotifMessage?: null; extendedMessageContentWithSear?: null; imageGalleryMessage?: null; paymentsTransactionMessage?: null; bumpExistingMessage?: null; noteReplyMessage?: null; ravenMessageMsgr?: null; networkVerificationMessage?: null; homebaseSharingControl: waproto.Armadillo.Content.HomebaseSharingControl.$Shape })
+)
+			interface IPaymentsTransactionMessage extends waproto.Armadillo.Content.PaymentsTransactionMessage.$Properties {
+			}
+			class PaymentsTransactionMessage {
+				constructor(p?: waproto.Armadillo.Content.PaymentsTransactionMessage.$Properties)
+				$unknowns?: Uint8Array[]
+				transactionId?: (number|Long|null)
+				amount?: (string|null)
+				currency?: (string|null)
+				paymentStatus?: (waproto.ARMADILLO_CONTENT_PAYMENTS_TRANSACTION_MESSAGE_PAYMENT_STATUS|null)
+				extendedContentMessage?: (waproto.ExtendedContentMessage.$Properties|null)
+				static encode(m: waproto.Armadillo.Content.PaymentsTransactionMessage.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content.PaymentsTransactionMessage & waproto.Armadillo.Content.PaymentsTransactionMessage.$Shape
+			}
+			namespace PaymentsTransactionMessage {
+				interface $Properties {
+					transactionId?: (number|Long|null)
+					amount?: (string|null)
+					currency?: (string|null)
+					paymentStatus?: (waproto.ARMADILLO_CONTENT_PAYMENTS_TRANSACTION_MESSAGE_PAYMENT_STATUS|null)
+					extendedContentMessage?: (waproto.ExtendedContentMessage.$Properties|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.Content.PaymentsTransactionMessage.$Properties
+			}
+			interface INetworkVerificationMessage extends waproto.Armadillo.Content.NetworkVerificationMessage.$Properties {
+			}
+			class NetworkVerificationMessage {
+				constructor(p?: waproto.Armadillo.Content.NetworkVerificationMessage.$Properties)
+				$unknowns?: Uint8Array[]
+				codeText?: (string|null)
+				static encode(m: waproto.Armadillo.Content.NetworkVerificationMessage.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content.NetworkVerificationMessage & waproto.Armadillo.Content.NetworkVerificationMessage.$Shape
+			}
+			namespace NetworkVerificationMessage {
+				interface $Properties {
+					codeText?: (string|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.Content.NetworkVerificationMessage.$Properties
+			}
+			interface INoteReplyMessage extends waproto.Armadillo.Content.NoteReplyMessage.$Properties {
+			}
+			class NoteReplyMessage {
+				constructor(p?: waproto.Armadillo.Content.NoteReplyMessage.$Properties)
+				$unknowns?: Uint8Array[]
+				noteId?: (string|null)
+				noteText?: (waproto.MessageText.$Properties|null)
+				noteTimestampMs?: (number|Long|null)
+				textContent?: (waproto.MessageText.$Properties|null)
+				stickerContent?: (waproto.SubProtocol.$Properties|null)
+				videoContent?: (waproto.SubProtocol.$Properties|null)
+				noteReplyContent?: ("textContent"|"stickerContent"|"videoContent")
+				static encode(m: waproto.Armadillo.Content.NoteReplyMessage.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content.NoteReplyMessage & waproto.Armadillo.Content.NoteReplyMessage.$Shape
+			}
+			namespace NoteReplyMessage {
+				interface $Properties {
+					noteId?: (string|null)
+					noteText?: (waproto.MessageText.$Properties|null)
+					noteTimestampMs?: (number|Long|null)
+					textContent?: (waproto.MessageText.$Properties|null)
+					stickerContent?: (waproto.SubProtocol.$Properties|null)
+					videoContent?: (waproto.SubProtocol.$Properties|null)
+					noteReplyContent?: ("textContent"|"stickerContent"|"videoContent")
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = {
+  noteId?: string|null
+  noteText?: waproto.MessageText.$Shape|null
+  noteTimestampMs?: number|Long|null
+  textContent?: waproto.MessageText.$Shape|null
+  stickerContent?: waproto.SubProtocol.$Shape|null
+  videoContent?: waproto.SubProtocol.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ noteReplyContent?: undefined; textContent?: null; stickerContent?: null; videoContent?: null }|{ noteReplyContent?: "textContent"; textContent: waproto.MessageText.$Shape; stickerContent?: null; videoContent?: null }|{ noteReplyContent?: "stickerContent"; textContent?: null; stickerContent: waproto.SubProtocol.$Shape; videoContent?: null }|{ noteReplyContent?: "videoContent"; textContent?: null; stickerContent?: null; videoContent: waproto.SubProtocol.$Shape })
+)
+			}
+			interface IBumpExistingMessage extends waproto.Armadillo.Content.BumpExistingMessage.$Properties {
+			}
+			class BumpExistingMessage {
+				constructor(p?: waproto.Armadillo.Content.BumpExistingMessage.$Properties)
+				$unknowns?: Uint8Array[]
+				key?: (waproto.MessageKey.$Properties|null)
+				static encode(m: waproto.Armadillo.Content.BumpExistingMessage.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content.BumpExistingMessage & waproto.Armadillo.Content.BumpExistingMessage.$Shape
+			}
+			namespace BumpExistingMessage {
+				interface $Properties {
+					key?: (waproto.MessageKey.$Properties|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.Content.BumpExistingMessage.$Properties
+			}
+			interface IImageGalleryMessage extends waproto.Armadillo.Content.ImageGalleryMessage.$Properties {
+			}
+			class ImageGalleryMessage {
+				constructor(p?: waproto.Armadillo.Content.ImageGalleryMessage.$Properties)
+				$unknowns?: Uint8Array[]
+				images: waproto.SubProtocol.$Properties[]
+				static encode(m: waproto.Armadillo.Content.ImageGalleryMessage.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content.ImageGalleryMessage & waproto.Armadillo.Content.ImageGalleryMessage.$Shape
+			}
+			namespace ImageGalleryMessage {
+				interface $Properties {
+					images?: (waproto.SubProtocol.$Properties[]|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.Content.ImageGalleryMessage.$Properties
+			}
+			interface IHomebaseSharingControl extends waproto.Armadillo.Content.HomebaseSharingControl.$Properties {
+			}
+			class HomebaseSharingControl {
+				constructor(p?: waproto.Armadillo.Content.HomebaseSharingControl.$Properties)
+				$unknowns?: Uint8Array[]
+				protocolVersion?: (number|null)
+				operation?: (waproto.ARMADILLO_CONTENT_HOMEBASE_SHARING_CONTROL_HOMEBASE_SHARING_CONTROL_OPERATION|null)
+				reason?: (waproto.ARMADILLO_CONTENT_HOMEBASE_SHARING_CONTROL_HOMEBASE_SHARING_CONTROL_REASON|null)
+				authorizationEpochId?: (string|null)
+				messageLimit?: (number|null)
+				static encode(m: waproto.Armadillo.Content.HomebaseSharingControl.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content.HomebaseSharingControl & waproto.Armadillo.Content.HomebaseSharingControl.$Shape
+			}
+			namespace HomebaseSharingControl {
+				interface $Properties {
+					protocolVersion?: (number|null)
+					operation?: (waproto.ARMADILLO_CONTENT_HOMEBASE_SHARING_CONTROL_HOMEBASE_SHARING_CONTROL_OPERATION|null)
+					reason?: (waproto.ARMADILLO_CONTENT_HOMEBASE_SHARING_CONTROL_HOMEBASE_SHARING_CONTROL_REASON|null)
+					authorizationEpochId?: (string|null)
+					messageLimit?: (number|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.Content.HomebaseSharingControl.$Properties
+			}
+			interface IScreenshotAction extends waproto.Armadillo.Content.ScreenshotAction.$Properties {
+			}
+			class ScreenshotAction {
+				constructor(p?: waproto.Armadillo.Content.ScreenshotAction.$Properties)
+				$unknowns?: Uint8Array[]
+				screenshotType?: (waproto.ARMADILLO_CONTENT_SCREENSHOT_ACTION_SCREENSHOT_TYPE|null)
+				static encode(m: waproto.Armadillo.Content.ScreenshotAction.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content.ScreenshotAction & waproto.Armadillo.Content.ScreenshotAction.$Shape
+			}
+			namespace ScreenshotAction {
+				interface $Properties {
+					screenshotType?: (waproto.ARMADILLO_CONTENT_SCREENSHOT_ACTION_SCREENSHOT_TYPE|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.Content.ScreenshotAction.$Properties
+			}
+			interface IExtendedContentMessageWithSear extends waproto.Armadillo.Content.ExtendedContentMessageWithSear.$Properties {
+			}
+			class ExtendedContentMessageWithSear {
+				constructor(p?: waproto.Armadillo.Content.ExtendedContentMessageWithSear.$Properties)
+				$unknowns?: Uint8Array[]
+				searId?: (string|null)
+				payload?: (Uint8Array|null)
+				nativeUrl?: (string|null)
+				searAssociatedMessage?: (waproto.SubProtocol.$Properties|null)
+				searSentWithMessageId?: (string|null)
+				static encode(m: waproto.Armadillo.Content.ExtendedContentMessageWithSear.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content.ExtendedContentMessageWithSear & waproto.Armadillo.Content.ExtendedContentMessageWithSear.$Shape
+			}
+			namespace ExtendedContentMessageWithSear {
+				interface $Properties {
+					searId?: (string|null)
+					payload?: (Uint8Array|null)
+					nativeUrl?: (string|null)
+					searAssociatedMessage?: (waproto.SubProtocol.$Properties|null)
+					searSentWithMessageId?: (string|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.Content.ExtendedContentMessageWithSear.$Properties
+			}
+			interface IRavenActionNotifMessage extends waproto.Armadillo.Content.RavenActionNotifMessage.$Properties {
+			}
+			class RavenActionNotifMessage {
+				constructor(p?: waproto.Armadillo.Content.RavenActionNotifMessage.$Properties)
+				$unknowns?: Uint8Array[]
+				key?: (waproto.MessageKey.$Properties|null)
+				actionTimestamp?: (number|Long|null)
+				actionType?: (waproto.ARMADILLO_CONTENT_RAVEN_ACTION_NOTIF_MESSAGE_ACTION_TYPE|null)
+				static encode(m: waproto.Armadillo.Content.RavenActionNotifMessage.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content.RavenActionNotifMessage & waproto.Armadillo.Content.RavenActionNotifMessage.$Shape
+			}
+			namespace RavenActionNotifMessage {
+				interface $Properties {
+					key?: (waproto.MessageKey.$Properties|null)
+					actionTimestamp?: (number|Long|null)
+					actionType?: (waproto.ARMADILLO_CONTENT_RAVEN_ACTION_NOTIF_MESSAGE_ACTION_TYPE|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.Content.RavenActionNotifMessage.$Properties
+			}
+			interface IRavenMessage extends waproto.Armadillo.Content.RavenMessage.$Properties {
+			}
+			class RavenMessage {
+				constructor(p?: waproto.Armadillo.Content.RavenMessage.$Properties)
+				$unknowns?: Uint8Array[]
+				ephemeralType?: (waproto.ARMADILLO_CONTENT_RAVEN_MESSAGE_EPHEMERAL_TYPE|null)
+				imageMessage?: (waproto.SubProtocol.$Properties|null)
+				videoMessage?: (waproto.SubProtocol.$Properties|null)
+				mediaContent?: ("imageMessage"|"videoMessage")
+				static encode(m: waproto.Armadillo.Content.RavenMessage.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content.RavenMessage & waproto.Armadillo.Content.RavenMessage.$Shape
+			}
+			namespace RavenMessage {
+				interface $Properties {
+					ephemeralType?: (waproto.ARMADILLO_CONTENT_RAVEN_MESSAGE_EPHEMERAL_TYPE|null)
+					imageMessage?: (waproto.SubProtocol.$Properties|null)
+					videoMessage?: (waproto.SubProtocol.$Properties|null)
+					mediaContent?: ("imageMessage"|"videoMessage")
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = {
+  ephemeralType?: waproto.ARMADILLO_CONTENT_RAVEN_MESSAGE_EPHEMERAL_TYPE|null
+  imageMessage?: waproto.SubProtocol.$Shape|null
+  videoMessage?: waproto.SubProtocol.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ mediaContent?: undefined; imageMessage?: null; videoMessage?: null }|{ mediaContent?: "imageMessage"; imageMessage: waproto.SubProtocol.$Shape; videoMessage?: null }|{ mediaContent?: "videoMessage"; imageMessage?: null; videoMessage: waproto.SubProtocol.$Shape })
+)
+			}
+			interface ICommonSticker extends waproto.Armadillo.Content.CommonSticker.$Properties {
+			}
+			class CommonSticker {
+				constructor(p?: waproto.Armadillo.Content.CommonSticker.$Properties)
+				$unknowns?: Uint8Array[]
+				stickerType?: (waproto.ARMADILLO_CONTENT_COMMON_STICKER_STICKER_TYPE|null)
+				static encode(m: waproto.Armadillo.Content.CommonSticker.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Armadillo.Content.CommonSticker & waproto.Armadillo.Content.CommonSticker.$Shape
+			}
+			namespace CommonSticker {
+				interface $Properties {
+					stickerType?: (waproto.ARMADILLO_CONTENT_COMMON_STICKER_STICKER_TYPE|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Armadillo.Content.CommonSticker.$Properties
+			}
+		}
+	}
+	interface IAudioMsgContentProto extends waproto.AudioMsgContentProto.$Properties {
+	}
+	class AudioMsgContentProto {
+		constructor(p?: waproto.AudioMsgContentProto.$Properties)
+		$unknowns?: Uint8Array[]
+		duration?: (number|null)
+		mimetype?: (string|null)
+		played?: (boolean|null)
+		waveform?: (Uint8Array|null)
+		static encode(m: waproto.AudioMsgContentProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.AudioMsgContentProto & waproto.AudioMsgContentProto.$Shape
+	}
+	namespace AudioMsgContentProto {
+		interface $Properties {
+			duration?: (number|null)
+			mimetype?: (string|null)
+			played?: (boolean|null)
+			waveform?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.AudioMsgContentProto.$Properties
+	}
+	interface IAudioTransport extends waproto.AudioTransport.$Properties {
+	}
+	class AudioTransport {
+		constructor(p?: waproto.AudioTransport.$Properties)
+		$unknowns?: Uint8Array[]
+		integral?: (waproto.AudioTransport.Integral.$Properties|null)
+		ancillary?: (waproto.AudioTransport.Ancillary.$Properties|null)
+		static encode(m: waproto.AudioTransport.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.AudioTransport & waproto.AudioTransport.$Shape
+	}
+	namespace AudioTransport {
+		interface $Properties {
+			integral?: (waproto.AudioTransport.Integral.$Properties|null)
+			ancillary?: (waproto.AudioTransport.Ancillary.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.AudioTransport.$Properties
+		interface IAncillary extends waproto.AudioTransport.Ancillary.$Properties {
+		}
+		class Ancillary {
+			constructor(p?: waproto.AudioTransport.Ancillary.$Properties)
+			$unknowns?: Uint8Array[]
+			seconds?: (number|null)
+			avatarAudio?: (waproto.AudioTransport.Ancillary.AvatarAudio.$Properties|null)
+			waveformData?: (string|null)
+			waveform?: (Uint8Array|null)
+			static encode(m: waproto.AudioTransport.Ancillary.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.AudioTransport.Ancillary & waproto.AudioTransport.Ancillary.$Shape
+		}
+		namespace Ancillary {
+			interface $Properties {
+				seconds?: (number|null)
+				avatarAudio?: (waproto.AudioTransport.Ancillary.AvatarAudio.$Properties|null)
+				waveformData?: (string|null)
+				waveform?: (Uint8Array|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.AudioTransport.Ancillary.$Properties
+			interface IAvatarAudio extends waproto.AudioTransport.Ancillary.AvatarAudio.$Properties {
+			}
+			class AvatarAudio {
+				constructor(p?: waproto.AudioTransport.Ancillary.AvatarAudio.$Properties)
+				$unknowns?: Uint8Array[]
+				poseId?: (number|null)
+				avatarAnimations: waproto.AudioTransport.Ancillary.AvatarAudio.DownloadableAvatarAnimations.$Properties[]
+				static encode(m: waproto.AudioTransport.Ancillary.AvatarAudio.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.AudioTransport.Ancillary.AvatarAudio & waproto.AudioTransport.Ancillary.AvatarAudio.$Shape
+			}
+			namespace AvatarAudio {
+				interface $Properties {
+					poseId?: (number|null)
+					avatarAnimations?: (waproto.AudioTransport.Ancillary.AvatarAudio.DownloadableAvatarAnimations.$Properties[]|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.AudioTransport.Ancillary.AvatarAudio.$Properties
+				interface IDownloadableAvatarAnimations extends waproto.AudioTransport.Ancillary.AvatarAudio.DownloadableAvatarAnimations.$Properties {
+				}
+				class DownloadableAvatarAnimations {
+					constructor(p?: waproto.AudioTransport.Ancillary.AvatarAudio.DownloadableAvatarAnimations.$Properties)
+					$unknowns?: Uint8Array[]
+					fileSha256?: (Uint8Array|null)
+					fileEncSha256?: (Uint8Array|null)
+					directPath?: (string|null)
+					mediaKey?: (Uint8Array|null)
+					mediaKeyTimestamp?: (number|Long|null)
+					objectId?: (string|null)
+					animationsType?: (waproto.AUDIO_TRANSPORT_ANCILLARY_AVATAR_AUDIO_ANIMATIONS_TYPE|null)
+					static encode(m: waproto.AudioTransport.Ancillary.AvatarAudio.DownloadableAvatarAnimations.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.AudioTransport.Ancillary.AvatarAudio.DownloadableAvatarAnimations & waproto.AudioTransport.Ancillary.AvatarAudio.DownloadableAvatarAnimations.$Shape
+				}
+				namespace DownloadableAvatarAnimations {
+					interface $Properties {
+						fileSha256?: (Uint8Array|null)
+						fileEncSha256?: (Uint8Array|null)
+						directPath?: (string|null)
+						mediaKey?: (Uint8Array|null)
+						mediaKeyTimestamp?: (number|Long|null)
+						objectId?: (string|null)
+						animationsType?: (waproto.AUDIO_TRANSPORT_ANCILLARY_AVATAR_AUDIO_ANIMATIONS_TYPE|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.AudioTransport.Ancillary.AvatarAudio.DownloadableAvatarAnimations.$Properties
+				}
+			}
+		}
+		interface IIntegral extends waproto.AudioTransport.Integral.$Properties {
+		}
+		class Integral {
+			constructor(p?: waproto.AudioTransport.Integral.$Properties)
+			$unknowns?: Uint8Array[]
+			transport?: (waproto.WAMediaTransport.$Properties|null)
+			audioFormat?: (waproto.AUDIO_TRANSPORT_INTEGRAL_AUDIO_FORMAT|null)
+			static encode(m: waproto.AudioTransport.Integral.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.AudioTransport.Integral & waproto.AudioTransport.Integral.$Shape
+		}
+		namespace Integral {
+			interface $Properties {
+				transport?: (waproto.WAMediaTransport.$Properties|null)
+				audioFormat?: (waproto.AUDIO_TRANSPORT_INTEGRAL_AUDIO_FORMAT|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.AudioTransport.Integral.$Properties
+		}
+	}
 	interface IAutoDownloadSettings extends waproto.AutoDownloadSettings.$Properties {
 	}
 	class AutoDownloadSettings {
@@ -1174,6 +2565,130 @@ export namespace waproto {
 		}
 		type $Shape = waproto.AvatarUserSettings.$Properties
 	}
+	interface IBackupMessage extends waproto.BackupMessage.$Properties {
+	}
+	class BackupMessage {
+		constructor(p?: waproto.BackupMessage.$Properties)
+		$unknowns?: Uint8Array[]
+		metadata?: (waproto.Metadata.$Properties|null)
+		encryptedTransportMessage?: (Uint8Array|null)
+		encryptedTransportEvent?: (waproto.Subprotocol.$Properties|null)
+		encryptedTransportLocallyTransformedMessage?: (waproto.Subprotocol.$Properties|null)
+		miTransportAdminMessage?: (waproto.Subprotocol.$Properties|null)
+		payload?: ("encryptedTransportMessage"|"encryptedTransportEvent"|"encryptedTransportLocallyTransformedMessage"|"miTransportAdminMessage")
+		static encode(m: waproto.BackupMessage.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.BackupMessage & waproto.BackupMessage.$Shape
+	}
+	namespace BackupMessage {
+		interface $Properties {
+			metadata?: (waproto.Metadata.$Properties|null)
+			encryptedTransportMessage?: (Uint8Array|null)
+			encryptedTransportEvent?: (waproto.Subprotocol.$Properties|null)
+			encryptedTransportLocallyTransformedMessage?: (waproto.Subprotocol.$Properties|null)
+			miTransportAdminMessage?: (waproto.Subprotocol.$Properties|null)
+			payload?: ("encryptedTransportMessage"|"encryptedTransportEvent"|"encryptedTransportLocallyTransformedMessage"|"miTransportAdminMessage")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  metadata?: waproto.Metadata.$Shape|null
+  encryptedTransportMessage?: Uint8Array|null
+  encryptedTransportEvent?: waproto.Subprotocol.$Shape|null
+  encryptedTransportLocallyTransformedMessage?: waproto.Subprotocol.$Shape|null
+  miTransportAdminMessage?: waproto.Subprotocol.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ payload?: undefined; encryptedTransportMessage?: null; encryptedTransportEvent?: null; encryptedTransportLocallyTransformedMessage?: null; miTransportAdminMessage?: null }|{ payload?: "encryptedTransportMessage"; encryptedTransportMessage: Uint8Array; encryptedTransportEvent?: null; encryptedTransportLocallyTransformedMessage?: null; miTransportAdminMessage?: null }|{ payload?: "encryptedTransportEvent"; encryptedTransportMessage?: null; encryptedTransportEvent: waproto.Subprotocol.$Shape; encryptedTransportLocallyTransformedMessage?: null; miTransportAdminMessage?: null }|{ payload?: "encryptedTransportLocallyTransformedMessage"; encryptedTransportMessage?: null; encryptedTransportEvent?: null; encryptedTransportLocallyTransformedMessage: waproto.Subprotocol.$Shape; miTransportAdminMessage?: null }|{ payload?: "miTransportAdminMessage"; encryptedTransportMessage?: null; encryptedTransportEvent?: null; encryptedTransportLocallyTransformedMessage?: null; miTransportAdminMessage: waproto.Subprotocol.$Shape })
+)
+	}
+	interface IBackwardEdge extends waproto.BackwardEdge.$Properties {
+	}
+	class BackwardEdge {
+		constructor(p?: waproto.BackwardEdge.$Properties)
+		$unknowns?: Uint8Array[]
+		encryptedPrevEpochAnonId?: (Uint8Array|null)
+		encryptedPrevEpochRootKey?: (Uint8Array|null)
+		prevEpochRootKeyFingerprint?: (Uint8Array|null)
+		static encode(m: waproto.BackwardEdge.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.BackwardEdge & waproto.BackwardEdge.$Shape
+	}
+	namespace BackwardEdge {
+		interface $Properties {
+			encryptedPrevEpochAnonId?: (Uint8Array|null)
+			encryptedPrevEpochRootKey?: (Uint8Array|null)
+			prevEpochRootKeyFingerprint?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.BackwardEdge.$Properties
+	}
+	interface IBizAIMetadataSync extends waproto.BizAIMetadataSync.$Properties {
+	}
+	class BizAIMetadataSync {
+		constructor(p?: waproto.BizAIMetadataSync.$Properties)
+		$unknowns?: Uint8Array[]
+		serverEvent?: (waproto.BizAIMetadataSync.ServerEvent.$Properties|null)
+		operation?: "serverEvent"
+		static encode(m: waproto.BizAIMetadataSync.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.BizAIMetadataSync & waproto.BizAIMetadataSync.$Shape
+	}
+	namespace BizAIMetadataSync {
+		interface $Properties {
+			serverEvent?: (waproto.BizAIMetadataSync.ServerEvent.$Properties|null)
+			operation?: "serverEvent"
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  serverEvent?: waproto.BizAIMetadataSync.ServerEvent.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ operation?: undefined; serverEvent?: null }|{ operation?: "serverEvent"; serverEvent: waproto.BizAIMetadataSync.ServerEvent.$Shape })
+)
+		interface IServerEvent extends waproto.BizAIMetadataSync.ServerEvent.$Properties {
+		}
+		class ServerEvent {
+			constructor(p?: waproto.BizAIMetadataSync.ServerEvent.$Properties)
+			$unknowns?: Uint8Array[]
+			protocolEvent?: (waproto.BizAIMetadataSync.ServerEvent.ProtocolEvent|null)
+			agentOnboardingStarted?: (waproto.BizAIMetadataSync.ServerEvent.AgentOnboardingStarted.$Properties|null)
+			event?: ("protocolEvent"|"agentOnboardingStarted")
+			static encode(m: waproto.BizAIMetadataSync.ServerEvent.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.BizAIMetadataSync.ServerEvent & waproto.BizAIMetadataSync.ServerEvent.$Shape
+		}
+		namespace ServerEvent {
+			interface $Properties {
+				protocolEvent?: (waproto.BizAIMetadataSync.ServerEvent.ProtocolEvent|null)
+				agentOnboardingStarted?: (waproto.BizAIMetadataSync.ServerEvent.AgentOnboardingStarted.$Properties|null)
+				event?: ("protocolEvent"|"agentOnboardingStarted")
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  protocolEvent?: waproto.BizAIMetadataSync.ServerEvent.ProtocolEvent|null
+  agentOnboardingStarted?: waproto.BizAIMetadataSync.ServerEvent.AgentOnboardingStarted.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ event?: undefined; protocolEvent?: null; agentOnboardingStarted?: null }|{ event?: "protocolEvent"; protocolEvent: waproto.BizAIMetadataSync.ServerEvent.ProtocolEvent; agentOnboardingStarted?: null }|{ event?: "agentOnboardingStarted"; protocolEvent?: null; agentOnboardingStarted: waproto.BizAIMetadataSync.ServerEvent.AgentOnboardingStarted.$Shape })
+)
+			enum ProtocolEvent {
+				UNSPECIFIED = 0,
+				AGENT_CHAT_READY = 1
+			}
+			interface IAgentOnboardingStarted extends waproto.BizAIMetadataSync.ServerEvent.AgentOnboardingStarted.$Properties {
+			}
+			class AgentOnboardingStarted {
+				constructor(p?: waproto.BizAIMetadataSync.ServerEvent.AgentOnboardingStarted.$Properties)
+				$unknowns?: Uint8Array[]
+				composerBlockDurationSecs?: (number|Long|null)
+				static encode(m: waproto.BizAIMetadataSync.ServerEvent.AgentOnboardingStarted.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.BizAIMetadataSync.ServerEvent.AgentOnboardingStarted & waproto.BizAIMetadataSync.ServerEvent.AgentOnboardingStarted.$Shape
+			}
+			namespace AgentOnboardingStarted {
+				interface $Properties {
+					composerBlockDurationSecs?: (number|Long|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.BizAIMetadataSync.ServerEvent.AgentOnboardingStarted.$Properties
+			}
+		}
+	}
 	interface IBizAccountLinkInfo extends waproto.BizAccountLinkInfo.$Properties {
 	}
 	class BizAccountLinkInfo {
@@ -1184,6 +2699,7 @@ export namespace waproto {
 		issueTime?: (number|Long|null)
 		hostStorage?: (waproto.BizAccountLinkInfo.HostStorageType|null)
 		accountType?: (waproto.BizAccountLinkInfo.AccountType|null)
+		whatsappAcctEmail?: (string|null)
 		static encode(m: waproto.BizAccountLinkInfo.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.BizAccountLinkInfo & waproto.BizAccountLinkInfo.$Shape
 	}
@@ -1194,6 +2710,7 @@ export namespace waproto {
 			issueTime?: (number|Long|null)
 			hostStorage?: (waproto.BizAccountLinkInfo.HostStorageType|null)
 			accountType?: (waproto.BizAccountLinkInfo.AccountType|null)
+			whatsappAcctEmail?: (string|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.BizAccountLinkInfo.$Properties
@@ -1406,7 +2923,31 @@ export namespace waproto {
 			UNIFIED_RESPONSE_MARKDOWN_LINKS_ENABLED = 63,
 			AI_RICH_RESPONSE_MAPS_V2_ENABLED = 64,
 			AI_SUBSCRIPTION_METERING_ENABLED = 65,
-			RICH_RESPONSE_SPORTS_WIDGET_ENABLED = 66
+			RICH_RESPONSE_SPORTS_WIDGET_ENABLED = 66,
+			AI_RICH_RESPONSE_ARTIFACTS_ENABLED = 67,
+			AI_RICH_RESPONSE_EMAIL_CALENDAR_ENABLED = 68,
+			AI_RICH_RESPONSE_REMINDERS_ENABLED = 69,
+			AI_STOP_GENERATION_ENABLED = 70,
+			AI_RICH_RESPONSE_3P_LINKING_CARD_ENABLED = 71,
+			HATCH_NOTIFICATION_METADATA_EVENT_ENABLED = 72,
+			AI_SUGGESTED_REPLIES_ENABLED = 73,
+			RICH_RESPONSE_IN_APP_SURVEY_BLOKS = 74,
+			RICH_RESPONSE_IMAGE_SOURCE_ATTRIBUTION = 75,
+			HATCH_CONNECTOR_ACTION_CARD_ENABLED = 76,
+			HATCH_SECURE_CREDENTIAL_CARD_ENABLED = 77,
+			HATCH_BROWSER_TASK_CARD_ENABLED = 78,
+			HATCH_ARTIFACT_CARD_ENABLED = 79,
+			AI_STUDY_CENTER_ENABLED = 80,
+			AI_MUSE_JARVIS_SCHEMA_ENABLED = 81,
+			AI_STUDY_QUIZ_ENABLED = 82,
+			HATCH_CVM_ENABLED = 83,
+			RICH_RESPONSE_SOCIAL_ENTITY_PREFETCH_SCHEDULER_ENABLED = 84,
+			AI_MUSE_JARVIS_EXTENDED_CARDS_ENABLED = 85,
+			AI_INTERJECTIONS_ENABLED = 86,
+			AI_RICH_RESPONSE_READ_ALOUD_ENABLED = 87,
+			AI_RICH_RESPONSE_ITEM_LISTS_ENABLED = 88,
+			RICH_RESPONSE_SIDE_BY_SIDE_BUFFER_BOTH = 89,
+			AI_MUSE_JARVIS_ENVELOPE_GZIP_ENABLED = 90
 		}
 	}
 	interface IBotCommandMetadata extends waproto.BotCommandMetadata.$Properties {
@@ -1775,6 +3316,24 @@ export namespace waproto {
 			CLIPPY = 1
 		}
 	}
+	interface IBotInterjectionMetadata extends waproto.BotInterjectionMetadata.$Properties {
+	}
+	class BotInterjectionMetadata {
+		constructor(p?: waproto.BotInterjectionMetadata.$Properties)
+		$unknowns?: Uint8Array[]
+		targetPromptMessageId?: (string|null)
+		foldedPromptMessageIds: string[]
+		static encode(m: waproto.BotInterjectionMetadata.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotInterjectionMetadata & waproto.BotInterjectionMetadata.$Shape
+	}
+	namespace BotInterjectionMetadata {
+		interface $Properties {
+			targetPromptMessageId?: (string|null)
+			foldedPromptMessageIds?: (string[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.BotInterjectionMetadata.$Properties
+	}
 	interface IBotLinkedAccount extends waproto.BotLinkedAccount.$Properties {
 	}
 	class BotLinkedAccount {
@@ -1907,17 +3466,20 @@ export namespace waproto {
 		constructor(p?: waproto.BotMessageOrigin.$Properties)
 		$unknowns?: Uint8Array[]
 		type?: (waproto.BotMessageOrigin.BotMessageOriginType|null)
+		proactiveMessageCampaignId?: (string|null)
 		static encode(m: waproto.BotMessageOrigin.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMessageOrigin & waproto.BotMessageOrigin.$Shape
 	}
 	namespace BotMessageOrigin {
 		interface $Properties {
 			type?: (waproto.BotMessageOrigin.BotMessageOriginType|null)
+			proactiveMessageCampaignId?: (string|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.BotMessageOrigin.$Properties
 		enum BotMessageOriginType {
-			BOT_MESSAGE_ORIGIN_TYPE_AI_INITIATED = 0
+			BOT_MESSAGE_ORIGIN_TYPE_AI_INITIATED = 0,
+			BOT_MESSAGE_ORIGIN_TYPE_META_AI_THREAD_WELCOME = 1
 		}
 	}
 	interface IBotMessageOriginMetadata extends waproto.BotMessageOriginMetadata.$Properties {
@@ -2001,6 +3563,8 @@ export namespace waproto {
 		subscriptionUpsellMetadata?: (waproto.AISubscriptionUpsellMetadata.$Properties|null)
 		pttPromptMetadata?: (waproto.BotPttPromptMetadata.$Properties|null)
 		botHistoryShareMetadata?: (waproto.BotHistoryShareMetadata.$Properties|null)
+		responseStoppedByUser?: (boolean|null)
+		interjectionMetadata?: (waproto.BotInterjectionMetadata.$Properties|null)
 		internalMetadata?: (Uint8Array|null)
 		static encode(m: waproto.BotMetadata.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMetadata & waproto.BotMetadata.$Shape
@@ -2049,6 +3613,8 @@ export namespace waproto {
 			subscriptionUpsellMetadata?: (waproto.AISubscriptionUpsellMetadata.$Properties|null)
 			pttPromptMetadata?: (waproto.BotPttPromptMetadata.$Properties|null)
 			botHistoryShareMetadata?: (waproto.BotHistoryShareMetadata.$Properties|null)
+			responseStoppedByUser?: (boolean|null)
+			interjectionMetadata?: (waproto.BotInterjectionMetadata.$Properties|null)
 			internalMetadata?: (Uint8Array|null)
 			$unknowns?: Uint8Array[]
 		}
@@ -2566,6 +4132,7 @@ export namespace waproto {
 		useCase?: (waproto.BotSignatureVerificationUseCaseProof.BotSignatureUseCase|null)
 		signature?: (Uint8Array|null)
 		certificateChain: Uint8Array[]
+		certificateChainSki: waproto.BotSignatureVerificationUseCaseProof.CertificateSKI.$Properties[]
 		static encode(m: waproto.BotSignatureVerificationUseCaseProof.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotSignatureVerificationUseCaseProof & waproto.BotSignatureVerificationUseCaseProof.$Shape
 	}
@@ -2575,6 +4142,7 @@ export namespace waproto {
 			useCase?: (waproto.BotSignatureVerificationUseCaseProof.BotSignatureUseCase|null)
 			signature?: (Uint8Array|null)
 			certificateChain?: (Uint8Array[]|null)
+			certificateChainSki?: (waproto.BotSignatureVerificationUseCaseProof.CertificateSKI.$Properties[]|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.BotSignatureVerificationUseCaseProof.$Properties
@@ -2582,7 +4150,27 @@ export namespace waproto {
 			UNSPECIFIED = 0,
 			WA_BOT_MSG = 1,
 			WA_TEE_BOT_MSG = 2,
-			P2P_PILLS = 3
+			P2P_PILLS = 3,
+			WA_WAFFLE = 4,
+			WA_FEATURE_PKI = 5
+		}
+		interface ICertificateSKI extends waproto.BotSignatureVerificationUseCaseProof.CertificateSKI.$Properties {
+		}
+		class CertificateSKI {
+			constructor(p?: waproto.BotSignatureVerificationUseCaseProof.CertificateSKI.$Properties)
+			$unknowns?: Uint8Array[]
+			useCase?: (waproto.BotSignatureVerificationUseCaseProof.BotSignatureUseCase|null)
+			ski?: (Uint8Array|null)
+			static encode(m: waproto.BotSignatureVerificationUseCaseProof.CertificateSKI.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotSignatureVerificationUseCaseProof.CertificateSKI & waproto.BotSignatureVerificationUseCaseProof.CertificateSKI.$Shape
+		}
+		namespace CertificateSKI {
+			interface $Properties {
+				useCase?: (waproto.BotSignatureVerificationUseCaseProof.BotSignatureUseCase|null)
+				ski?: (Uint8Array|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.BotSignatureVerificationUseCaseProof.CertificateSKI.$Properties
 		}
 	}
 	interface IBotSourcesMetadata extends waproto.BotSourcesMetadata.$Properties {
@@ -2714,6 +4302,30 @@ export namespace waproto {
 			type $Shape = waproto.BotUnifiedResponseMutation.SideBySideMetadata.$Properties
 		}
 	}
+	interface ICTAProto extends waproto.CTAProto.$Properties {
+	}
+	class CTAProto {
+		constructor(p?: waproto.CTAProto.$Properties)
+		$unknowns?: Uint8Array[]
+		buttonType?: (number|null)
+		title?: (string|null)
+		actionUrl?: (string|null)
+		nativeUrl?: (string|null)
+		ctaType?: (string|null)
+		static encode(m: waproto.CTAProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.CTAProto & waproto.CTAProto.$Shape
+	}
+	namespace CTAProto {
+		interface $Properties {
+			buttonType?: (number|null)
+			title?: (string|null)
+			actionUrl?: (string|null)
+			nativeUrl?: (string|null)
+			ctaType?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.CTAProto.$Properties
+	}
 	interface ICallLogRecord extends waproto.CallLogRecord.$Properties {
 	}
 	class CallLogRecord {
@@ -2788,6 +4400,7 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 			userJid?: (string|null)
 			callResult?: (waproto.CallLogRecord.CallResult|null)
+			guestInfo?: (waproto.CallLogRecord.GuestInfo.$Properties|null)
 			static encode(m: waproto.CallLogRecord.ParticipantInfo.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.CallLogRecord.ParticipantInfo & waproto.CallLogRecord.ParticipantInfo.$Shape
 		}
@@ -2795,9 +4408,26 @@ export namespace waproto {
 			interface $Properties {
 				userJid?: (string|null)
 				callResult?: (waproto.CallLogRecord.CallResult|null)
+				guestInfo?: (waproto.CallLogRecord.GuestInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.CallLogRecord.ParticipantInfo.$Properties
+		}
+		interface IGuestInfo extends waproto.CallLogRecord.GuestInfo.$Properties {
+		}
+		class GuestInfo {
+			constructor(p?: waproto.CallLogRecord.GuestInfo.$Properties)
+			$unknowns?: Uint8Array[]
+			pushName?: (string|null)
+			static encode(m: waproto.CallLogRecord.GuestInfo.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.CallLogRecord.GuestInfo & waproto.CallLogRecord.GuestInfo.$Shape
+		}
+		namespace GuestInfo {
+			interface $Properties {
+				pushName?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.CallLogRecord.GuestInfo.$Properties
 		}
 	}
 	interface ICertChain extends waproto.CertChain.$Properties {
@@ -2876,7 +4506,11 @@ export namespace waproto {
 			secretCode?: (waproto.UserPassword.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.ChatLockSettings.$Properties
+		type $Shape = {
+  hideLockedChats?: boolean|null
+  secretCode?: waproto.UserPassword.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface IChatRowOpaqueData extends waproto.ChatRowOpaqueData.$Properties {
 	}
@@ -2983,6 +4617,30 @@ export namespace waproto {
 			}
 		}
 	}
+	interface IChunkTableSchemaProto extends waproto.ChunkTableSchemaProto.$Properties {
+	}
+	class ChunkTableSchemaProto {
+		constructor(p?: waproto.ChunkTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		plaintextHash?: (string|null)
+		blobData?: (Uint8Array|null)
+		mimetype?: (string|null)
+		hashedPlaintextHash?: (string|null)
+		chunkId?: (number|null)
+		static encode(m: waproto.ChunkTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ChunkTableSchemaProto & waproto.ChunkTableSchemaProto.$Shape
+	}
+	namespace ChunkTableSchemaProto {
+		interface $Properties {
+			plaintextHash?: (string|null)
+			blobData?: (Uint8Array|null)
+			mimetype?: (string|null)
+			hashedPlaintextHash?: (string|null)
+			chunkId?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ChunkTableSchemaProto.$Properties
+	}
 	interface ICitation extends waproto.Citation.$Properties {
 	}
 	class Citation {
@@ -3015,6 +4673,10 @@ export namespace waproto {
 		isSyncdSnapshotRecoveryEnabled?: (boolean|null)
 		isHsThumbnailSyncEnabled?: (boolean|null)
 		subscriptionSyncPayload?: (Uint8Array|null)
+		isBotJidDbMigrated?: (boolean|null)
+		companionAddPeerPayload?: (Uint8Array|null)
+		isCompanionRegistrationFgsEnabled?: (boolean|null)
+		isCompanionPairingProgressUiEnabled?: (boolean|null)
 		static encode(m: waproto.ClientPairingProps.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPairingProps & waproto.ClientPairingProps.$Shape
 	}
@@ -3025,6 +4687,10 @@ export namespace waproto {
 			isSyncdSnapshotRecoveryEnabled?: (boolean|null)
 			isHsThumbnailSyncEnabled?: (boolean|null)
 			subscriptionSyncPayload?: (Uint8Array|null)
+			isBotJidDbMigrated?: (boolean|null)
+			companionAddPeerPayload?: (Uint8Array|null)
+			isCompanionRegistrationFgsEnabled?: (boolean|null)
+			isCompanionPairingProgressUiEnabled?: (boolean|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.ClientPairingProps.$Properties
@@ -3070,6 +4736,8 @@ export namespace waproto {
 		processingQueueSize?: (number|null)
 		pairedPeripherals: string[]
 		testIsolationId?: (Uint8Array|null)
+		messageSts?: (number|Long|null)
+		integrationAttestation?: (waproto.ClientPayload.IntegrationAttestation.$Properties|null)
 		static encode(m: waproto.ClientPayload.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload & waproto.ClientPayload.$Shape
 	}
@@ -3111,6 +4779,8 @@ export namespace waproto {
 			processingQueueSize?: (number|null)
 			pairedPeripherals?: (string[]|null)
 			testIsolationId?: (Uint8Array|null)
+			messageSts?: (number|Long|null)
+			integrationAttestation?: (waproto.ClientPayload.IntegrationAttestation.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.ClientPayload.$Properties
@@ -3159,6 +4829,24 @@ export namespace waproto {
 			SHARE_EXTENSION = 0,
 			SERVICE_EXTENSION = 1,
 			INTENTS_EXTENSION = 2
+		}
+		interface IIntegrationAttestation extends waproto.ClientPayload.IntegrationAttestation.$Properties {
+		}
+		class IntegrationAttestation {
+			constructor(p?: waproto.ClientPayload.IntegrationAttestation.$Properties)
+			$unknowns?: Uint8Array[]
+			staticUnbound?: (string|null)
+			onlineSigned?: (string|null)
+			static encode(m: waproto.ClientPayload.IntegrationAttestation.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload.IntegrationAttestation & waproto.ClientPayload.IntegrationAttestation.$Shape
+		}
+		namespace IntegrationAttestation {
+			interface $Properties {
+				staticUnbound?: (string|null)
+				onlineSigned?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.ClientPayload.IntegrationAttestation.$Properties
 		}
 		interface IInteropData extends waproto.ClientPayload.InteropData.$Properties {
 		}
@@ -3360,7 +5048,10 @@ export namespace waproto {
 				TABLET = 1,
 				DESKTOP = 2,
 				WEARABLE = 3,
-				VR = 4
+				VR = 4,
+				SMART_DISPLAY = 5,
+				SMART_SPEAKER = 6,
+				AGENT = 7
 			}
 			enum DistributionChannel {
 				APPSTORE = 0,
@@ -3412,7 +5103,11 @@ export namespace waproto {
 				TEST = 34,
 				SMART_GLASSES = 35,
 				BLUE_VR = 36,
-				AR_WRIST = 37
+				AR_WRIST = 37,
+				WAIL = 38,
+				WORK_ANDROID = 39,
+				WORK_IOS = 40,
+				AUTOMOTIVE = 41
 			}
 			interface IAppVersion extends waproto.ClientPayload.UserAgent.AppVersion.$Properties {
 			}
@@ -3439,6 +5134,26 @@ export namespace waproto {
 				type $Shape = waproto.ClientPayload.UserAgent.AppVersion.$Properties
 			}
 		}
+	}
+	interface ICloudflareSignatureResponse extends waproto.CloudflareSignatureResponse.$Properties {
+	}
+	class CloudflareSignatureResponse {
+		constructor(p?: waproto.CloudflareSignatureResponse.$Properties)
+		$unknowns?: Uint8Array[]
+		signature?: (Uint8Array|null)
+		keyId?: (number|null)
+		serializedMessage?: (Uint8Array|null)
+		static encode(m: waproto.CloudflareSignatureResponse.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.CloudflareSignatureResponse & waproto.CloudflareSignatureResponse.$Shape
+	}
+	namespace CloudflareSignatureResponse {
+		interface $Properties {
+			signature?: (Uint8Array|null)
+			keyId?: (number|null)
+			serializedMessage?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.CloudflareSignatureResponse.$Properties
 	}
 	interface ICoexStateSync extends waproto.CoexStateSync.$Properties {
 	}
@@ -3495,6 +5210,34 @@ export namespace waproto {
 			}
 			type $Shape = waproto.CoexStateSync.Mutation.$Properties
 		}
+	}
+	interface ICollectionVersionsTableSchemaProto extends waproto.CollectionVersionsTableSchemaProto.$Properties {
+	}
+	class CollectionVersionsTableSchemaProto {
+		constructor(p?: waproto.CollectionVersionsTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		collection?: (string|null)
+		version?: (number|null)
+		state?: (string|null)
+		finiteFailureStartTime?: (number|Long|null)
+		ltHash?: (Uint8Array|null)
+		isCollectionInMacMismatchFatal?: (boolean|null)
+		isCollectionLthashInconsistent?: (boolean|null)
+		static encode(m: waproto.CollectionVersionsTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.CollectionVersionsTableSchemaProto & waproto.CollectionVersionsTableSchemaProto.$Shape
+	}
+	namespace CollectionVersionsTableSchemaProto {
+		interface $Properties {
+			collection?: (string|null)
+			version?: (number|null)
+			state?: (string|null)
+			finiteFailureStartTime?: (number|Long|null)
+			ltHash?: (Uint8Array|null)
+			isCollectionInMacMismatchFatal?: (boolean|null)
+			isCollectionLthashInconsistent?: (boolean|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.CollectionVersionsTableSchemaProto.$Properties
 	}
 	interface ICombinedFingerprint extends waproto.CombinedFingerprint.$Properties {
 	}
@@ -3592,20 +5335,134 @@ export namespace waproto {
 		}
 		type $Shape = waproto.CompanionEphemeralIdentity.$Properties
 	}
+	interface ICompanionTestMessageThreadIdInput extends waproto.CompanionTestMessageThreadIdInput.$Properties {
+	}
+	class CompanionTestMessageThreadIdInput {
+		constructor(p?: waproto.CompanionTestMessageThreadIdInput.$Properties)
+		$unknowns?: Uint8Array[]
+		static encode(m: waproto.CompanionTestMessageThreadIdInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.CompanionTestMessageThreadIdInput & waproto.CompanionTestMessageThreadIdInput.$Shape
+	}
+	namespace CompanionTestMessageThreadIdInput {
+		interface $Properties {
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.CompanionTestMessageThreadIdInput.$Properties
+	}
+	interface ICompanionTestMessageThreadIdOutput extends waproto.CompanionTestMessageThreadIdOutput.$Properties {
+	}
+	class CompanionTestMessageThreadIdOutput {
+		constructor(p?: waproto.CompanionTestMessageThreadIdOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (waproto.CompanionTestMessageThreadIdSuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.CompanionTestMessageThreadIdOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.CompanionTestMessageThreadIdOutput & waproto.CompanionTestMessageThreadIdOutput.$Shape
+	}
+	namespace CompanionTestMessageThreadIdOutput {
+		interface $Properties {
+			success?: (waproto.CompanionTestMessageThreadIdSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.CompanionTestMessageThreadIdSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.CompanionTestMessageThreadIdSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface ICompanionTestMessageThreadIdSuccess extends waproto.CompanionTestMessageThreadIdSuccess.$Properties {
+	}
+	class CompanionTestMessageThreadIdSuccess {
+		constructor(p?: waproto.CompanionTestMessageThreadIdSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		threadId?: (string|null)
+		static encode(m: waproto.CompanionTestMessageThreadIdSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.CompanionTestMessageThreadIdSuccess & waproto.CompanionTestMessageThreadIdSuccess.$Shape
+	}
+	namespace CompanionTestMessageThreadIdSuccess {
+		interface $Properties {
+			threadId?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.CompanionTestMessageThreadIdSuccess.$Properties
+	}
+	interface IComputeClientSealTokenInput extends waproto.ComputeClientSealTokenInput.$Properties {
+	}
+	class ComputeClientSealTokenInput {
+		constructor(p?: waproto.ComputeClientSealTokenInput.$Properties)
+		$unknowns?: Uint8Array[]
+		orfClientState?: (Uint8Array|null)
+		backupId?: (number|Long|null)
+		static encode(m: waproto.ComputeClientSealTokenInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ComputeClientSealTokenInput & waproto.ComputeClientSealTokenInput.$Shape
+	}
+	namespace ComputeClientSealTokenInput {
+		interface $Properties {
+			orfClientState?: (Uint8Array|null)
+			backupId?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ComputeClientSealTokenInput.$Properties
+	}
+	interface IComputeClientSealTokenOutput extends waproto.ComputeClientSealTokenOutput.$Properties {
+	}
+	class ComputeClientSealTokenOutput {
+		constructor(p?: waproto.ComputeClientSealTokenOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (waproto.ComputeClientSealTokenSuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.ComputeClientSealTokenOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ComputeClientSealTokenOutput & waproto.ComputeClientSealTokenOutput.$Shape
+	}
+	namespace ComputeClientSealTokenOutput {
+		interface $Properties {
+			success?: (waproto.ComputeClientSealTokenSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.ComputeClientSealTokenSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.ComputeClientSealTokenSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IComputeClientSealTokenSuccess extends waproto.ComputeClientSealTokenSuccess.$Properties {
+	}
+	class ComputeClientSealTokenSuccess {
+		constructor(p?: waproto.ComputeClientSealTokenSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		clientSealToken?: (Uint8Array|null)
+		static encode(m: waproto.ComputeClientSealTokenSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ComputeClientSealTokenSuccess & waproto.ComputeClientSealTokenSuccess.$Shape
+	}
+	namespace ComputeClientSealTokenSuccess {
+		interface $Properties {
+			clientSealToken?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ComputeClientSealTokenSuccess.$Properties
+	}
 	interface IConfig extends waproto.Config.$Properties {
 	}
 	class Config {
 		constructor(p?: waproto.Config.$Properties)
 		$unknowns?: Uint8Array[]
 		field: { [k: string]: waproto.Field.$Properties }
-		version?: (number|null)
 		static encode(m: waproto.Config.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.Config & waproto.Config.$Shape
 	}
 	namespace Config {
 		interface $Properties {
 			field?: ({ [k: string]: waproto.Field.$Properties }|null)
-			version?: (number|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.Config.$Properties
@@ -3626,7 +5483,11 @@ export namespace waproto {
 			metadata?: (waproto.ConsumerApplication.Metadata.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.ConsumerApplication.$Properties
+		type $Shape = {
+  payload?: waproto.ConsumerApplication.Payload.$Shape|null
+  metadata?: waproto.ConsumerApplication.Metadata.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		interface IPayload extends waproto.ConsumerApplication.Payload.$Properties {
 		}
 		class Payload {
@@ -3636,6 +5497,7 @@ export namespace waproto {
 			applicationData?: (waproto.ConsumerApplication.ApplicationData.$Properties|null)
 			signal?: (waproto.ConsumerApplication.Signal.$Properties|null)
 			subProtocol?: (waproto.ConsumerApplication.SubProtocolPayload.$Properties|null)
+			payload?: ("content"|"applicationData"|"signal"|"subProtocol")
 			static encode(m: waproto.ConsumerApplication.Payload.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.Payload & waproto.ConsumerApplication.Payload.$Shape
 		}
@@ -3645,9 +5507,18 @@ export namespace waproto {
 				applicationData?: (waproto.ConsumerApplication.ApplicationData.$Properties|null)
 				signal?: (waproto.ConsumerApplication.Signal.$Properties|null)
 				subProtocol?: (waproto.ConsumerApplication.SubProtocolPayload.$Properties|null)
+				payload?: ("content"|"applicationData"|"signal"|"subProtocol")
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.ConsumerApplication.Payload.$Properties
+			type $Shape = {
+  content?: waproto.ConsumerApplication.Content.$Shape|null
+  applicationData?: waproto.ConsumerApplication.ApplicationData.$Shape|null
+  signal?: waproto.ConsumerApplication.Signal.$Shape|null
+  subProtocol?: waproto.ConsumerApplication.SubProtocolPayload.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ payload?: undefined; content?: null; applicationData?: null; signal?: null; subProtocol?: null }|{ payload?: "content"; content: waproto.ConsumerApplication.Content.$Shape; applicationData?: null; signal?: null; subProtocol?: null }|{ payload?: "applicationData"; content?: null; applicationData: waproto.ConsumerApplication.ApplicationData.$Shape; signal?: null; subProtocol?: null }|{ payload?: "signal"; content?: null; applicationData?: null; signal: waproto.ConsumerApplication.Signal.$Shape; subProtocol?: null }|{ payload?: "subProtocol"; content?: null; applicationData?: null; signal?: null; subProtocol: waproto.ConsumerApplication.SubProtocolPayload.$Shape })
+)
 		}
 		interface ISubProtocolPayload extends waproto.ConsumerApplication.SubProtocolPayload.$Properties {
 		}
@@ -3701,15 +5572,22 @@ export namespace waproto {
 			constructor(p?: waproto.ConsumerApplication.ApplicationData.$Properties)
 			$unknowns?: Uint8Array[]
 			revoke?: (waproto.ConsumerApplication.RevokeMessage.$Properties|null)
+			applicationContent?: "revoke"
 			static encode(m: waproto.ConsumerApplication.ApplicationData.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.ApplicationData & waproto.ConsumerApplication.ApplicationData.$Shape
 		}
 		namespace ApplicationData {
 			interface $Properties {
 				revoke?: (waproto.ConsumerApplication.RevokeMessage.$Properties|null)
+				applicationContent?: "revoke"
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.ConsumerApplication.ApplicationData.$Properties
+			type $Shape = {
+  revoke?: waproto.ConsumerApplication.RevokeMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ applicationContent?: undefined; revoke?: null }|{ applicationContent?: "revoke"; revoke: waproto.ConsumerApplication.RevokeMessage.$Shape })
+)
 		}
 		interface IContent extends waproto.ConsumerApplication.Content.$Properties {
 		}
@@ -3734,6 +5612,7 @@ export namespace waproto {
 			pollCreationMessage?: (waproto.ConsumerApplication.PollCreationMessage.$Properties|null)
 			pollUpdateMessage?: (waproto.ConsumerApplication.PollUpdateMessage.$Properties|null)
 			editMessage?: (waproto.ConsumerApplication.EditMessage.$Properties|null)
+			content?: ("messageText"|"imageMessage"|"contactMessage"|"locationMessage"|"extendedTextMessage"|"statusTextMessage"|"documentMessage"|"audioMessage"|"videoMessage"|"contactsArrayMessage"|"liveLocationMessage"|"stickerMessage"|"groupInviteMessage"|"viewOnceMessage"|"reactionMessage"|"pollCreationMessage"|"pollUpdateMessage"|"editMessage")
 			static encode(m: waproto.ConsumerApplication.Content.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.Content & waproto.ConsumerApplication.Content.$Shape
 		}
@@ -3757,9 +5636,32 @@ export namespace waproto {
 				pollCreationMessage?: (waproto.ConsumerApplication.PollCreationMessage.$Properties|null)
 				pollUpdateMessage?: (waproto.ConsumerApplication.PollUpdateMessage.$Properties|null)
 				editMessage?: (waproto.ConsumerApplication.EditMessage.$Properties|null)
+				content?: ("messageText"|"imageMessage"|"contactMessage"|"locationMessage"|"extendedTextMessage"|"statusTextMessage"|"documentMessage"|"audioMessage"|"videoMessage"|"contactsArrayMessage"|"liveLocationMessage"|"stickerMessage"|"groupInviteMessage"|"viewOnceMessage"|"reactionMessage"|"pollCreationMessage"|"pollUpdateMessage"|"editMessage")
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.ConsumerApplication.Content.$Properties
+			type $Shape = {
+  messageText?: waproto.MessageText.$Shape|null
+  imageMessage?: waproto.ConsumerApplication.ImageMessage.$Shape|null
+  contactMessage?: waproto.ConsumerApplication.ContactMessage.$Shape|null
+  locationMessage?: waproto.ConsumerApplication.LocationMessage.$Shape|null
+  extendedTextMessage?: waproto.ConsumerApplication.ExtendedTextMessage.$Shape|null
+  statusTextMessage?: waproto.ConsumerApplication.StatusTextMesage.$Shape|null
+  documentMessage?: waproto.ConsumerApplication.DocumentMessage.$Shape|null
+  audioMessage?: waproto.ConsumerApplication.AudioMessage.$Shape|null
+  videoMessage?: waproto.ConsumerApplication.VideoMessage.$Shape|null
+  contactsArrayMessage?: waproto.ConsumerApplication.ContactsArrayMessage.$Shape|null
+  liveLocationMessage?: waproto.ConsumerApplication.LiveLocationMessage.$Shape|null
+  stickerMessage?: waproto.ConsumerApplication.StickerMessage.$Shape|null
+  groupInviteMessage?: waproto.ConsumerApplication.GroupInviteMessage.$Shape|null
+  viewOnceMessage?: waproto.ConsumerApplication.ViewOnceMessage.$Shape|null
+  reactionMessage?: waproto.ConsumerApplication.ReactionMessage.$Shape|null
+  pollCreationMessage?: waproto.ConsumerApplication.PollCreationMessage.$Shape|null
+  pollUpdateMessage?: waproto.ConsumerApplication.PollUpdateMessage.$Shape|null
+  editMessage?: waproto.ConsumerApplication.EditMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ content?: undefined; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "messageText"; messageText: waproto.MessageText.$Shape; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "imageMessage"; messageText?: null; imageMessage: waproto.ConsumerApplication.ImageMessage.$Shape; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "contactMessage"; messageText?: null; imageMessage?: null; contactMessage: waproto.ConsumerApplication.ContactMessage.$Shape; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "locationMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage: waproto.ConsumerApplication.LocationMessage.$Shape; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "extendedTextMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage: waproto.ConsumerApplication.ExtendedTextMessage.$Shape; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "statusTextMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage: waproto.ConsumerApplication.StatusTextMesage.$Shape; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "documentMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage: waproto.ConsumerApplication.DocumentMessage.$Shape; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "audioMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage: waproto.ConsumerApplication.AudioMessage.$Shape; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "videoMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage: waproto.ConsumerApplication.VideoMessage.$Shape; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "contactsArrayMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage: waproto.ConsumerApplication.ContactsArrayMessage.$Shape; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "liveLocationMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage: waproto.ConsumerApplication.LiveLocationMessage.$Shape; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "stickerMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage: waproto.ConsumerApplication.StickerMessage.$Shape; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "groupInviteMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage: waproto.ConsumerApplication.GroupInviteMessage.$Shape; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "viewOnceMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage: waproto.ConsumerApplication.ViewOnceMessage.$Shape; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "reactionMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage: waproto.ConsumerApplication.ReactionMessage.$Shape; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage?: null }|{ content?: "pollCreationMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage: waproto.ConsumerApplication.PollCreationMessage.$Shape; pollUpdateMessage?: null; editMessage?: null }|{ content?: "pollUpdateMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage: waproto.ConsumerApplication.PollUpdateMessage.$Shape; editMessage?: null }|{ content?: "editMessage"; messageText?: null; imageMessage?: null; contactMessage?: null; locationMessage?: null; extendedTextMessage?: null; statusTextMessage?: null; documentMessage?: null; audioMessage?: null; videoMessage?: null; contactsArrayMessage?: null; liveLocationMessage?: null; stickerMessage?: null; groupInviteMessage?: null; viewOnceMessage?: null; reactionMessage?: null; pollCreationMessage?: null; pollUpdateMessage?: null; editMessage: waproto.ConsumerApplication.EditMessage.$Shape })
+)
 		}
 		interface IEditMessage extends waproto.ConsumerApplication.EditMessage.$Properties {
 		}
@@ -3940,6 +5842,7 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 			imageMessage?: (waproto.ConsumerApplication.ImageMessage.$Properties|null)
 			videoMessage?: (waproto.ConsumerApplication.VideoMessage.$Properties|null)
+			viewOnceContent?: ("imageMessage"|"videoMessage")
 			static encode(m: waproto.ConsumerApplication.ViewOnceMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.ViewOnceMessage & waproto.ConsumerApplication.ViewOnceMessage.$Shape
 		}
@@ -3947,9 +5850,16 @@ export namespace waproto {
 			interface $Properties {
 				imageMessage?: (waproto.ConsumerApplication.ImageMessage.$Properties|null)
 				videoMessage?: (waproto.ConsumerApplication.VideoMessage.$Properties|null)
+				viewOnceContent?: ("imageMessage"|"videoMessage")
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.ConsumerApplication.ViewOnceMessage.$Properties
+			type $Shape = {
+  imageMessage?: waproto.ConsumerApplication.ImageMessage.$Shape|null
+  videoMessage?: waproto.ConsumerApplication.VideoMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ viewOnceContent?: undefined; imageMessage?: null; videoMessage?: null }|{ viewOnceContent?: "imageMessage"; imageMessage: waproto.ConsumerApplication.ImageMessage.$Shape; videoMessage?: null }|{ viewOnceContent?: "videoMessage"; imageMessage?: null; videoMessage: waproto.ConsumerApplication.VideoMessage.$Shape })
+)
 		}
 		interface IGroupInviteMessage extends waproto.ConsumerApplication.GroupInviteMessage.$Properties {
 		}
@@ -4202,6 +6112,7 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 			polygonVertices: waproto.ConsumerApplication.Point.$Properties[]
 			location?: (waproto.ConsumerApplication.Location.$Properties|null)
+			action?: "location"
 			static encode(m: waproto.ConsumerApplication.InteractiveAnnotation.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.InteractiveAnnotation & waproto.ConsumerApplication.InteractiveAnnotation.$Shape
 		}
@@ -4209,9 +6120,16 @@ export namespace waproto {
 			interface $Properties {
 				polygonVertices?: (waproto.ConsumerApplication.Point.$Properties[]|null)
 				location?: (waproto.ConsumerApplication.Location.$Properties|null)
+				action?: "location"
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.ConsumerApplication.InteractiveAnnotation.$Properties
+			type $Shape = {
+  polygonVertices?: waproto.ConsumerApplication.Point.$Shape[]|null
+  location?: waproto.ConsumerApplication.Location.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ action?: undefined; location?: null }|{ action?: "location"; location: waproto.ConsumerApplication.Location.$Shape })
+)
 		}
 		interface IPoint extends waproto.ConsumerApplication.Point.$Properties {
 		}
@@ -4266,6 +6184,70 @@ export namespace waproto {
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.ConsumerApplication.MediaPayload.$Properties
+		}
+	}
+	interface IContactTransport extends waproto.ContactTransport.$Properties {
+	}
+	class ContactTransport {
+		constructor(p?: waproto.ContactTransport.$Properties)
+		$unknowns?: Uint8Array[]
+		integral?: (waproto.ContactTransport.Integral.$Properties|null)
+		ancillary?: (waproto.ContactTransport.Ancillary.$Properties|null)
+		static encode(m: waproto.ContactTransport.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContactTransport & waproto.ContactTransport.$Shape
+	}
+	namespace ContactTransport {
+		interface $Properties {
+			integral?: (waproto.ContactTransport.Integral.$Properties|null)
+			ancillary?: (waproto.ContactTransport.Ancillary.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  integral?: waproto.ContactTransport.Integral.$Shape|null
+  ancillary?: waproto.ContactTransport.Ancillary.$Shape|null
+  $unknowns?: Uint8Array[]
+}
+		interface IAncillary extends waproto.ContactTransport.Ancillary.$Properties {
+		}
+		class Ancillary {
+			constructor(p?: waproto.ContactTransport.Ancillary.$Properties)
+			$unknowns?: Uint8Array[]
+			displayName?: (string|null)
+			static encode(m: waproto.ContactTransport.Ancillary.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContactTransport.Ancillary & waproto.ContactTransport.Ancillary.$Shape
+		}
+		namespace Ancillary {
+			interface $Properties {
+				displayName?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.ContactTransport.Ancillary.$Properties
+		}
+		interface IIntegral extends waproto.ContactTransport.Integral.$Properties {
+		}
+		class Integral {
+			constructor(p?: waproto.ContactTransport.Integral.$Properties)
+			$unknowns?: Uint8Array[]
+			vcard?: (string|null)
+			downloadableVcard?: (waproto.WAMediaTransport.$Properties|null)
+			contact?: ("vcard"|"downloadableVcard")
+			static encode(m: waproto.ContactTransport.Integral.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContactTransport.Integral & waproto.ContactTransport.Integral.$Shape
+		}
+		namespace Integral {
+			interface $Properties {
+				vcard?: (string|null)
+				downloadableVcard?: (waproto.WAMediaTransport.$Properties|null)
+				contact?: ("vcard"|"downloadableVcard")
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  vcard?: string|null
+  downloadableVcard?: waproto.WAMediaTransport.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ contact?: undefined; vcard?: null; downloadableVcard?: null }|{ contact?: "vcard"; vcard: string; downloadableVcard?: null }|{ contact?: "downloadableVcard"; vcard?: null; downloadableVcard: waproto.WAMediaTransport.$Shape })
+)
 		}
 	}
 	interface IContextInfo extends waproto.ContextInfo.$Properties {
@@ -4337,6 +6319,12 @@ export namespace waproto {
 		posterStatusId?: (string|null)
 		instagramThreadLink?: (waproto.ContextInfo.InstagramThreadLink.$Properties|null)
 		aiProvenance?: (waproto.AIProvenance.$Properties|null)
+		experienceIds: number[]
+		partnerDeepLinkToken?: (string|null)
+		sourceExperienceId?: (number|null)
+		sourceExperienceIds: number[]
+		foaMutualsSignature?: (Uint8Array|null)
+		forwardReachScore?: (number|null)
 		static encode(m: waproto.ContextInfo.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo & waproto.ContextInfo.$Shape
 	}
@@ -4406,9 +6394,87 @@ export namespace waproto {
 			posterStatusId?: (string|null)
 			instagramThreadLink?: (waproto.ContextInfo.InstagramThreadLink.$Properties|null)
 			aiProvenance?: (waproto.AIProvenance.$Properties|null)
+			experienceIds?: (number[]|null)
+			partnerDeepLinkToken?: (string|null)
+			sourceExperienceId?: (number|null)
+			sourceExperienceIds?: (number[]|null)
+			foaMutualsSignature?: (Uint8Array|null)
+			forwardReachScore?: (number|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.ContextInfo.$Properties
+		type $Shape = {
+  stanzaId?: string|null
+  participant?: string|null
+  quotedMessage?: waproto.Message.$Shape|null
+  remoteJid?: string|null
+  mentionedJid?: string[]|null
+  conversionSource?: string|null
+  conversionData?: Uint8Array|null
+  conversionDelaySeconds?: number|null
+  forwardingScore?: number|null
+  isForwarded?: boolean|null
+  quotedAd?: waproto.ContextInfo.AdReplyInfo.$Shape|null
+  placeholderKey?: waproto.MessageKey.$Shape|null
+  expiration?: number|null
+  ephemeralSettingTimestamp?: number|Long|null
+  ephemeralSharedSecret?: Uint8Array|null
+  externalAdReply?: waproto.ContextInfo.ExternalAdReplyInfo.$Shape|null
+  entryPointConversionSource?: string|null
+  entryPointConversionApp?: string|null
+  entryPointConversionDelaySeconds?: number|null
+  disappearingMode?: waproto.DisappearingMode.$Shape|null
+  actionLink?: waproto.ActionLink.$Shape|null
+  groupSubject?: string|null
+  parentGroupJid?: string|null
+  trustBannerType?: string|null
+  trustBannerAction?: number|null
+  isSampled?: boolean|null
+  groupMentions?: waproto.GroupMention.$Shape[]|null
+  utm?: waproto.ContextInfo.UTMInfo.$Shape|null
+  forwardedNewsletterMessageInfo?: waproto.ContextInfo.ForwardedNewsletterMessageInfo.$Shape|null
+  businessMessageForwardInfo?: waproto.ContextInfo.BusinessMessageForwardInfo.$Shape|null
+  smbClientCampaignId?: string|null
+  smbServerCampaignId?: string|null
+  dataSharingContext?: waproto.ContextInfo.DataSharingContext.$Shape|null
+  alwaysShowAdAttribution?: boolean|null
+  featureEligibilities?: waproto.ContextInfo.FeatureEligibilities.$Shape|null
+  entryPointConversionExternalSource?: string|null
+  entryPointConversionExternalMedium?: string|null
+  ctwaSignals?: string|null
+  ctwaPayload?: Uint8Array|null
+  forwardedAiBotMessageInfo?: waproto.ForwardedAIBotMessageInfo.$Shape|null
+  statusAttributionType?: waproto.ContextInfo.StatusAttributionType|null
+  urlTrackingMap?: waproto.UrlTrackingMap.$Shape|null
+  pairedMediaType?: waproto.ContextInfo.PairedMediaType|null
+  rankingVersion?: number|null
+  memberLabel?: waproto.MemberLabel.$Shape|null
+  isQuestion?: boolean|null
+  statusSourceType?: waproto.ContextInfo.StatusSourceType|null
+  statusAttributions?: waproto.StatusAttribution.$Shape[]|null
+  isGroupStatus?: boolean|null
+  forwardOrigin?: waproto.ContextInfo.ForwardOrigin|null
+  questionReplyQuotedMessage?: waproto.ContextInfo.QuestionReplyQuotedMessage.$Shape|null
+  statusAudienceMetadata?: waproto.ContextInfo.StatusAudienceMetadata.$Shape|null
+  nonJidMentions?: number|null
+  quotedType?: waproto.ContextInfo.QuotedType|null
+  botMessageSharingInfo?: waproto.BotMessageSharingInfo.$Shape|null
+  isSpoiler?: boolean|null
+  mediaDomainInfo?: waproto.MediaDomainInfo.$Shape|null
+  partiallySelectedContent?: waproto.ContextInfo.PartiallySelectedContent.$Shape|null
+  afterReadDuration?: number|null
+  crossAppSource?: waproto.ContextInfo.CrossAppSource|null
+  businessInteractionPills?: waproto.ContextInfo.BusinessInteractionPills.$Shape|null
+  posterStatusId?: string|null
+  instagramThreadLink?: waproto.ContextInfo.InstagramThreadLink.$Shape|null
+  aiProvenance?: waproto.AIProvenance.$Shape|null
+  experienceIds?: number[]|null
+  partnerDeepLinkToken?: string|null
+  sourceExperienceId?: number|null
+  sourceExperienceIds?: number[]|null
+  foaMutualsSignature?: Uint8Array|null
+  forwardReachScore?: number|null
+  $unknowns?: Uint8Array[]
+}
 		enum CrossAppSource {
 			CROSS_APP_SOURCE_UNKNOWN = 0,
 			CROSS_APP_SOURCE_INSTAGRAM = 1,
@@ -4443,7 +6509,13 @@ export namespace waproto {
 			MOTION_PHOTO_PARENT = 5,
 			MOTION_PHOTO_CHILD = 6,
 			HEVC_VIDEO_PARENT = 7,
-			HEVC_VIDEO_CHILD = 8
+			HEVC_VIDEO_CHILD = 8,
+			AV1_VIDEO_PARENT = 9,
+			AV1_VIDEO_CHILD = 10,
+			STREAMED_VIDEO_PARENT = 11,
+			STREAMED_VIDEO_CHILD = 12,
+			ORIGINAL_VIDEO_CHILD = 13,
+			ORIGINAL_IMAGE_CHILD = 14
 		}
 		enum StatusAttributionType {
 			NONE = 0,
@@ -4583,6 +6655,7 @@ export namespace waproto {
 			audienceType?: (waproto.ContextInfo.StatusAudienceMetadata.AudienceType|null)
 			listName?: (string|null)
 			listEmoji?: (string|null)
+			orgId?: (string|null)
 			static encode(m: waproto.ContextInfo.StatusAudienceMetadata.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.StatusAudienceMetadata & waproto.ContextInfo.StatusAudienceMetadata.$Shape
 		}
@@ -4591,12 +6664,15 @@ export namespace waproto {
 				audienceType?: (waproto.ContextInfo.StatusAudienceMetadata.AudienceType|null)
 				listName?: (string|null)
 				listEmoji?: (string|null)
+				orgId?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.ContextInfo.StatusAudienceMetadata.$Properties
 			enum AudienceType {
 				UNKNOWN = 0,
-				CLOSE_FRIENDS = 1
+				CLOSE_FRIENDS = 1,
+				CUSTOM_LIST = 2,
+				ORG = 3
 			}
 		}
 		interface IPartiallySelectedContent extends waproto.ContextInfo.PartiallySelectedContent.$Properties {
@@ -4707,7 +6783,12 @@ export namespace waproto {
 				quotedResponse?: (waproto.Message.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.ContextInfo.QuestionReplyQuotedMessage.$Properties
+			type $Shape = {
+  serverQuestionId?: number|null
+  quotedQuestion?: waproto.Message.$Shape|null
+  quotedResponse?: waproto.Message.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IForwardedNewsletterMessageInfo extends waproto.ContextInfo.ForwardedNewsletterMessageInfo.$Properties {
 		}
@@ -4795,6 +6876,15 @@ export namespace waproto {
 			agmTitleStrategy?: (number|null)
 			agmSubtitleStrategy?: (number|null)
 			agmHeaderInteractionStrategy?: (number|null)
+			containsCtwaFlowsAutoLabel?: (boolean|null)
+			productId?: (string|null)
+			containsCtwaPromo?: (boolean|null)
+			ctwaPromoResponseId?: (string|null)
+			ctwaPromoOfferId?: (string|null)
+			ctwaPromoAdEntryId?: (string|null)
+			ctwaPromoResponseExpiresAtSeconds?: (number|Long|null)
+			ctwaPromoSchemaVersion?: (number|null)
+			ctwaPromoAdgroupId?: (string|null)
 			static encode(m: waproto.ContextInfo.ExternalAdReplyInfo.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.ExternalAdReplyInfo & waproto.ContextInfo.ExternalAdReplyInfo.$Shape
 		}
@@ -4832,6 +6922,15 @@ export namespace waproto {
 				agmTitleStrategy?: (number|null)
 				agmSubtitleStrategy?: (number|null)
 				agmHeaderInteractionStrategy?: (number|null)
+				containsCtwaFlowsAutoLabel?: (boolean|null)
+				productId?: (string|null)
+				containsCtwaPromo?: (boolean|null)
+				ctwaPromoResponseId?: (string|null)
+				ctwaPromoOfferId?: (string|null)
+				ctwaPromoAdEntryId?: (string|null)
+				ctwaPromoResponseExpiresAtSeconds?: (number|Long|null)
+				ctwaPromoSchemaVersion?: (number|null)
+				ctwaPromoAdgroupId?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.ContextInfo.ExternalAdReplyInfo.$Properties
@@ -4957,6 +7056,12 @@ export namespace waproto {
 		authAgentParentCompanyName?: (string|null)
 		authAgentObaPhoneNumber?: (string|null)
 		identityVerification?: (waproto.IdentityVerificationState.$Properties|null)
+		acp2Setting?: (waproto.ACP2Setting.$Properties|null)
+		acp2HistoryWithheld?: (boolean|null)
+		groupRootKeys: waproto.GroupRootKey.$Properties[]
+		isWorkGroup?: (boolean|null)
+		nonE2EeType?: (number|null)
+		contactAccountEncryptionAttestationType?: (waproto.NonE2EEAttestation.AccountType|null)
 		static encode(m: waproto.Conversation.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.Conversation & waproto.Conversation.$Shape
 	}
@@ -5025,9 +7130,86 @@ export namespace waproto {
 			authAgentParentCompanyName?: (string|null)
 			authAgentObaPhoneNumber?: (string|null)
 			identityVerification?: (waproto.IdentityVerificationState.$Properties|null)
+			acp2Setting?: (waproto.ACP2Setting.$Properties|null)
+			acp2HistoryWithheld?: (boolean|null)
+			groupRootKeys?: (waproto.GroupRootKey.$Properties[]|null)
+			isWorkGroup?: (boolean|null)
+			nonE2EeType?: (number|null)
+			contactAccountEncryptionAttestationType?: (waproto.NonE2EEAttestation.AccountType|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.Conversation.$Properties
+		type $Shape = {
+  id?: string|null
+  messages?: waproto.HistorySyncMsg.$Shape[]|null
+  newJid?: string|null
+  oldJid?: string|null
+  lastMsgTimestamp?: number|Long|null
+  unreadCount?: number|null
+  readOnly?: boolean|null
+  endOfHistoryTransfer?: boolean|null
+  ephemeralExpiration?: number|null
+  ephemeralSettingTimestamp?: number|Long|null
+  endOfHistoryTransferType?: waproto.Conversation.EndOfHistoryTransferType|null
+  conversationTimestamp?: number|Long|null
+  name?: string|null
+  pHash?: string|null
+  notSpam?: boolean|null
+  archived?: boolean|null
+  disappearingMode?: waproto.DisappearingMode.$Shape|null
+  unreadMentionCount?: number|null
+  markedAsUnread?: boolean|null
+  participant?: waproto.GroupParticipant.$Shape[]|null
+  tcToken?: Uint8Array|null
+  tcTokenTimestamp?: number|Long|null
+  contactPrimaryIdentityKey?: Uint8Array|null
+  pinned?: number|null
+  muteEndTime?: number|Long|null
+  wallpaper?: waproto.WallpaperSettings.$Shape|null
+  mediaVisibility?: waproto.MediaVisibility|null
+  tcTokenSenderTimestamp?: number|Long|null
+  suspended?: boolean|null
+  terminated?: boolean|null
+  createdAt?: number|Long|null
+  createdBy?: string|null
+  description?: string|null
+  support?: boolean|null
+  isParentGroup?: boolean|null
+  isDefaultSubgroup?: boolean|null
+  parentGroupId?: string|null
+  displayName?: string|null
+  pnJid?: string|null
+  shareOwnPn?: boolean|null
+  pnhDuplicateLidThread?: boolean|null
+  lidJid?: string|null
+  username?: string|null
+  lidOriginType?: string|null
+  commentsCount?: number|null
+  locked?: boolean|null
+  systemMessageToInsert?: waproto.PrivacySystemMessage|null
+  capiCreatedGroup?: boolean|null
+  accountLid?: string|null
+  limitSharing?: boolean|null
+  limitSharingSettingTimestamp?: number|Long|null
+  limitSharingTrigger?: waproto.LimitSharing.Trigger|null
+  limitSharingInitiatedByMe?: boolean|null
+  maibaAiThreadEnabled?: boolean|null
+  isMarketingMessageThread?: boolean|null
+  isSenderNewAccount?: boolean|null
+  afterReadDuration?: number|null
+  isSenderSuspicious?: boolean|null
+  appealStatus?: waproto.Conversation.GroupAppealStatus|null
+  appealUpdateTime?: number|Long|null
+  authAgentParentCompanyName?: string|null
+  authAgentObaPhoneNumber?: string|null
+  identityVerification?: waproto.IdentityVerificationState.$Shape|null
+  acp2Setting?: waproto.ACP2Setting.$Shape|null
+  acp2HistoryWithheld?: boolean|null
+  groupRootKeys?: waproto.GroupRootKey.$Shape[]|null
+  isWorkGroup?: boolean|null
+  nonE2EeType?: number|null
+  contactAccountEncryptionAttestationType?: waproto.NonE2EEAttestation.AccountType|null
+  $unknowns?: Uint8Array[]
+}
 		enum GroupAppealStatus {
 			NO_APPEAL = 0,
 			APPEAL_IN_REVIEW = 1,
@@ -5064,24 +7246,160 @@ export namespace waproto {
 	class CreateBackupOutput {
 		constructor(p?: waproto.CreateBackupOutput.$Properties)
 		$unknowns?: Uint8Array[]
-		device?: (waproto.DeviceOutput.$Properties|null)
-		virtualDevice?: (waproto.VirtualDeviceOutput.$Properties|null)
-		epoch0?: (waproto.Epoch0Output.$Properties|null)
-		mailboxRootKey?: (Uint8Array|null)
+		success?: (waproto.CreateBackupSuccess.$Properties|null)
 		error?: (string|null)
+		result?: ("success"|"error")
 		static encode(m: waproto.CreateBackupOutput.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.CreateBackupOutput & waproto.CreateBackupOutput.$Shape
 	}
 	namespace CreateBackupOutput {
 		interface $Properties {
+			success?: (waproto.CreateBackupSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.CreateBackupSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.CreateBackupSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface ICreateBackupSuccess extends waproto.CreateBackupSuccess.$Properties {
+	}
+	class CreateBackupSuccess {
+		constructor(p?: waproto.CreateBackupSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		device?: (waproto.DeviceOutput.$Properties|null)
+		virtualDevice?: (waproto.VirtualDeviceOutput.$Properties|null)
+		epoch0?: (waproto.Epoch0Output.$Properties|null)
+		mailboxRootKey?: (Uint8Array|null)
+		static encode(m: waproto.CreateBackupSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.CreateBackupSuccess & waproto.CreateBackupSuccess.$Shape
+	}
+	namespace CreateBackupSuccess {
+		interface $Properties {
 			device?: (waproto.DeviceOutput.$Properties|null)
 			virtualDevice?: (waproto.VirtualDeviceOutput.$Properties|null)
 			epoch0?: (waproto.Epoch0Output.$Properties|null)
 			mailboxRootKey?: (Uint8Array|null)
-			error?: (string|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.CreateBackupOutput.$Properties
+		type $Shape = waproto.CreateBackupSuccess.$Properties
+	}
+	interface IDbAppMetaValuesProto extends waproto.DbAppMetaValuesProto.$Properties {
+	}
+	class DbAppMetaValuesProto {
+		constructor(p?: waproto.DbAppMetaValuesProto.$Properties)
+		$unknowns?: Uint8Array[]
+		msgTypeVersion?: (number|null)
+		hmacKey?: (Uint8Array|null)
+		allowSecurityAlert?: (boolean|null)
+		hotlikeSticker?: (Uint8Array|null)
+		isBackfilledForOccamadillo?: (boolean|null)
+		allowSecurityAlertForSelf?: (boolean|null)
+		hasMigratedFromDexie?: (boolean|null)
+		restoreMigrationAttempts?: (number|null)
+		deviceJid?: (string|null)
+		restoreToDexieMigrationComplete?: (boolean|null)
+		dbMigrationVersion?: (number|null)
+		static encode(m: waproto.DbAppMetaValuesProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DbAppMetaValuesProto & waproto.DbAppMetaValuesProto.$Shape
+	}
+	namespace DbAppMetaValuesProto {
+		interface $Properties {
+			msgTypeVersion?: (number|null)
+			hmacKey?: (Uint8Array|null)
+			allowSecurityAlert?: (boolean|null)
+			hotlikeSticker?: (Uint8Array|null)
+			isBackfilledForOccamadillo?: (boolean|null)
+			allowSecurityAlertForSelf?: (boolean|null)
+			hasMigratedFromDexie?: (boolean|null)
+			restoreMigrationAttempts?: (number|null)
+			deviceJid?: (string|null)
+			restoreToDexieMigrationComplete?: (boolean|null)
+			dbMigrationVersion?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DbAppMetaValuesProto.$Properties
+	}
+	interface IDbQuotedMsgContentProto extends waproto.DbQuotedMsgContentProto.$Properties {
+	}
+	class DbQuotedMsgContentProto {
+		constructor(p?: waproto.DbQuotedMsgContentProto.$Properties)
+		$unknowns?: Uint8Array[]
+		type?: (string|null)
+		ts?: (number|Long|null)
+		externalId?: (string|null)
+		author?: (string|null)
+		msgContent?: (waproto.MsgContentProto.$Properties|null)
+		obsoleteMedia?: (waproto.QuotedDbMediaProto.$Properties|null)
+		msgId?: (string|null)
+		mediaId?: (number|null)
+		sourceId?: (string|null)
+		xmaMessageType?: (number|null)
+		specialTextSize?: (number|null)
+		plaintextHash?: (string|null)
+		expirationTs?: (number|Long|null)
+		static encode(m: waproto.DbQuotedMsgContentProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DbQuotedMsgContentProto & waproto.DbQuotedMsgContentProto.$Shape
+	}
+	namespace DbQuotedMsgContentProto {
+		interface $Properties {
+			type?: (string|null)
+			ts?: (number|Long|null)
+			externalId?: (string|null)
+			author?: (string|null)
+			msgContent?: (waproto.MsgContentProto.$Properties|null)
+			obsoleteMedia?: (waproto.QuotedDbMediaProto.$Properties|null)
+			msgId?: (string|null)
+			mediaId?: (number|null)
+			sourceId?: (string|null)
+			xmaMessageType?: (number|null)
+			specialTextSize?: (number|null)
+			plaintextHash?: (string|null)
+			expirationTs?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DbQuotedMsgContentProto.$Properties
+	}
+	interface IDbQuotedMsgProto extends waproto.DbQuotedMsgProto.$Properties {
+	}
+	class DbQuotedMsgProto {
+		constructor(p?: waproto.DbQuotedMsgProto.$Properties)
+		$unknowns?: Uint8Array[]
+		remoteJid?: (string|null)
+		content?: (waproto.DbQuotedMsgContentProto.$Properties|null)
+		static encode(m: waproto.DbQuotedMsgProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DbQuotedMsgProto & waproto.DbQuotedMsgProto.$Shape
+	}
+	namespace DbQuotedMsgProto {
+		interface $Properties {
+			remoteJid?: (string|null)
+			content?: (waproto.DbQuotedMsgContentProto.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DbQuotedMsgProto.$Properties
+	}
+	interface IDbUserStatusTsProto extends waproto.DbUserStatusTsProto.$Properties {
+	}
+	class DbUserStatusTsProto {
+		constructor(p?: waproto.DbUserStatusTsProto.$Properties)
+		$unknowns?: Uint8Array[]
+		deliveredTs?: (number|Long|null)
+		readTs?: (number|Long|null)
+		static encode(m: waproto.DbUserStatusTsProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DbUserStatusTsProto & waproto.DbUserStatusTsProto.$Shape
+	}
+	namespace DbUserStatusTsProto {
+		interface $Properties {
+			deliveredTs?: (number|Long|null)
+			readTs?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DbUserStatusTsProto.$Properties
 	}
 	interface IDecryptMessageInput extends waproto.DecryptMessageInput.$Properties {
 	}
@@ -5089,7 +7407,7 @@ export namespace waproto {
 		constructor(p?: waproto.DecryptMessageInput.$Properties)
 		$unknowns?: Uint8Array[]
 		epochRootKey?: (Uint8Array|null)
-		epochAnonId?: (Uint8Array|null)
+		epochAnonId?: (number|null)
 		threadId?: (string|null)
 		encryptionVersion?: (number|null)
 		ciphertext?: (Uint8Array|null)
@@ -5099,7 +7417,7 @@ export namespace waproto {
 	namespace DecryptMessageInput {
 		interface $Properties {
 			epochRootKey?: (Uint8Array|null)
-			epochAnonId?: (Uint8Array|null)
+			epochAnonId?: (number|null)
 			threadId?: (string|null)
 			encryptionVersion?: (number|null)
 			ciphertext?: (Uint8Array|null)
@@ -5112,18 +7430,248 @@ export namespace waproto {
 	class DecryptMessageOutput {
 		constructor(p?: waproto.DecryptMessageOutput.$Properties)
 		$unknowns?: Uint8Array[]
-		plaintextPayload?: (Uint8Array|null)
+		success?: (waproto.DecryptMessageSuccess.$Properties|null)
 		error?: (string|null)
+		result?: ("success"|"error")
 		static encode(m: waproto.DecryptMessageOutput.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DecryptMessageOutput & waproto.DecryptMessageOutput.$Shape
 	}
 	namespace DecryptMessageOutput {
 		interface $Properties {
-			plaintextPayload?: (Uint8Array|null)
+			success?: (waproto.DecryptMessageSuccess.$Properties|null)
 			error?: (string|null)
+			result?: ("success"|"error")
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.DecryptMessageOutput.$Properties
+		type $Shape = {
+  success?: waproto.DecryptMessageSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.DecryptMessageSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IDecryptMessageSuccess extends waproto.DecryptMessageSuccess.$Properties {
+	}
+	class DecryptMessageSuccess {
+		constructor(p?: waproto.DecryptMessageSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		plaintextPayload?: (Uint8Array|null)
+		static encode(m: waproto.DecryptMessageSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DecryptMessageSuccess & waproto.DecryptMessageSuccess.$Shape
+	}
+	namespace DecryptMessageSuccess {
+		interface $Properties {
+			plaintextPayload?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DecryptMessageSuccess.$Properties
+	}
+	interface IDeletedMessagesTableSchemaProto extends waproto.DeletedMessagesTableSchemaProto.$Properties {
+	}
+	class DeletedMessagesTableSchemaProto {
+		constructor(p?: waproto.DeletedMessagesTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		author?: (string|null)
+		chat?: (string|null)
+		externalId?: (string|null)
+		reason?: (string|null)
+		static encode(m: waproto.DeletedMessagesTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeletedMessagesTableSchemaProto & waproto.DeletedMessagesTableSchemaProto.$Shape
+	}
+	namespace DeletedMessagesTableSchemaProto {
+		interface $Properties {
+			author?: (string|null)
+			chat?: (string|null)
+			externalId?: (string|null)
+			reason?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DeletedMessagesTableSchemaProto.$Properties
+	}
+	interface IDeriveEpochsInput extends waproto.DeriveEpochsInput.$Properties {
+	}
+	class DeriveEpochsInput {
+		constructor(p?: waproto.DeriveEpochsInput.$Properties)
+		$unknowns?: Uint8Array[]
+		epochStoragePrivateKey?: (Uint8Array|null)
+		epochs: waproto.EpochKey.$Properties[]
+		edges: waproto.EpochDerivationEdge.$Properties[]
+		static encode(m: waproto.DeriveEpochsInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeriveEpochsInput & waproto.DeriveEpochsInput.$Shape
+	}
+	namespace DeriveEpochsInput {
+		interface $Properties {
+			epochStoragePrivateKey?: (Uint8Array|null)
+			epochs?: (waproto.EpochKey.$Properties[]|null)
+			edges?: (waproto.EpochDerivationEdge.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DeriveEpochsInput.$Properties
+	}
+	interface IDeriveEpochsOutput extends waproto.DeriveEpochsOutput.$Properties {
+	}
+	class DeriveEpochsOutput {
+		constructor(p?: waproto.DeriveEpochsOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (waproto.DeriveEpochsSuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.DeriveEpochsOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeriveEpochsOutput & waproto.DeriveEpochsOutput.$Shape
+	}
+	namespace DeriveEpochsOutput {
+		interface $Properties {
+			success?: (waproto.DeriveEpochsSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.DeriveEpochsSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.DeriveEpochsSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IDeriveEpochsSuccess extends waproto.DeriveEpochsSuccess.$Properties {
+	}
+	class DeriveEpochsSuccess {
+		constructor(p?: waproto.DeriveEpochsSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		epochs: waproto.EpochKey.$Properties[]
+		static encode(m: waproto.DeriveEpochsSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeriveEpochsSuccess & waproto.DeriveEpochsSuccess.$Shape
+	}
+	namespace DeriveEpochsSuccess {
+		interface $Properties {
+			epochs?: (waproto.EpochKey.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DeriveEpochsSuccess.$Properties
+	}
+	interface IDeriveMessageKeyInput extends waproto.DeriveMessageKeyInput.$Properties {
+	}
+	class DeriveMessageKeyInput {
+		constructor(p?: waproto.DeriveMessageKeyInput.$Properties)
+		$unknowns?: Uint8Array[]
+		epochRootKey?: (Uint8Array|null)
+		epochAnonId?: (number|null)
+		threadId?: (string|null)
+		static encode(m: waproto.DeriveMessageKeyInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeriveMessageKeyInput & waproto.DeriveMessageKeyInput.$Shape
+	}
+	namespace DeriveMessageKeyInput {
+		interface $Properties {
+			epochRootKey?: (Uint8Array|null)
+			epochAnonId?: (number|null)
+			threadId?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DeriveMessageKeyInput.$Properties
+	}
+	interface IDeriveMessageKeyOutput extends waproto.DeriveMessageKeyOutput.$Properties {
+	}
+	class DeriveMessageKeyOutput {
+		constructor(p?: waproto.DeriveMessageKeyOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (waproto.DeriveMessageKeySuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.DeriveMessageKeyOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeriveMessageKeyOutput & waproto.DeriveMessageKeyOutput.$Shape
+	}
+	namespace DeriveMessageKeyOutput {
+		interface $Properties {
+			success?: (waproto.DeriveMessageKeySuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.DeriveMessageKeySuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.DeriveMessageKeySuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IDeriveMessageKeySuccess extends waproto.DeriveMessageKeySuccess.$Properties {
+	}
+	class DeriveMessageKeySuccess {
+		constructor(p?: waproto.DeriveMessageKeySuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		messageKey?: (Uint8Array|null)
+		static encode(m: waproto.DeriveMessageKeySuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeriveMessageKeySuccess & waproto.DeriveMessageKeySuccess.$Shape
+	}
+	namespace DeriveMessageKeySuccess {
+		interface $Properties {
+			messageKey?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DeriveMessageKeySuccess.$Properties
+	}
+	interface IDeriveVirtualDeviceIdInput extends waproto.DeriveVirtualDeviceIdInput.$Properties {
+	}
+	class DeriveVirtualDeviceIdInput {
+		constructor(p?: waproto.DeriveVirtualDeviceIdInput.$Properties)
+		$unknowns?: Uint8Array[]
+		recoveryCode?: (string|null)
+		userId?: (number|Long|null)
+		static encode(m: waproto.DeriveVirtualDeviceIdInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeriveVirtualDeviceIdInput & waproto.DeriveVirtualDeviceIdInput.$Shape
+	}
+	namespace DeriveVirtualDeviceIdInput {
+		interface $Properties {
+			recoveryCode?: (string|null)
+			userId?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DeriveVirtualDeviceIdInput.$Properties
+	}
+	interface IDeriveVirtualDeviceIdOutput extends waproto.DeriveVirtualDeviceIdOutput.$Properties {
+	}
+	class DeriveVirtualDeviceIdOutput {
+		constructor(p?: waproto.DeriveVirtualDeviceIdOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (waproto.DeriveVirtualDeviceIdSuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.DeriveVirtualDeviceIdOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeriveVirtualDeviceIdOutput & waproto.DeriveVirtualDeviceIdOutput.$Shape
+	}
+	namespace DeriveVirtualDeviceIdOutput {
+		interface $Properties {
+			success?: (waproto.DeriveVirtualDeviceIdSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.DeriveVirtualDeviceIdSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.DeriveVirtualDeviceIdSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IDeriveVirtualDeviceIdSuccess extends waproto.DeriveVirtualDeviceIdSuccess.$Properties {
+	}
+	class DeriveVirtualDeviceIdSuccess {
+		constructor(p?: waproto.DeriveVirtualDeviceIdSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		virtualDeviceId?: (Uint8Array|null)
+		static encode(m: waproto.DeriveVirtualDeviceIdSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeriveVirtualDeviceIdSuccess & waproto.DeriveVirtualDeviceIdSuccess.$Shape
+	}
+	namespace DeriveVirtualDeviceIdSuccess {
+		interface $Properties {
+			virtualDeviceId?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DeriveVirtualDeviceIdSuccess.$Properties
 	}
 	interface IDeviceCapabilities extends waproto.DeviceCapabilities.$Properties {
 	}
@@ -5137,6 +7685,14 @@ export namespace waproto {
 		memberNameTagPrimarySupport?: (waproto.DeviceCapabilities.MemberNameTagPrimarySupport|null)
 		aiThread?: (waproto.DeviceCapabilities.AiThread.$Properties|null)
 		aiFbidMigration?: (waproto.DeviceCapabilities.AiFbidMigration.$Properties|null)
+		bizAiSettingsSync?: (waproto.DeviceCapabilities.BizAiSettingsSync.$Properties|null)
+		contactRefresh?: (waproto.DeviceCapabilities.ContactRefresh.$Properties|null)
+		reverseHistorySync?: (waproto.DeviceCapabilities.ReverseHistorySync.$Properties|null)
+		newsletterChatsMigration?: (waproto.DeviceCapabilities.NewsletterChatsMigration.$Properties|null)
+		hostWriteMutationSupport?: (waproto.DeviceCapabilities.HostWriteMutationSupport.$Properties|null)
+		bizAiWebOnboarding?: (waproto.DeviceCapabilities.BizAiWebOnboarding.$Properties|null)
+		phoneNumberSharing?: (waproto.DeviceCapabilities.PhoneNumberSharing.$Properties|null)
+		recentConversationsOnDemand?: (waproto.DeviceCapabilities.RecentConversationsOnDemand.$Properties|null)
 		static encode(m: waproto.DeviceCapabilities.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities & waproto.DeviceCapabilities.$Shape
 	}
@@ -5149,6 +7705,14 @@ export namespace waproto {
 			memberNameTagPrimarySupport?: (waproto.DeviceCapabilities.MemberNameTagPrimarySupport|null)
 			aiThread?: (waproto.DeviceCapabilities.AiThread.$Properties|null)
 			aiFbidMigration?: (waproto.DeviceCapabilities.AiFbidMigration.$Properties|null)
+			bizAiSettingsSync?: (waproto.DeviceCapabilities.BizAiSettingsSync.$Properties|null)
+			contactRefresh?: (waproto.DeviceCapabilities.ContactRefresh.$Properties|null)
+			reverseHistorySync?: (waproto.DeviceCapabilities.ReverseHistorySync.$Properties|null)
+			newsletterChatsMigration?: (waproto.DeviceCapabilities.NewsletterChatsMigration.$Properties|null)
+			hostWriteMutationSupport?: (waproto.DeviceCapabilities.HostWriteMutationSupport.$Properties|null)
+			bizAiWebOnboarding?: (waproto.DeviceCapabilities.BizAiWebOnboarding.$Properties|null)
+			phoneNumberSharing?: (waproto.DeviceCapabilities.PhoneNumberSharing.$Properties|null)
+			recentConversationsOnDemand?: (waproto.DeviceCapabilities.RecentConversationsOnDemand.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.DeviceCapabilities.$Properties
@@ -5162,18 +7726,156 @@ export namespace waproto {
 			MINIMAL = 1,
 			FULL = 2
 		}
+		interface IRecentConversationsOnDemand extends waproto.DeviceCapabilities.RecentConversationsOnDemand.$Properties {
+		}
+		class RecentConversationsOnDemand {
+			constructor(p?: waproto.DeviceCapabilities.RecentConversationsOnDemand.$Properties)
+			$unknowns?: Uint8Array[]
+			supported?: (boolean|null)
+			static encode(m: waproto.DeviceCapabilities.RecentConversationsOnDemand.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.RecentConversationsOnDemand & waproto.DeviceCapabilities.RecentConversationsOnDemand.$Shape
+		}
+		namespace RecentConversationsOnDemand {
+			interface $Properties {
+				supported?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.DeviceCapabilities.RecentConversationsOnDemand.$Properties
+		}
+		interface IPhoneNumberSharing extends waproto.DeviceCapabilities.PhoneNumberSharing.$Properties {
+		}
+		class PhoneNumberSharing {
+			constructor(p?: waproto.DeviceCapabilities.PhoneNumberSharing.$Properties)
+			$unknowns?: Uint8Array[]
+			phoneSharingSupported?: (boolean|null)
+			static encode(m: waproto.DeviceCapabilities.PhoneNumberSharing.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.PhoneNumberSharing & waproto.DeviceCapabilities.PhoneNumberSharing.$Shape
+		}
+		namespace PhoneNumberSharing {
+			interface $Properties {
+				phoneSharingSupported?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.DeviceCapabilities.PhoneNumberSharing.$Properties
+		}
+		interface IBizAiWebOnboarding extends waproto.DeviceCapabilities.BizAiWebOnboarding.$Properties {
+		}
+		class BizAiWebOnboarding {
+			constructor(p?: waproto.DeviceCapabilities.BizAiWebOnboarding.$Properties)
+			$unknowns?: Uint8Array[]
+			version?: (number|null)
+			static encode(m: waproto.DeviceCapabilities.BizAiWebOnboarding.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.BizAiWebOnboarding & waproto.DeviceCapabilities.BizAiWebOnboarding.$Shape
+		}
+		namespace BizAiWebOnboarding {
+			interface $Properties {
+				version?: (number|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.DeviceCapabilities.BizAiWebOnboarding.$Properties
+		}
+		interface IHostWriteMutationSupport extends waproto.DeviceCapabilities.HostWriteMutationSupport.$Properties {
+		}
+		class HostWriteMutationSupport {
+			constructor(p?: waproto.DeviceCapabilities.HostWriteMutationSupport.$Properties)
+			$unknowns?: Uint8Array[]
+			mutationNames: string[]
+			static encode(m: waproto.DeviceCapabilities.HostWriteMutationSupport.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.HostWriteMutationSupport & waproto.DeviceCapabilities.HostWriteMutationSupport.$Shape
+		}
+		namespace HostWriteMutationSupport {
+			interface $Properties {
+				mutationNames?: (string[]|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.DeviceCapabilities.HostWriteMutationSupport.$Properties
+		}
+		interface INewsletterChatsMigration extends waproto.DeviceCapabilities.NewsletterChatsMigration.$Properties {
+		}
+		class NewsletterChatsMigration {
+			constructor(p?: waproto.DeviceCapabilities.NewsletterChatsMigration.$Properties)
+			$unknowns?: Uint8Array[]
+			effectiveMigrated?: (boolean|null)
+			countdownEndsAt?: (number|Long|null)
+			rolledBack?: (boolean|null)
+			static encode(m: waproto.DeviceCapabilities.NewsletterChatsMigration.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.NewsletterChatsMigration & waproto.DeviceCapabilities.NewsletterChatsMigration.$Shape
+		}
+		namespace NewsletterChatsMigration {
+			interface $Properties {
+				effectiveMigrated?: (boolean|null)
+				countdownEndsAt?: (number|Long|null)
+				rolledBack?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.DeviceCapabilities.NewsletterChatsMigration.$Properties
+		}
+		interface IReverseHistorySync extends waproto.DeviceCapabilities.ReverseHistorySync.$Properties {
+		}
+		class ReverseHistorySync {
+			constructor(p?: waproto.DeviceCapabilities.ReverseHistorySync.$Properties)
+			$unknowns?: Uint8Array[]
+			enabledProducts: waproto.DeviceCapabilities.ReverseHistorySync.Product[]
+			static encode(m: waproto.DeviceCapabilities.ReverseHistorySync.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.ReverseHistorySync & waproto.DeviceCapabilities.ReverseHistorySync.$Shape
+		}
+		namespace ReverseHistorySync {
+			interface $Properties {
+				enabledProducts?: (waproto.DeviceCapabilities.ReverseHistorySync.Product[]|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.DeviceCapabilities.ReverseHistorySync.$Properties
+			enum Product {
+				PRODUCT_UNSPECIFIED = 0,
+				HATCH = 1
+			}
+		}
+		interface IContactRefresh extends waproto.DeviceCapabilities.ContactRefresh.$Properties {
+		}
+		class ContactRefresh {
+			constructor(p?: waproto.DeviceCapabilities.ContactRefresh.$Properties)
+			$unknowns?: Uint8Array[]
+			refreshSupported?: (boolean|null)
+			static encode(m: waproto.DeviceCapabilities.ContactRefresh.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.ContactRefresh & waproto.DeviceCapabilities.ContactRefresh.$Shape
+		}
+		namespace ContactRefresh {
+			interface $Properties {
+				refreshSupported?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.DeviceCapabilities.ContactRefresh.$Properties
+		}
+		interface IBizAiSettingsSync extends waproto.DeviceCapabilities.BizAiSettingsSync.$Properties {
+		}
+		class BizAiSettingsSync {
+			constructor(p?: waproto.DeviceCapabilities.BizAiSettingsSync.$Properties)
+			$unknowns?: Uint8Array[]
+			handoffRemovalTimingEnabled?: (boolean|null)
+			static encode(m: waproto.DeviceCapabilities.BizAiSettingsSync.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.BizAiSettingsSync & waproto.DeviceCapabilities.BizAiSettingsSync.$Shape
+		}
+		namespace BizAiSettingsSync {
+			interface $Properties {
+				handoffRemovalTimingEnabled?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.DeviceCapabilities.BizAiSettingsSync.$Properties
+		}
 		interface IAiFbidMigration extends waproto.DeviceCapabilities.AiFbidMigration.$Properties {
 		}
 		class AiFbidMigration {
 			constructor(p?: waproto.DeviceCapabilities.AiFbidMigration.$Properties)
 			$unknowns?: Uint8Array[]
 			chatDbMigrationTimestamp?: (number|Long|null)
+			supportVersion?: (number|null)
 			static encode(m: waproto.DeviceCapabilities.AiFbidMigration.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.AiFbidMigration & waproto.DeviceCapabilities.AiFbidMigration.$Shape
 		}
 		namespace AiFbidMigration {
 			interface $Properties {
 				chatDbMigrationTimestamp?: (number|Long|null)
+				supportVersion?: (number|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.DeviceCapabilities.AiFbidMigration.$Properties
@@ -5225,6 +7927,7 @@ export namespace waproto {
 			campaignSyncEnabled?: (boolean|null)
 			insightsSyncEnabled?: (boolean|null)
 			recipientLimit?: (number|null)
+			proCompanionSupportEnabled?: (boolean|null)
 			static encode(m: waproto.DeviceCapabilities.BusinessBroadcast.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.BusinessBroadcast & waproto.DeviceCapabilities.BusinessBroadcast.$Shape
 		}
@@ -5235,6 +7938,7 @@ export namespace waproto {
 				campaignSyncEnabled?: (boolean|null)
 				insightsSyncEnabled?: (boolean|null)
 				recipientLimit?: (number|null)
+				proCompanionSupportEnabled?: (boolean|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.DeviceCapabilities.BusinessBroadcast.$Properties
@@ -5255,6 +7959,48 @@ export namespace waproto {
 			}
 			type $Shape = waproto.DeviceCapabilities.LIDMigration.$Properties
 		}
+	}
+	interface IDeviceChangeAlertsTableSchemaProto extends waproto.DeviceChangeAlertsTableSchemaProto.$Properties {
+	}
+	class DeviceChangeAlertsTableSchemaProto {
+		constructor(p?: waproto.DeviceChangeAlertsTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		action?: (string|null)
+		isArchived?: (boolean|null)
+		deviceChangeAlertsId?: (number|Long|null)
+		location?: (string|null)
+		model?: (string|null)
+		ts?: (number|Long|null)
+		loggedOut?: (boolean|null)
+		deviceJid?: (string|null)
+		identity?: (Uint8Array|null)
+		platform?: (string|null)
+		latitude?: (string|null)
+		longitude?: (string|null)
+		isConfirmed?: (boolean|null)
+		isNotified?: (boolean|null)
+		static encode(m: waproto.DeviceChangeAlertsTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceChangeAlertsTableSchemaProto & waproto.DeviceChangeAlertsTableSchemaProto.$Shape
+	}
+	namespace DeviceChangeAlertsTableSchemaProto {
+		interface $Properties {
+			action?: (string|null)
+			isArchived?: (boolean|null)
+			deviceChangeAlertsId?: (number|Long|null)
+			location?: (string|null)
+			model?: (string|null)
+			ts?: (number|Long|null)
+			loggedOut?: (boolean|null)
+			deviceJid?: (string|null)
+			identity?: (Uint8Array|null)
+			platform?: (string|null)
+			latitude?: (string|null)
+			longitude?: (string|null)
+			isConfirmed?: (boolean|null)
+			isNotified?: (boolean|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DeviceChangeAlertsTableSchemaProto.$Properties
 	}
 	interface IDeviceConsistencyCodeMessage extends waproto.DeviceConsistencyCodeMessage.$Properties {
 	}
@@ -5318,6 +8064,9 @@ export namespace waproto {
 		encryptionVersionSignature?: (Uint8Array|null)
 		clientVersion?: (number|null)
 		ocmfClientState?: (Uint8Array|null)
+		epochStoragePrivateKey?: (Uint8Array|null)
+		epochAuthPrivateKey?: (Uint8Array|null)
+		deviceEpochHmac?: (Uint8Array|null)
 		static encode(m: waproto.DeviceOutput.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceOutput & waproto.DeviceOutput.$Shape
 	}
@@ -5332,6 +8081,9 @@ export namespace waproto {
 			encryptionVersionSignature?: (Uint8Array|null)
 			clientVersion?: (number|null)
 			ocmfClientState?: (Uint8Array|null)
+			epochStoragePrivateKey?: (Uint8Array|null)
+			epochAuthPrivateKey?: (Uint8Array|null)
+			deviceEpochHmac?: (Uint8Array|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.DeviceOutput.$Properties
@@ -5346,6 +8098,7 @@ export namespace waproto {
 		platformType?: (waproto.DeviceProps.PlatformType|null)
 		requireFullSync?: (boolean|null)
 		historySyncConfig?: (waproto.DeviceProps.HistorySyncConfig.$Properties|null)
+		deviceName?: (string|null)
 		static encode(m: waproto.DeviceProps.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceProps & waproto.DeviceProps.$Shape
 	}
@@ -5356,6 +8109,7 @@ export namespace waproto {
 			platformType?: (waproto.DeviceProps.PlatformType|null)
 			requireFullSync?: (boolean|null)
 			historySyncConfig?: (waproto.DeviceProps.HistorySyncConfig.$Properties|null)
+			deviceName?: (string|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.DeviceProps.$Properties
@@ -5384,7 +8138,13 @@ export namespace waproto {
 			UWP = 21,
 			VR = 22,
 			CLOUD_API = 23,
-			SMARTGLASSES = 24
+			SMARTGLASSES = 24,
+			WAIL = 25,
+			WASS = 26,
+			BUSINESS_BACK_OFFICE = 27,
+			WAIL_WAI = 28,
+			WAIL_ALEXA = 29,
+			AUTOMOTIVE = 30
 		}
 		interface IHistorySyncConfig extends waproto.DeviceProps.HistorySyncConfig.$Properties {
 		}
@@ -5416,6 +8176,8 @@ export namespace waproto {
 			supportedBotChannelFbids: string[]
 			supportInlineContacts?: (boolean|null)
 			supportNewsletter?: (boolean|null)
+			supportUniversalReachChat?: (boolean|null)
+			supportOmittedConversationMetadata?: (boolean|null)
 			static encode(m: waproto.DeviceProps.HistorySyncConfig.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceProps.HistorySyncConfig & waproto.DeviceProps.HistorySyncConfig.$Shape
 		}
@@ -5446,6 +8208,8 @@ export namespace waproto {
 				supportedBotChannelFbids?: (string[]|null)
 				supportInlineContacts?: (boolean|null)
 				supportNewsletter?: (boolean|null)
+				supportUniversalReachChat?: (boolean|null)
+				supportOmittedConversationMetadata?: (boolean|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.DeviceProps.HistorySyncConfig.$Properties
@@ -5474,6 +8238,24 @@ export namespace waproto {
 			}
 			type $Shape = waproto.DeviceProps.AppVersion.$Properties
 		}
+	}
+	interface IDeviceResponse extends waproto.DeviceResponse.$Properties {
+	}
+	class DeviceResponse {
+		constructor(p?: waproto.DeviceResponse.$Properties)
+		$unknowns?: Uint8Array[]
+		deviceId?: (number|null)
+		deviceResponse?: (boolean|null)
+		static encode(m: waproto.DeviceResponse.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceResponse & waproto.DeviceResponse.$Shape
+	}
+	namespace DeviceResponse {
+		interface $Properties {
+			deviceId?: (number|null)
+			deviceResponse?: (boolean|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DeviceResponse.$Properties
 	}
 	interface IDisappearingMode extends waproto.DisappearingMode.$Properties {
 	}
@@ -5511,6 +8293,168 @@ export namespace waproto {
 			BIZ_UPGRADE_FB_HOSTING = 3
 		}
 	}
+	interface IDocumentFileMsgContentProto extends waproto.DocumentFileMsgContentProto.$Properties {
+	}
+	class DocumentFileMsgContentProto {
+		constructor(p?: waproto.DocumentFileMsgContentProto.$Properties)
+		$unknowns?: Uint8Array[]
+		filename?: (string|null)
+		mimetype?: (string|null)
+		static encode(m: waproto.DocumentFileMsgContentProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DocumentFileMsgContentProto & waproto.DocumentFileMsgContentProto.$Shape
+	}
+	namespace DocumentFileMsgContentProto {
+		interface $Properties {
+			filename?: (string|null)
+			mimetype?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DocumentFileMsgContentProto.$Properties
+	}
+	interface IDocumentTransport extends waproto.DocumentTransport.$Properties {
+	}
+	class DocumentTransport {
+		constructor(p?: waproto.DocumentTransport.$Properties)
+		$unknowns?: Uint8Array[]
+		integral?: (waproto.DocumentTransport.Integral.$Properties|null)
+		ancillary?: (waproto.DocumentTransport.Ancillary.$Properties|null)
+		static encode(m: waproto.DocumentTransport.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DocumentTransport & waproto.DocumentTransport.$Shape
+	}
+	namespace DocumentTransport {
+		interface $Properties {
+			integral?: (waproto.DocumentTransport.Integral.$Properties|null)
+			ancillary?: (waproto.DocumentTransport.Ancillary.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DocumentTransport.$Properties
+		interface IAncillary extends waproto.DocumentTransport.Ancillary.$Properties {
+		}
+		class Ancillary {
+			constructor(p?: waproto.DocumentTransport.Ancillary.$Properties)
+			$unknowns?: Uint8Array[]
+			pageCount?: (number|null)
+			static encode(m: waproto.DocumentTransport.Ancillary.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DocumentTransport.Ancillary & waproto.DocumentTransport.Ancillary.$Shape
+		}
+		namespace Ancillary {
+			interface $Properties {
+				pageCount?: (number|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.DocumentTransport.Ancillary.$Properties
+		}
+		interface IIntegral extends waproto.DocumentTransport.Integral.$Properties {
+		}
+		class Integral {
+			constructor(p?: waproto.DocumentTransport.Integral.$Properties)
+			$unknowns?: Uint8Array[]
+			transport?: (waproto.WAMediaTransport.$Properties|null)
+			static encode(m: waproto.DocumentTransport.Integral.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.DocumentTransport.Integral & waproto.DocumentTransport.Integral.$Shape
+		}
+		namespace Integral {
+			interface $Properties {
+				transport?: (waproto.WAMediaTransport.$Properties|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.DocumentTransport.Integral.$Properties
+		}
+	}
+	interface IDyiBatchTableSchemaProto extends waproto.DyiBatchTableSchemaProto.$Properties {
+	}
+	class DyiBatchTableSchemaProto {
+		constructor(p?: waproto.DyiBatchTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		batchId?: (number|null)
+		numMessages?: (number|null)
+		oldestTs?: (number|Long|null)
+		threadId?: (string|null)
+		isThread?: (boolean|null)
+		numMessagesRestored?: (number|null)
+		qplInstanceKeyForThread?: (number|Long|null)
+		qplFlowDescriptor?: (waproto.DYI_BATCH_TABLE_SCHEMA_PROTO_QPL_FLOW_DESCRIPTOR|null)
+		qplInstanceKeyE2E?: (number|Long|null)
+		numThreadsRestored?: (number|Long|null)
+		static encode(m: waproto.DyiBatchTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.DyiBatchTableSchemaProto & waproto.DyiBatchTableSchemaProto.$Shape
+	}
+	namespace DyiBatchTableSchemaProto {
+		interface $Properties {
+			batchId?: (number|null)
+			numMessages?: (number|null)
+			oldestTs?: (number|Long|null)
+			threadId?: (string|null)
+			isThread?: (boolean|null)
+			numMessagesRestored?: (number|null)
+			qplInstanceKeyForThread?: (number|Long|null)
+			qplFlowDescriptor?: (waproto.DYI_BATCH_TABLE_SCHEMA_PROTO_QPL_FLOW_DESCRIPTOR|null)
+			qplInstanceKeyE2E?: (number|Long|null)
+			numThreadsRestored?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.DyiBatchTableSchemaProto.$Properties
+	}
+	interface IEBMsgRangesTableSchemaProto extends waproto.EBMsgRangesTableSchemaProto.$Properties {
+	}
+	class EBMsgRangesTableSchemaProto {
+		constructor(p?: waproto.EBMsgRangesTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		rangeId?: (number|null)
+		threadJid?: (string|null)
+		minMsgExternalId?: (string|null)
+		maxMsgExternalId?: (string|null)
+		minMsgSortOrderMs?: (number|Long|null)
+		maxMsgSortOrderMs?: (number|Long|null)
+		creationTime?: (number|Long|null)
+		static encode(m: waproto.EBMsgRangesTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EBMsgRangesTableSchemaProto & waproto.EBMsgRangesTableSchemaProto.$Shape
+	}
+	namespace EBMsgRangesTableSchemaProto {
+		interface $Properties {
+			rangeId?: (number|null)
+			threadJid?: (string|null)
+			minMsgExternalId?: (string|null)
+			maxMsgExternalId?: (string|null)
+			minMsgSortOrderMs?: (number|Long|null)
+			maxMsgSortOrderMs?: (number|Long|null)
+			creationTime?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.EBMsgRangesTableSchemaProto.$Properties
+	}
+	interface IEditMsgHistoryTableSchemaProto extends waproto.EditMsgHistoryTableSchemaProto.$Properties {
+	}
+	class EditMsgHistoryTableSchemaProto {
+		constructor(p?: waproto.EditMsgHistoryTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		author?: (string|null)
+		editMsgHistoryId?: (number|null)
+		editTs?: (number|Long|null)
+		msgContent?: (waproto.MsgContentProto.$Properties|null)
+		originalMsgExternalId?: (string|null)
+		specialTextSize?: (number|null)
+		threadJid?: (string|null)
+		editExternalId?: (string|null)
+		sendStatus?: (number|null)
+		static encode(m: waproto.EditMsgHistoryTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EditMsgHistoryTableSchemaProto & waproto.EditMsgHistoryTableSchemaProto.$Shape
+	}
+	namespace EditMsgHistoryTableSchemaProto {
+		interface $Properties {
+			author?: (string|null)
+			editMsgHistoryId?: (number|null)
+			editTs?: (number|Long|null)
+			msgContent?: (waproto.MsgContentProto.$Properties|null)
+			originalMsgExternalId?: (string|null)
+			specialTextSize?: (number|null)
+			threadJid?: (string|null)
+			editExternalId?: (string|null)
+			sendStatus?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.EditMsgHistoryTableSchemaProto.$Properties
+	}
 	interface IEmbeddedContent extends waproto.EmbeddedContent.$Properties {
 	}
 	class EmbeddedContent {
@@ -5518,6 +8462,7 @@ export namespace waproto {
 		$unknowns?: Uint8Array[]
 		embeddedMessage?: (waproto.EmbeddedMessage.$Properties|null)
 		embeddedMusic?: (waproto.EmbeddedMusic.$Properties|null)
+		content?: ("embeddedMessage"|"embeddedMusic")
 		static encode(m: waproto.EmbeddedContent.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EmbeddedContent & waproto.EmbeddedContent.$Shape
 	}
@@ -5525,9 +8470,16 @@ export namespace waproto {
 		interface $Properties {
 			embeddedMessage?: (waproto.EmbeddedMessage.$Properties|null)
 			embeddedMusic?: (waproto.EmbeddedMusic.$Properties|null)
+			content?: ("embeddedMessage"|"embeddedMusic")
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.EmbeddedContent.$Properties
+		type $Shape = {
+  embeddedMessage?: waproto.EmbeddedMessage.$Shape|null
+  embeddedMusic?: waproto.EmbeddedMusic.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ content?: undefined; embeddedMessage?: null; embeddedMusic?: null }|{ content?: "embeddedMessage"; embeddedMessage: waproto.EmbeddedMessage.$Shape; embeddedMusic?: null }|{ content?: "embeddedMusic"; embeddedMessage?: null; embeddedMusic: waproto.EmbeddedMusic.$Shape })
+)
 	}
 	interface IEmbeddedMessage extends waproto.EmbeddedMessage.$Properties {
 	}
@@ -5545,7 +8497,11 @@ export namespace waproto {
 			message?: (waproto.Message.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.EmbeddedMessage.$Properties
+		type $Shape = {
+  stanzaId?: string|null
+  message?: waproto.Message.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface IEmbeddedMusic extends waproto.EmbeddedMusic.$Properties {
 	}
@@ -5597,7 +8553,7 @@ export namespace waproto {
 		epochRootKey?: (Uint8Array|null)
 		mailboxRootKey?: (Uint8Array|null)
 		orfClientState?: (Uint8Array|null)
-		epochAnonId?: (Uint8Array|null)
+		epochAnonId?: (number|null)
 		epochId?: (number|Long|null)
 		threadId?: (string|null)
 		waCanonicalUserFbid?: (number|Long|null)
@@ -5613,7 +8569,7 @@ export namespace waproto {
 			epochRootKey?: (Uint8Array|null)
 			mailboxRootKey?: (Uint8Array|null)
 			orfClientState?: (Uint8Array|null)
-			epochAnonId?: (Uint8Array|null)
+			epochAnonId?: (number|null)
 			epochId?: (number|Long|null)
 			threadId?: (string|null)
 			waCanonicalUserFbid?: (number|Long|null)
@@ -5630,28 +8586,120 @@ export namespace waproto {
 	class EncryptMessageOutput {
 		constructor(p?: waproto.EncryptMessageOutput.$Properties)
 		$unknowns?: Uint8Array[]
+		success?: (waproto.EncryptMessageSuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.EncryptMessageOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EncryptMessageOutput & waproto.EncryptMessageOutput.$Shape
+	}
+	namespace EncryptMessageOutput {
+		interface $Properties {
+			success?: (waproto.EncryptMessageSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.EncryptMessageSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.EncryptMessageSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IEncryptMessageSuccess extends waproto.EncryptMessageSuccess.$Properties {
+	}
+	class EncryptMessageSuccess {
+		constructor(p?: waproto.EncryptMessageSuccess.$Properties)
+		$unknowns?: Uint8Array[]
 		encryptedProtobuf?: (Uint8Array|null)
 		orfThreadId?: (Uint8Array|null)
 		valueSecretRef?: (string|null)
 		offlineThreadingId?: (number|Long|null)
 		timestampMs?: (number|Long|null)
-		messageKey?: (Uint8Array|null)
-		error?: (string|null)
-		static encode(m: waproto.EncryptMessageOutput.$Properties, w?: PbWriter): PbWriter
-		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EncryptMessageOutput & waproto.EncryptMessageOutput.$Shape
+		static encode(m: waproto.EncryptMessageSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EncryptMessageSuccess & waproto.EncryptMessageSuccess.$Shape
 	}
-	namespace EncryptMessageOutput {
+	namespace EncryptMessageSuccess {
 		interface $Properties {
 			encryptedProtobuf?: (Uint8Array|null)
 			orfThreadId?: (Uint8Array|null)
 			valueSecretRef?: (string|null)
 			offlineThreadingId?: (number|Long|null)
 			timestampMs?: (number|Long|null)
-			messageKey?: (Uint8Array|null)
-			error?: (string|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.EncryptMessageOutput.$Properties
+		type $Shape = waproto.EncryptMessageSuccess.$Properties
+	}
+	interface IEncryptedBackupsSecretsEpochProto extends waproto.EncryptedBackupsSecretsEpochProto.$Properties {
+	}
+	class EncryptedBackupsSecretsEpochProto {
+		constructor(p?: waproto.EncryptedBackupsSecretsEpochProto.$Properties)
+		$unknowns?: Uint8Array[]
+		id?: (number|Long|null)
+		anonId?: (Uint8Array|null)
+		rootKey?: (Uint8Array|null)
+		status?: (number|null)
+		static encode(m: waproto.EncryptedBackupsSecretsEpochProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EncryptedBackupsSecretsEpochProto & waproto.EncryptedBackupsSecretsEpochProto.$Shape
+	}
+	namespace EncryptedBackupsSecretsEpochProto {
+		interface $Properties {
+			id?: (number|Long|null)
+			anonId?: (Uint8Array|null)
+			rootKey?: (Uint8Array|null)
+			status?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.EncryptedBackupsSecretsEpochProto.$Properties
+	}
+	interface IEncryptedBackupsSecretsProto extends waproto.EncryptedBackupsSecretsProto.$Properties {
+	}
+	class EncryptedBackupsSecretsProto {
+		constructor(p?: waproto.EncryptedBackupsSecretsProto.$Properties)
+		$unknowns?: Uint8Array[]
+		backupId?: (number|Long|null)
+		serverDataId?: (number|Long|null)
+		epoch: waproto.EncryptedBackupsSecretsEpochProto.$Properties[]
+		tempOcmfClientState?: (Uint8Array|null)
+		mailboxRootKey?: (Uint8Array|null)
+		obliviousValidationToken?: (Uint8Array|null)
+		static encode(m: waproto.EncryptedBackupsSecretsProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EncryptedBackupsSecretsProto & waproto.EncryptedBackupsSecretsProto.$Shape
+	}
+	namespace EncryptedBackupsSecretsProto {
+		interface $Properties {
+			backupId?: (number|Long|null)
+			serverDataId?: (number|Long|null)
+			epoch?: (waproto.EncryptedBackupsSecretsEpochProto.$Properties[]|null)
+			tempOcmfClientState?: (Uint8Array|null)
+			mailboxRootKey?: (Uint8Array|null)
+			obliviousValidationToken?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.EncryptedBackupsSecretsProto.$Properties
+	}
+	interface IEncryptedJoinRequestPayload extends waproto.EncryptedJoinRequestPayload.$Properties {
+	}
+	class EncryptedJoinRequestPayload {
+		constructor(p?: waproto.EncryptedJoinRequestPayload.$Properties)
+		$unknowns?: Uint8Array[]
+		encryptedAnswers?: (Uint8Array|null)
+		encIv?: (Uint8Array|null)
+		signalIdentityPublicKey?: (Uint8Array|null)
+		kemCiphertext?: (Uint8Array|null)
+		static encode(m: waproto.EncryptedJoinRequestPayload.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EncryptedJoinRequestPayload & waproto.EncryptedJoinRequestPayload.$Shape
+	}
+	namespace EncryptedJoinRequestPayload {
+		interface $Properties {
+			encryptedAnswers?: (Uint8Array|null)
+			encIv?: (Uint8Array|null)
+			signalIdentityPublicKey?: (Uint8Array|null)
+			kemCiphertext?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.EncryptedJoinRequestPayload.$Properties
 	}
 	interface IEncryptedPairingRequest extends waproto.EncryptedPairingRequest.$Properties {
 	}
@@ -5680,7 +8728,6 @@ export namespace waproto {
 		encryptedObliviousValidationTokenBlob?: (Uint8Array|null)
 		encryptedEpochStoragePrivateKey?: (Uint8Array|null)
 		encryptedOcmfClientState?: (Uint8Array|null)
-		encryptedOrfClientStateV2?: (Uint8Array|null)
 		encryptedMailboxRootKeyBlob?: (Uint8Array|null)
 		encryptedEpochAnonId?: (Uint8Array|null)
 		encryptedEpochRootKey?: (Uint8Array|null)
@@ -5693,7 +8740,6 @@ export namespace waproto {
 			encryptedObliviousValidationTokenBlob?: (Uint8Array|null)
 			encryptedEpochStoragePrivateKey?: (Uint8Array|null)
 			encryptedOcmfClientState?: (Uint8Array|null)
-			encryptedOrfClientStateV2?: (Uint8Array|null)
 			encryptedMailboxRootKeyBlob?: (Uint8Array|null)
 			encryptedEpochAnonId?: (Uint8Array|null)
 			encryptedEpochRootKey?: (Uint8Array|null)
@@ -5719,16 +8765,64 @@ export namespace waproto {
 		}
 		type $Shape = waproto.EphemeralSetting.$Properties
 	}
+	interface IEphemeralSettingProto extends waproto.EphemeralSettingProto.$Properties {
+	}
+	class EphemeralSettingProto {
+		constructor(p?: waproto.EphemeralSettingProto.$Properties)
+		$unknowns?: Uint8Array[]
+		ephemeralExpirationInSec?: (number|null)
+		ephemeralLastUpdatedOrSetTimestamp?: (number|Long|null)
+		static encode(m: waproto.EphemeralSettingProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EphemeralSettingProto & waproto.EphemeralSettingProto.$Shape
+	}
+	namespace EphemeralSettingProto {
+		interface $Properties {
+			ephemeralExpirationInSec?: (number|null)
+			ephemeralLastUpdatedOrSetTimestamp?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.EphemeralSettingProto.$Properties
+	}
+	interface IEphemeralSyncResponseBackoffInfo extends waproto.EphemeralSyncResponseBackoffInfo.$Properties {
+	}
+	class EphemeralSyncResponseBackoffInfo {
+		constructor(p?: waproto.EphemeralSyncResponseBackoffInfo.$Properties)
+		$unknowns?: Uint8Array[]
+		syncResponseRetries?: (number|null)
+		syncResponseSentTs?: (number|Long|null)
+		static encode(m: waproto.EphemeralSyncResponseBackoffInfo.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EphemeralSyncResponseBackoffInfo & waproto.EphemeralSyncResponseBackoffInfo.$Shape
+	}
+	namespace EphemeralSyncResponseBackoffInfo {
+		interface $Properties {
+			syncResponseRetries?: (number|null)
+			syncResponseSentTs?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.EphemeralSyncResponseBackoffInfo.$Properties
+	}
+	interface IEpoch extends waproto.Epoch.$Properties {
+	}
+	class Epoch {
+		constructor(p?: waproto.Epoch.$Properties)
+		$unknowns?: Uint8Array[]
+		inner?: (number|Long|null)
+		static encode(m: waproto.Epoch.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.Epoch & waproto.Epoch.$Shape
+	}
+	namespace Epoch {
+		interface $Properties {
+			inner?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.Epoch.$Properties
+	}
 	interface IEpoch0Output extends waproto.Epoch0Output.$Properties {
 	}
 	class Epoch0Output {
 		constructor(p?: waproto.Epoch0Output.$Properties)
 		$unknowns?: Uint8Array[]
-		epochFbid?: (number|Long|null)
-		epochAnonId?: (Uint8Array|null)
-		epochData?: (Uint8Array|null)
-		wrappedRootKeyForSelf?: (Uint8Array|null)
-		epochSignature?: (Uint8Array|null)
+		epochAnonId?: (number|null)
 		epochRootKeyFingerprint?: (Uint8Array|null)
 		epochRootKey?: (Uint8Array|null)
 		static encode(m: waproto.Epoch0Output.$Properties, w?: PbWriter): PbWriter
@@ -5736,16 +8830,72 @@ export namespace waproto {
 	}
 	namespace Epoch0Output {
 		interface $Properties {
-			epochFbid?: (number|Long|null)
-			epochAnonId?: (Uint8Array|null)
-			epochData?: (Uint8Array|null)
-			wrappedRootKeyForSelf?: (Uint8Array|null)
-			epochSignature?: (Uint8Array|null)
+			epochAnonId?: (number|null)
 			epochRootKeyFingerprint?: (Uint8Array|null)
 			epochRootKey?: (Uint8Array|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.Epoch0Output.$Properties
+	}
+	interface IEpochDerivationEdge extends waproto.EpochDerivationEdge.$Properties {
+	}
+	class EpochDerivationEdge {
+		constructor(p?: waproto.EpochDerivationEdge.$Properties)
+		$unknowns?: Uint8Array[]
+		fromEpoch?: (waproto.EpochIds.$Properties|null)
+		toEpoch?: (waproto.EpochIds.$Properties|null)
+		forwardEdge?: (waproto.ForwardEdgeInput.$Properties|null)
+		backwardEdge?: (Uint8Array|null)
+		static encode(m: waproto.EpochDerivationEdge.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EpochDerivationEdge & waproto.EpochDerivationEdge.$Shape
+	}
+	namespace EpochDerivationEdge {
+		interface $Properties {
+			fromEpoch?: (waproto.EpochIds.$Properties|null)
+			toEpoch?: (waproto.EpochIds.$Properties|null)
+			forwardEdge?: (waproto.ForwardEdgeInput.$Properties|null)
+			backwardEdge?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.EpochDerivationEdge.$Properties
+	}
+	interface IEpochIds extends waproto.EpochIds.$Properties {
+	}
+	class EpochIds {
+		constructor(p?: waproto.EpochIds.$Properties)
+		$unknowns?: Uint8Array[]
+		serverEpochId?: (number|Long|null)
+		epochAnonId?: (number|null)
+		static encode(m: waproto.EpochIds.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EpochIds & waproto.EpochIds.$Shape
+	}
+	namespace EpochIds {
+		interface $Properties {
+			serverEpochId?: (number|Long|null)
+			epochAnonId?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.EpochIds.$Properties
+	}
+	interface IEpochKey extends waproto.EpochKey.$Properties {
+	}
+	class EpochKey {
+		constructor(p?: waproto.EpochKey.$Properties)
+		$unknowns?: Uint8Array[]
+		serverEpochId?: (number|Long|null)
+		epochAnonId?: (number|null)
+		epochRootKey?: (Uint8Array|null)
+		static encode(m: waproto.EpochKey.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EpochKey & waproto.EpochKey.$Shape
+	}
+	namespace EpochKey {
+		interface $Properties {
+			serverEpochId?: (number|Long|null)
+			epochAnonId?: (number|null)
+			epochRootKey?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.EpochKey.$Properties
 	}
 	interface IEventAdditionalMetadata extends waproto.EventAdditionalMetadata.$Properties {
 	}
@@ -5762,6 +8912,44 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.EventAdditionalMetadata.$Properties
+	}
+	interface IEventInviteAdditionalMetadata extends waproto.EventInviteAdditionalMetadata.$Properties {
+	}
+	class EventInviteAdditionalMetadata {
+		constructor(p?: waproto.EventInviteAdditionalMetadata.$Properties)
+		$unknowns?: Uint8Array[]
+		isUpdated?: (boolean|null)
+		selfAccessStatus?: (waproto.EventInviteAdditionalMetadata.AccessStatus|null)
+		selfRsvpStatus?: (waproto.EventInviteAdditionalMetadata.RsvpStatus|null)
+		selfAdditionalGuestCount?: (number|null)
+		selfInviteeLastUpdatedTsUsec?: (number|Long|null)
+		static encode(m: waproto.EventInviteAdditionalMetadata.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.EventInviteAdditionalMetadata & waproto.EventInviteAdditionalMetadata.$Shape
+	}
+	namespace EventInviteAdditionalMetadata {
+		interface $Properties {
+			isUpdated?: (boolean|null)
+			selfAccessStatus?: (waproto.EventInviteAdditionalMetadata.AccessStatus|null)
+			selfRsvpStatus?: (waproto.EventInviteAdditionalMetadata.RsvpStatus|null)
+			selfAdditionalGuestCount?: (number|null)
+			selfInviteeLastUpdatedTsUsec?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.EventInviteAdditionalMetadata.$Properties
+		enum RsvpStatus {
+			RSVP_STATUS_UNKNOWN = 0,
+			GOING = 1,
+			NOT_GOING = 2,
+			MAYBE = 3,
+			NO_RESPONSE = 4
+		}
+		enum AccessStatus {
+			ACCESS_STATUS_UNKNOWN = 0,
+			HAS_ACCESS = 1,
+			LEFT_EVENT = 2,
+			REMOVED_FROM_INVITE_LIST = 3,
+			UNAVAILABLE = 4
+		}
 	}
 	interface IEventResponse extends waproto.EventResponse.$Properties {
 	}
@@ -5803,6 +8991,104 @@ export namespace waproto {
 		}
 		type $Shape = waproto.ExitCode.$Properties
 	}
+	interface IExtendedContentMessage extends waproto.ExtendedContentMessage.$Properties {
+	}
+	class ExtendedContentMessage {
+		constructor(p?: waproto.ExtendedContentMessage.$Properties)
+		$unknowns?: Uint8Array[]
+		associatedMessage?: (waproto.SubProtocol.$Properties|null)
+		targetType?: (waproto.EXTENDED_CONTENT_MESSAGE_EXTENDED_CONTENT_TYPE|null)
+		targetUsername?: (string|null)
+		targetId?: (string|null)
+		targetExpiringAtSec?: (number|Long|null)
+		xmaLayoutType?: (waproto.EXTENDED_CONTENT_MESSAGE_XMA_LAYOUT_TYPE|null)
+		ctas: waproto.ExtendedContentMessage.CTA.$Properties[]
+		previews: waproto.SubProtocol.$Properties[]
+		titleText?: (string|null)
+		subtitleText?: (string|null)
+		maxTitleNumOfLines?: (number|null)
+		maxSubtitleNumOfLines?: (number|null)
+		favicon?: (waproto.SubProtocol.$Properties|null)
+		headerImage?: (waproto.SubProtocol.$Properties|null)
+		headerTitle?: (string|null)
+		overlayIconGlyph?: (waproto.EXTENDED_CONTENT_MESSAGE_OVERLAY_ICON_GLYPH|null)
+		overlayTitle?: (string|null)
+		overlayDescription?: (string|null)
+		sentWithMessageId?: (string|null)
+		messageText?: (string|null)
+		headerSubtitle?: (string|null)
+		xmaDataclass?: (string|null)
+		contentRef?: (string|null)
+		mentionedJid: string[]
+		commands: waproto.Command.$Properties[]
+		mentions: waproto.Mention.$Properties[]
+		xmaDataclassType?: (waproto.EXTENDED_CONTENT_MESSAGE_XMA_DATACLASS_TYPE|null)
+		signedXmaDataclassValidation?: (string|null)
+		featureSharedSessionId?: (string|null)
+		static encode(m: waproto.ExtendedContentMessage.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ExtendedContentMessage & waproto.ExtendedContentMessage.$Shape
+	}
+	namespace ExtendedContentMessage {
+		interface $Properties {
+			associatedMessage?: (waproto.SubProtocol.$Properties|null)
+			targetType?: (waproto.EXTENDED_CONTENT_MESSAGE_EXTENDED_CONTENT_TYPE|null)
+			targetUsername?: (string|null)
+			targetId?: (string|null)
+			targetExpiringAtSec?: (number|Long|null)
+			xmaLayoutType?: (waproto.EXTENDED_CONTENT_MESSAGE_XMA_LAYOUT_TYPE|null)
+			ctas?: (waproto.ExtendedContentMessage.CTA.$Properties[]|null)
+			previews?: (waproto.SubProtocol.$Properties[]|null)
+			titleText?: (string|null)
+			subtitleText?: (string|null)
+			maxTitleNumOfLines?: (number|null)
+			maxSubtitleNumOfLines?: (number|null)
+			favicon?: (waproto.SubProtocol.$Properties|null)
+			headerImage?: (waproto.SubProtocol.$Properties|null)
+			headerTitle?: (string|null)
+			overlayIconGlyph?: (waproto.EXTENDED_CONTENT_MESSAGE_OVERLAY_ICON_GLYPH|null)
+			overlayTitle?: (string|null)
+			overlayDescription?: (string|null)
+			sentWithMessageId?: (string|null)
+			messageText?: (string|null)
+			headerSubtitle?: (string|null)
+			xmaDataclass?: (string|null)
+			contentRef?: (string|null)
+			mentionedJid?: (string[]|null)
+			commands?: (waproto.Command.$Properties[]|null)
+			mentions?: (waproto.Mention.$Properties[]|null)
+			xmaDataclassType?: (waproto.EXTENDED_CONTENT_MESSAGE_XMA_DATACLASS_TYPE|null)
+			signedXmaDataclassValidation?: (string|null)
+			featureSharedSessionId?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ExtendedContentMessage.$Properties
+		interface ICTA extends waproto.ExtendedContentMessage.CTA.$Properties {
+		}
+		class CTA {
+			constructor(p?: waproto.ExtendedContentMessage.CTA.$Properties)
+			$unknowns?: Uint8Array[]
+			buttonType?: (waproto.EXTENDED_CONTENT_MESSAGE_CTA_BUTTON_TYPE|null)
+			title?: (string|null)
+			actionUrl?: (string|null)
+			nativeUrl?: (string|null)
+			ctaType?: (string|null)
+			actionContentBlob?: (string|null)
+			static encode(m: waproto.ExtendedContentMessage.CTA.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ExtendedContentMessage.CTA & waproto.ExtendedContentMessage.CTA.$Shape
+		}
+		namespace CTA {
+			interface $Properties {
+				buttonType?: (waproto.EXTENDED_CONTENT_MESSAGE_CTA_BUTTON_TYPE|null)
+				title?: (string|null)
+				actionUrl?: (string|null)
+				nativeUrl?: (string|null)
+				ctaType?: (string|null)
+				actionContentBlob?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.ExtendedContentMessage.CTA.$Properties
+		}
+	}
 	interface IExternalBlobReference extends waproto.ExternalBlobReference.$Properties {
 	}
 	class ExternalBlobReference {
@@ -5836,7 +9122,6 @@ export namespace waproto {
 		$unknowns?: Uint8Array[]
 		minVersion?: (number|null)
 		maxVersion?: (number|null)
-		notReportableMinVersion?: (number|null)
 		isMessage?: (boolean|null)
 		subfield: { [k: string]: waproto.Field.$Properties }
 		static encode(m: waproto.Field.$Properties, w?: PbWriter): PbWriter
@@ -5846,7 +9131,6 @@ export namespace waproto {
 		interface $Properties {
 			minVersion?: (number|null)
 			maxVersion?: (number|null)
-			notReportableMinVersion?: (number|null)
 			isMessage?: (boolean|null)
 			subfield?: ({ [k: string]: waproto.Field.$Properties }|null)
 			$unknowns?: Uint8Array[]
@@ -5879,6 +9163,44 @@ export namespace waproto {
 		}
 		type $Shape = waproto.FingerprintData.$Properties
 	}
+	interface IFingerprintProto extends waproto.FingerprintProto.$Properties {
+	}
+	class FingerprintProto {
+		constructor(p?: waproto.FingerprintProto.$Properties)
+		$unknowns?: Uint8Array[]
+		currentIndex?: (number|null)
+		deviceIndexes: number[]
+		rawId?: (number|null)
+		static encode(m: waproto.FingerprintProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.FingerprintProto & waproto.FingerprintProto.$Shape
+	}
+	namespace FingerprintProto {
+		interface $Properties {
+			currentIndex?: (number|null)
+			deviceIndexes?: (number[]|null)
+			rawId?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.FingerprintProto.$Properties
+	}
+	interface IForwardEdgeInput extends waproto.ForwardEdgeInput.$Properties {
+	}
+	class ForwardEdgeInput {
+		constructor(p?: waproto.ForwardEdgeInput.$Properties)
+		$unknowns?: Uint8Array[]
+		encryptedEntropy?: (Uint8Array|null)
+		authPublicKey?: (Uint8Array|null)
+		static encode(m: waproto.ForwardEdgeInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ForwardEdgeInput & waproto.ForwardEdgeInput.$Shape
+	}
+	namespace ForwardEdgeInput {
+		interface $Properties {
+			encryptedEntropy?: (Uint8Array|null)
+			authPublicKey?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ForwardEdgeInput.$Properties
+	}
 	interface IForwardedAIBotMessageInfo extends waproto.ForwardedAIBotMessageInfo.$Properties {
 	}
 	class ForwardedAIBotMessageInfo {
@@ -5898,6 +9220,24 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.ForwardedAIBotMessageInfo.$Properties
+	}
+	interface IFrankingMetadata extends waproto.FrankingMetadata.$Properties {
+	}
+	class FrankingMetadata {
+		constructor(p?: waproto.FrankingMetadata.$Properties)
+		$unknowns?: Uint8Array[]
+		frankingTag?: (Uint8Array|null)
+		reportingTag?: (Uint8Array|null)
+		static encode(m: waproto.FrankingMetadata.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.FrankingMetadata & waproto.FrankingMetadata.$Shape
+	}
+	namespace FrankingMetadata {
+		interface $Properties {
+			frankingTag?: (Uint8Array|null)
+			reportingTag?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.FrankingMetadata.$Properties
 	}
 	interface IGlobalSettings extends waproto.GlobalSettings.$Properties {
 	}
@@ -5951,7 +9291,29 @@ export namespace waproto {
 			chatDbLidMigrationTimestamp?: (number|Long|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.GlobalSettings.$Properties
+		type $Shape = {
+  lightThemeWallpaper?: waproto.WallpaperSettings.$Shape|null
+  mediaVisibility?: waproto.MediaVisibility|null
+  darkThemeWallpaper?: waproto.WallpaperSettings.$Shape|null
+  autoDownloadWiFi?: waproto.AutoDownloadSettings.$Shape|null
+  autoDownloadCellular?: waproto.AutoDownloadSettings.$Shape|null
+  autoDownloadRoaming?: waproto.AutoDownloadSettings.$Shape|null
+  showIndividualNotificationsPreview?: boolean|null
+  showGroupNotificationsPreview?: boolean|null
+  disappearingModeDuration?: number|null
+  disappearingModeTimestamp?: number|Long|null
+  avatarUserSettings?: waproto.AvatarUserSettings.$Shape|null
+  fontSize?: number|null
+  securityNotifications?: boolean|null
+  autoUnarchiveChats?: boolean|null
+  videoQualityMode?: number|null
+  photoQualityMode?: number|null
+  individualNotificationSettings?: waproto.NotificationSettings.$Shape|null
+  groupNotificationSettings?: waproto.NotificationSettings.$Shape|null
+  chatLockSettings?: waproto.ChatLockSettings.$Shape|null
+  chatDbLidMigrationTimestamp?: number|Long|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface IGroupHistory extends waproto.GroupHistory.$Properties {
 	}
@@ -5962,6 +9324,7 @@ export namespace waproto {
 		uncountedAssociatedMessageLists: waproto.UnCountedAssociatedMessageList.$Properties[]
 		commentMessages: waproto.WebMessageInfo.$Properties[]
 		outOfWindowPinnedMessages: waproto.WebMessageInfo.$Properties[]
+		themeMessage?: (waproto.WebMessageInfo.$Properties|null)
 		static encode(m: waproto.GroupHistory.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupHistory & waproto.GroupHistory.$Shape
 	}
@@ -5971,9 +9334,17 @@ export namespace waproto {
 			uncountedAssociatedMessageLists?: (waproto.UnCountedAssociatedMessageList.$Properties[]|null)
 			commentMessages?: (waproto.WebMessageInfo.$Properties[]|null)
 			outOfWindowPinnedMessages?: (waproto.WebMessageInfo.$Properties[]|null)
+			themeMessage?: (waproto.WebMessageInfo.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.GroupHistory.$Properties
+		type $Shape = {
+  messages?: waproto.WebMessageInfo.$Shape[]|null
+  uncountedAssociatedMessageLists?: waproto.UnCountedAssociatedMessageList.$Shape[]|null
+  commentMessages?: waproto.WebMessageInfo.$Shape[]|null
+  outOfWindowPinnedMessages?: waproto.WebMessageInfo.$Shape[]|null
+  themeMessage?: waproto.WebMessageInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface IGroupHistoryBundleInfo extends waproto.GroupHistoryBundleInfo.$Properties {
 	}
@@ -5991,7 +9362,11 @@ export namespace waproto {
 			processState?: (waproto.GroupHistoryBundleInfo.ProcessState|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.GroupHistoryBundleInfo.$Properties
+		type $Shape = {
+  deprecatedMessageHistoryBundle?: waproto.Message.MessageHistoryBundle.$Shape|null
+  processState?: waproto.GroupHistoryBundleInfo.ProcessState|null
+  $unknowns?: Uint8Array[]
+}
 		enum ProcessState {
 			NOT_INJECTED = 0,
 			INJECTED = 1,
@@ -6028,6 +9403,7 @@ export namespace waproto {
 		uncountedAssociatedMessageLists: waproto.UnCountedAssociatedMessageListWithMessageBytes.$Properties[]
 		commentMessages: waproto.WebMessageInfoWithMessageBytes.$Properties[]
 		outOfWindowPinnedMessages: waproto.WebMessageInfoWithMessageBytes.$Properties[]
+		themeMessage?: (waproto.WebMessageInfoWithMessageBytes.$Properties|null)
 		static encode(m: waproto.GroupHistoryWithMessageBytes.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupHistoryWithMessageBytes & waproto.GroupHistoryWithMessageBytes.$Shape
 	}
@@ -6037,9 +9413,162 @@ export namespace waproto {
 			uncountedAssociatedMessageLists?: (waproto.UnCountedAssociatedMessageListWithMessageBytes.$Properties[]|null)
 			commentMessages?: (waproto.WebMessageInfoWithMessageBytes.$Properties[]|null)
 			outOfWindowPinnedMessages?: (waproto.WebMessageInfoWithMessageBytes.$Properties[]|null)
+			themeMessage?: (waproto.WebMessageInfoWithMessageBytes.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.GroupHistoryWithMessageBytes.$Properties
+	}
+	interface IGroupInfoSchemaProto extends waproto.GroupInfoSchemaProto.$Properties {
+	}
+	class GroupInfoSchemaProto {
+		constructor(p?: waproto.GroupInfoSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		groupJid?: (string|null)
+		threadId?: (number|null)
+		creator?: (string|null)
+		creationTs?: (number|Long|null)
+		name?: (string|null)
+		nameOwner?: (string|null)
+		nameTs?: (number|Long|null)
+		msgExpiration?: (number|null)
+		participantVersion?: (string|null)
+		inviter?: (string|null)
+		memberAddMode?: (string|null)
+		static encode(m: waproto.GroupInfoSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupInfoSchemaProto & waproto.GroupInfoSchemaProto.$Shape
+	}
+	namespace GroupInfoSchemaProto {
+		interface $Properties {
+			groupJid?: (string|null)
+			threadId?: (number|null)
+			creator?: (string|null)
+			creationTs?: (number|Long|null)
+			name?: (string|null)
+			nameOwner?: (string|null)
+			nameTs?: (number|Long|null)
+			msgExpiration?: (number|null)
+			participantVersion?: (string|null)
+			inviter?: (string|null)
+			memberAddMode?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.GroupInfoSchemaProto.$Properties
+	}
+	interface IGroupInvitesTableSchemaProto extends waproto.GroupInvitesTableSchemaProto.$Properties {
+	}
+	class GroupInvitesTableSchemaProto {
+		constructor(p?: waproto.GroupInvitesTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		inviterJid?: (string|null)
+		invitedParticipantId?: (string|null)
+		inviteCode?: (string|null)
+		inviteExpirationTs?: (number|Long|null)
+		caption?: (string|null)
+		static encode(m: waproto.GroupInvitesTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupInvitesTableSchemaProto & waproto.GroupInvitesTableSchemaProto.$Shape
+	}
+	namespace GroupInvitesTableSchemaProto {
+		interface $Properties {
+			inviterJid?: (string|null)
+			invitedParticipantId?: (string|null)
+			inviteCode?: (string|null)
+			inviteExpirationTs?: (number|Long|null)
+			caption?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.GroupInvitesTableSchemaProto.$Properties
+	}
+	interface IGroupMembershipForm extends waproto.GroupMembershipForm.$Properties {
+	}
+	class GroupMembershipForm {
+		constructor(p?: waproto.GroupMembershipForm.$Properties)
+		$unknowns?: Uint8Array[]
+		questions: waproto.GroupMembershipFormQuestion.$Properties[]
+		memberTagPrompt?: (string|null)
+		schemaVersion?: (number|null)
+		static encode(m: waproto.GroupMembershipForm.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupMembershipForm & waproto.GroupMembershipForm.$Shape
+	}
+	namespace GroupMembershipForm {
+		interface $Properties {
+			questions?: (waproto.GroupMembershipFormQuestion.$Properties[]|null)
+			memberTagPrompt?: (string|null)
+			schemaVersion?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.GroupMembershipForm.$Properties
+	}
+	interface IGroupMembershipFormMemberTagAnswer extends waproto.GroupMembershipFormMemberTagAnswer.$Properties {
+	}
+	class GroupMembershipFormMemberTagAnswer {
+		constructor(p?: waproto.GroupMembershipFormMemberTagAnswer.$Properties)
+		$unknowns?: Uint8Array[]
+		prompt?: (string|null)
+		memberTag?: (string|null)
+		static encode(m: waproto.GroupMembershipFormMemberTagAnswer.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupMembershipFormMemberTagAnswer & waproto.GroupMembershipFormMemberTagAnswer.$Shape
+	}
+	namespace GroupMembershipFormMemberTagAnswer {
+		interface $Properties {
+			prompt?: (string|null)
+			memberTag?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.GroupMembershipFormMemberTagAnswer.$Properties
+	}
+	interface IGroupMembershipFormQuestion extends waproto.GroupMembershipFormQuestion.$Properties {
+	}
+	class GroupMembershipFormQuestion {
+		constructor(p?: waproto.GroupMembershipFormQuestion.$Properties)
+		$unknowns?: Uint8Array[]
+		text?: (string|null)
+		static encode(m: waproto.GroupMembershipFormQuestion.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupMembershipFormQuestion & waproto.GroupMembershipFormQuestion.$Shape
+	}
+	namespace GroupMembershipFormQuestion {
+		interface $Properties {
+			text?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.GroupMembershipFormQuestion.$Properties
+	}
+	interface IGroupMembershipFormQuestionAnswer extends waproto.GroupMembershipFormQuestionAnswer.$Properties {
+	}
+	class GroupMembershipFormQuestionAnswer {
+		constructor(p?: waproto.GroupMembershipFormQuestionAnswer.$Properties)
+		$unknowns?: Uint8Array[]
+		question?: (waproto.GroupMembershipFormQuestion.$Properties|null)
+		answer?: (string|null)
+		static encode(m: waproto.GroupMembershipFormQuestionAnswer.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupMembershipFormQuestionAnswer & waproto.GroupMembershipFormQuestionAnswer.$Shape
+	}
+	namespace GroupMembershipFormQuestionAnswer {
+		interface $Properties {
+			question?: (waproto.GroupMembershipFormQuestion.$Properties|null)
+			answer?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.GroupMembershipFormQuestionAnswer.$Properties
+	}
+	interface IGroupMembershipFormSubmission extends waproto.GroupMembershipFormSubmission.$Properties {
+	}
+	class GroupMembershipFormSubmission {
+		constructor(p?: waproto.GroupMembershipFormSubmission.$Properties)
+		$unknowns?: Uint8Array[]
+		questionAnswers: waproto.GroupMembershipFormQuestionAnswer.$Properties[]
+		memberTagAnswer?: (waproto.GroupMembershipFormMemberTagAnswer.$Properties|null)
+		schemaVersion?: (number|null)
+		static encode(m: waproto.GroupMembershipFormSubmission.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupMembershipFormSubmission & waproto.GroupMembershipFormSubmission.$Shape
+	}
+	namespace GroupMembershipFormSubmission {
+		interface $Properties {
+			questionAnswers?: (waproto.GroupMembershipFormQuestionAnswer.$Properties[]|null)
+			memberTagAnswer?: (waproto.GroupMembershipFormMemberTagAnswer.$Properties|null)
+			schemaVersion?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.GroupMembershipFormSubmission.$Properties
 	}
 	interface IGroupMention extends waproto.GroupMention.$Properties {
 	}
@@ -6083,6 +9612,42 @@ export namespace waproto {
 			ADMIN = 1,
 			SUPERADMIN = 2
 		}
+	}
+	interface IGroupRootKey extends waproto.GroupRootKey.$Properties {
+	}
+	class GroupRootKey {
+		constructor(p?: waproto.GroupRootKey.$Properties)
+		$unknowns?: Uint8Array[]
+		keyId?: (string|null)
+		rootKey?: (Uint8Array|null)
+		isCurrent?: (boolean|null)
+		static encode(m: waproto.GroupRootKey.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupRootKey & waproto.GroupRootKey.$Shape
+	}
+	namespace GroupRootKey {
+		interface $Properties {
+			keyId?: (string|null)
+			rootKey?: (Uint8Array|null)
+			isCurrent?: (boolean|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.GroupRootKey.$Properties
+	}
+	interface IGroupRootKeyRequest extends waproto.GroupRootKeyRequest.$Properties {
+	}
+	class GroupRootKeyRequest {
+		constructor(p?: waproto.GroupRootKeyRequest.$Properties)
+		$unknowns?: Uint8Array[]
+		keyId?: (string|null)
+		static encode(m: waproto.GroupRootKeyRequest.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupRootKeyRequest & waproto.GroupRootKeyRequest.$Shape
+	}
+	namespace GroupRootKeyRequest {
+		interface $Properties {
+			keyId?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.GroupRootKeyRequest.$Properties
 	}
 	interface IGroupRootKeyShare extends waproto.GroupRootKeyShare.$Properties {
 	}
@@ -6150,7 +9715,8 @@ export namespace waproto {
 			IKKEM = 5,
 			IKKEM_FS = 6,
 			XXKEM_2 = 7,
-			IKKEM_2 = 8
+			IKKEM_2 = 8,
+			XXKEM_EPH = 9
 		}
 		interface IClientFinish extends waproto.HandshakeMessage.ClientFinish.$Properties {
 		}
@@ -6282,6 +9848,9 @@ export namespace waproto {
 		nctSalt?: (Uint8Array|null)
 		inlineContacts: waproto.InlineContact.$Properties[]
 		inlineContactsProvided?: (boolean|null)
+		favoriteStickers: waproto.StickerMetadata.$Properties[]
+		omittedConversationMetadata?: (waproto.OmittedConversationMetadata.$Properties|null)
+		omittedConversationMetadataSnapshotId?: (string|null)
 		static encode(m: waproto.HistorySync.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.HistorySync & waproto.HistorySync.$Shape
 	}
@@ -6307,9 +9876,37 @@ export namespace waproto {
 			nctSalt?: (Uint8Array|null)
 			inlineContacts?: (waproto.InlineContact.$Properties[]|null)
 			inlineContactsProvided?: (boolean|null)
+			favoriteStickers?: (waproto.StickerMetadata.$Properties[]|null)
+			omittedConversationMetadata?: (waproto.OmittedConversationMetadata.$Properties|null)
+			omittedConversationMetadataSnapshotId?: (string|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.HistorySync.$Properties
+		type $Shape = {
+  syncType?: waproto.HistorySync.HistorySyncType|null
+  conversations?: waproto.Conversation.$Shape[]|null
+  statusV3Messages?: waproto.WebMessageInfo.$Shape[]|null
+  chunkOrder?: number|null
+  progress?: number|null
+  pushnames?: waproto.Pushname.$Shape[]|null
+  globalSettings?: waproto.GlobalSettings.$Shape|null
+  threadIdUserSecret?: Uint8Array|null
+  threadDsTimeframeOffset?: number|null
+  recentStickers?: waproto.StickerMetadata.$Shape[]|null
+  pastParticipants?: waproto.PastParticipants.$Shape[]|null
+  callLogRecords?: waproto.CallLogRecord.$Shape[]|null
+  aiWaitListState?: waproto.HistorySync.BotAIWaitListState|null
+  phoneNumberToLidMappings?: waproto.PhoneNumberToLIDMapping.$Shape[]|null
+  companionMetaNonce?: string|null
+  shareableChatIdentifierEncryptionKey?: Uint8Array|null
+  accounts?: waproto.Account.$Shape[]|null
+  nctSalt?: Uint8Array|null
+  inlineContacts?: waproto.InlineContact.$Shape[]|null
+  inlineContactsProvided?: boolean|null
+  favoriteStickers?: waproto.StickerMetadata.$Shape[]|null
+  omittedConversationMetadata?: waproto.OmittedConversationMetadata.$Shape|null
+  omittedConversationMetadataSnapshotId?: string|null
+  $unknowns?: Uint8Array[]
+}
 		enum BotAIWaitListState {
 			IN_WAITLIST = 0,
 			AI_AVAILABLE = 1
@@ -6321,7 +9918,8 @@ export namespace waproto {
 			RECENT = 3,
 			PUSH_NAME = 4,
 			NON_BLOCKING_DATA = 5,
-			ON_DEMAND = 6
+			ON_DEMAND = 6,
+			RECENT_CONVERSATIONS_ON_DEMAND = 9
 		}
 	}
 	interface IHistorySyncMsg extends waproto.HistorySyncMsg.$Properties {
@@ -6340,29 +9938,43 @@ export namespace waproto {
 			msgOrderId?: (number|Long|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.HistorySyncMsg.$Properties
+		type $Shape = {
+  message?: waproto.WebMessageInfo.$Shape|null
+  msgOrderId?: number|Long|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface IHydratedTemplateButton extends waproto.HydratedTemplateButton.$Properties {
 	}
 	class HydratedTemplateButton {
 		constructor(p?: waproto.HydratedTemplateButton.$Properties)
 		$unknowns?: Uint8Array[]
+		index?: (number|null)
 		quickReplyButton?: (waproto.HydratedTemplateButton.HydratedQuickReplyButton.$Properties|null)
 		urlButton?: (waproto.HydratedTemplateButton.HydratedURLButton.$Properties|null)
 		callButton?: (waproto.HydratedTemplateButton.HydratedCallButton.$Properties|null)
-		index?: (number|null)
+		hydratedButton?: ("quickReplyButton"|"urlButton"|"callButton")
 		static encode(m: waproto.HydratedTemplateButton.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.HydratedTemplateButton & waproto.HydratedTemplateButton.$Shape
 	}
 	namespace HydratedTemplateButton {
 		interface $Properties {
+			index?: (number|null)
 			quickReplyButton?: (waproto.HydratedTemplateButton.HydratedQuickReplyButton.$Properties|null)
 			urlButton?: (waproto.HydratedTemplateButton.HydratedURLButton.$Properties|null)
 			callButton?: (waproto.HydratedTemplateButton.HydratedCallButton.$Properties|null)
-			index?: (number|null)
+			hydratedButton?: ("quickReplyButton"|"urlButton"|"callButton")
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.HydratedTemplateButton.$Properties
+		type $Shape = {
+  index?: number|null
+  quickReplyButton?: waproto.HydratedTemplateButton.HydratedQuickReplyButton.$Shape|null
+  urlButton?: waproto.HydratedTemplateButton.HydratedURLButton.$Shape|null
+  callButton?: waproto.HydratedTemplateButton.HydratedCallButton.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ hydratedButton?: undefined; quickReplyButton?: null; urlButton?: null; callButton?: null }|{ hydratedButton?: "quickReplyButton"; quickReplyButton: waproto.HydratedTemplateButton.HydratedQuickReplyButton.$Shape; urlButton?: null; callButton?: null }|{ hydratedButton?: "urlButton"; quickReplyButton?: null; urlButton: waproto.HydratedTemplateButton.HydratedURLButton.$Shape; callButton?: null }|{ hydratedButton?: "callButton"; quickReplyButton?: null; urlButton?: null; callButton: waproto.HydratedTemplateButton.HydratedCallButton.$Shape })
+)
 		interface IHydratedCallButton extends waproto.HydratedTemplateButton.HydratedCallButton.$Properties {
 		}
 		class HydratedCallButton {
@@ -6427,6 +10039,26 @@ export namespace waproto {
 			type $Shape = waproto.HydratedTemplateButton.HydratedQuickReplyButton.$Properties
 		}
 	}
+	interface IIdentitiesPerDeviceProto extends waproto.IdentitiesPerDeviceProto.$Properties {
+	}
+	class IdentitiesPerDeviceProto {
+		constructor(p?: waproto.IdentitiesPerDeviceProto.$Properties)
+		$unknowns?: Uint8Array[]
+		deviceJid?: (string|null)
+		serializedPubKey?: (Uint8Array|null)
+		baseKey?: (Uint8Array|null)
+		static encode(m: waproto.IdentitiesPerDeviceProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.IdentitiesPerDeviceProto & waproto.IdentitiesPerDeviceProto.$Shape
+	}
+	namespace IdentitiesPerDeviceProto {
+		interface $Properties {
+			deviceJid?: (string|null)
+			serializedPubKey?: (Uint8Array|null)
+			baseKey?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.IdentitiesPerDeviceProto.$Properties
+	}
 	interface IIdentityKeyPairStructure extends waproto.IdentityKeyPairStructure.$Properties {
 	}
 	class IdentityKeyPairStructure {
@@ -6462,6 +10094,98 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.IdentityVerificationState.$Properties
+	}
+	interface IImageMsgContentProto extends waproto.ImageMsgContentProto.$Properties {
+	}
+	class ImageMsgContentProto {
+		constructor(p?: waproto.ImageMsgContentProto.$Properties)
+		$unknowns?: Uint8Array[]
+		width?: (number|null)
+		height?: (number|null)
+		jpegThumbnail?: (Uint8Array|null)
+		jpegThumbnailHeight?: (number|null)
+		jpegThumbnailWidth?: (number|null)
+		thumbnailPlaintextHash?: (string|null)
+		hdType?: (waproto.HD_TYPE|null)
+		static encode(m: waproto.ImageMsgContentProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ImageMsgContentProto & waproto.ImageMsgContentProto.$Shape
+	}
+	namespace ImageMsgContentProto {
+		interface $Properties {
+			width?: (number|null)
+			height?: (number|null)
+			jpegThumbnail?: (Uint8Array|null)
+			jpegThumbnailHeight?: (number|null)
+			jpegThumbnailWidth?: (number|null)
+			thumbnailPlaintextHash?: (string|null)
+			hdType?: (waproto.HD_TYPE|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ImageMsgContentProto.$Properties
+	}
+	interface IImageTransport extends waproto.ImageTransport.$Properties {
+	}
+	class ImageTransport {
+		constructor(p?: waproto.ImageTransport.$Properties)
+		$unknowns?: Uint8Array[]
+		integral?: (waproto.ImageTransport.Integral.$Properties|null)
+		ancillary?: (waproto.ImageTransport.Ancillary.$Properties|null)
+		static encode(m: waproto.ImageTransport.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ImageTransport & waproto.ImageTransport.$Shape
+	}
+	namespace ImageTransport {
+		interface $Properties {
+			integral?: (waproto.ImageTransport.Integral.$Properties|null)
+			ancillary?: (waproto.ImageTransport.Ancillary.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ImageTransport.$Properties
+		interface IAncillary extends waproto.ImageTransport.Ancillary.$Properties {
+		}
+		class Ancillary {
+			constructor(p?: waproto.ImageTransport.Ancillary.$Properties)
+			$unknowns?: Uint8Array[]
+			height?: (number|null)
+			width?: (number|null)
+			scansSidecar?: (Uint8Array|null)
+			scanLengths: number[]
+			midQualityFileSha256?: (Uint8Array|null)
+			hdType?: (waproto.IMAGE_TRANSPORT_ANCILLARY_HD_TYPE|null)
+			memoriesConceptScores: number[]
+			memoriesConceptIds: number[]
+			static encode(m: waproto.ImageTransport.Ancillary.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ImageTransport.Ancillary & waproto.ImageTransport.Ancillary.$Shape
+		}
+		namespace Ancillary {
+			interface $Properties {
+				height?: (number|null)
+				width?: (number|null)
+				scansSidecar?: (Uint8Array|null)
+				scanLengths?: (number[]|null)
+				midQualityFileSha256?: (Uint8Array|null)
+				hdType?: (waproto.IMAGE_TRANSPORT_ANCILLARY_HD_TYPE|null)
+				memoriesConceptScores?: (number[]|null)
+				memoriesConceptIds?: (number[]|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.ImageTransport.Ancillary.$Properties
+		}
+		interface IIntegral extends waproto.ImageTransport.Integral.$Properties {
+		}
+		class Integral {
+			constructor(p?: waproto.ImageTransport.Integral.$Properties)
+			$unknowns?: Uint8Array[]
+			transport?: (waproto.WAMediaTransport.$Properties|null)
+			static encode(m: waproto.ImageTransport.Integral.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.ImageTransport.Integral & waproto.ImageTransport.Integral.$Shape
+		}
+		namespace Integral {
+			interface $Properties {
+				transport?: (waproto.WAMediaTransport.$Properties|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.ImageTransport.Integral.$Properties
+		}
 	}
 	interface IInThreadSurveyMetadata extends waproto.InThreadSurveyMetadata.$Properties {
 	}
@@ -6601,29 +10325,46 @@ export namespace waproto {
 		constructor(p?: waproto.InteractiveAnnotation.$Properties)
 		$unknowns?: Uint8Array[]
 		polygonVertices: waproto.Point.$Properties[]
-		location?: (waproto.Location.$Properties|null)
-		newsletter?: (waproto.ContextInfo.ForwardedNewsletterMessageInfo.$Properties|null)
 		shouldSkipConfirmation?: (boolean|null)
 		embeddedContent?: (waproto.EmbeddedContent.$Properties|null)
+		statusLinkType?: (waproto.InteractiveAnnotation.StatusLinkType|null)
+		location?: (waproto.Location.$Properties|null)
+		newsletter?: (waproto.ContextInfo.ForwardedNewsletterMessageInfo.$Properties|null)
 		embeddedAction?: (boolean|null)
 		tapAction?: (waproto.TapLinkAction.$Properties|null)
-		statusLinkType?: (waproto.InteractiveAnnotation.StatusLinkType|null)
+		pixKey?: (waproto.StatusPixKey.$Properties|null)
+		action?: ("location"|"newsletter"|"embeddedAction"|"tapAction"|"pixKey")
 		static encode(m: waproto.InteractiveAnnotation.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.InteractiveAnnotation & waproto.InteractiveAnnotation.$Shape
 	}
 	namespace InteractiveAnnotation {
 		interface $Properties {
 			polygonVertices?: (waproto.Point.$Properties[]|null)
-			location?: (waproto.Location.$Properties|null)
-			newsletter?: (waproto.ContextInfo.ForwardedNewsletterMessageInfo.$Properties|null)
 			shouldSkipConfirmation?: (boolean|null)
 			embeddedContent?: (waproto.EmbeddedContent.$Properties|null)
+			statusLinkType?: (waproto.InteractiveAnnotation.StatusLinkType|null)
+			location?: (waproto.Location.$Properties|null)
+			newsletter?: (waproto.ContextInfo.ForwardedNewsletterMessageInfo.$Properties|null)
 			embeddedAction?: (boolean|null)
 			tapAction?: (waproto.TapLinkAction.$Properties|null)
-			statusLinkType?: (waproto.InteractiveAnnotation.StatusLinkType|null)
+			pixKey?: (waproto.StatusPixKey.$Properties|null)
+			action?: ("location"|"newsletter"|"embeddedAction"|"tapAction"|"pixKey")
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.InteractiveAnnotation.$Properties
+		type $Shape = {
+  polygonVertices?: waproto.Point.$Shape[]|null
+  shouldSkipConfirmation?: boolean|null
+  embeddedContent?: waproto.EmbeddedContent.$Shape|null
+  statusLinkType?: waproto.InteractiveAnnotation.StatusLinkType|null
+  location?: waproto.Location.$Shape|null
+  newsletter?: waproto.ContextInfo.ForwardedNewsletterMessageInfo.$Shape|null
+  embeddedAction?: boolean|null
+  tapAction?: waproto.TapLinkAction.$Shape|null
+  pixKey?: waproto.StatusPixKey.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ action?: undefined; location?: null; newsletter?: null; embeddedAction?: null; tapAction?: null; pixKey?: null }|{ action?: "location"; location: waproto.Location.$Shape; newsletter?: null; embeddedAction?: null; tapAction?: null; pixKey?: null }|{ action?: "newsletter"; location?: null; newsletter: waproto.ContextInfo.ForwardedNewsletterMessageInfo.$Shape; embeddedAction?: null; tapAction?: null; pixKey?: null }|{ action?: "embeddedAction"; location?: null; newsletter?: null; embeddedAction: boolean; tapAction?: null; pixKey?: null }|{ action?: "tapAction"; location?: null; newsletter?: null; embeddedAction?: null; tapAction: waproto.TapLinkAction.$Shape; pixKey?: null }|{ action?: "pixKey"; location?: null; newsletter?: null; embeddedAction?: null; tapAction?: null; pixKey: waproto.StatusPixKey.$Shape })
+)
 		enum StatusLinkType {
 			RASTERIZED_LINK_PREVIEW = 1,
 			RASTERIZED_LINK_TRUNCATED = 2,
@@ -6712,6 +10453,35 @@ export namespace waproto {
 		}
 		type $Shape = waproto.KeyId.$Properties
 	}
+	interface IKeyTransparencyCommand extends waproto.KeyTransparencyCommand.$Properties {
+	}
+	class KeyTransparencyCommand {
+		constructor(p?: waproto.KeyTransparencyCommand.$Properties)
+		$unknowns?: Uint8Array[]
+		verifyKtForUserSignal?: (waproto.VerifyKeyTransparencyForUserSignalCommand.$Properties|null)
+		verifyKtForUserMinos?: (waproto.VerifyKeyTransparencyForUserMinosCommand.$Properties|null)
+		verifyKtForUserMandrake?: (waproto.VerifyKeyTransparencyForUserMandrakeCommand.$Properties|null)
+		commandInput?: ("verifyKtForUserSignal"|"verifyKtForUserMinos"|"verifyKtForUserMandrake")
+		static encode(m: waproto.KeyTransparencyCommand.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.KeyTransparencyCommand & waproto.KeyTransparencyCommand.$Shape
+	}
+	namespace KeyTransparencyCommand {
+		interface $Properties {
+			verifyKtForUserSignal?: (waproto.VerifyKeyTransparencyForUserSignalCommand.$Properties|null)
+			verifyKtForUserMinos?: (waproto.VerifyKeyTransparencyForUserMinosCommand.$Properties|null)
+			verifyKtForUserMandrake?: (waproto.VerifyKeyTransparencyForUserMandrakeCommand.$Properties|null)
+			commandInput?: ("verifyKtForUserSignal"|"verifyKtForUserMinos"|"verifyKtForUserMandrake")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  verifyKtForUserSignal?: waproto.VerifyKeyTransparencyForUserSignalCommand.$Shape|null
+  verifyKtForUserMinos?: waproto.VerifyKeyTransparencyForUserMinosCommand.$Shape|null
+  verifyKtForUserMandrake?: waproto.VerifyKeyTransparencyForUserMandrakeCommand.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ commandInput?: undefined; verifyKtForUserSignal?: null; verifyKtForUserMinos?: null; verifyKtForUserMandrake?: null }|{ commandInput?: "verifyKtForUserSignal"; verifyKtForUserSignal: waproto.VerifyKeyTransparencyForUserSignalCommand.$Shape; verifyKtForUserMinos?: null; verifyKtForUserMandrake?: null }|{ commandInput?: "verifyKtForUserMinos"; verifyKtForUserSignal?: null; verifyKtForUserMinos: waproto.VerifyKeyTransparencyForUserMinosCommand.$Shape; verifyKtForUserMandrake?: null }|{ commandInput?: "verifyKtForUserMandrake"; verifyKtForUserSignal?: null; verifyKtForUserMinos?: null; verifyKtForUserMandrake: waproto.VerifyKeyTransparencyForUserMandrakeCommand.$Shape })
+)
+	}
 	interface ILIDMigrationMappingSyncMessage extends waproto.LIDMigrationMappingSyncMessage.$Properties {
 	}
 	class LIDMigrationMappingSyncMessage {
@@ -6737,6 +10507,18 @@ export namespace waproto {
 		encryptMessageInput?: (waproto.EncryptMessageInput.$Properties|null)
 		decryptMessageInput?: (waproto.DecryptMessageInput.$Properties|null)
 		orfThreadIdInput?: (waproto.OrfThreadIdInput.$Properties|null)
+		deriveMessageKeyInput?: (waproto.DeriveMessageKeyInput.$Properties|null)
+		rotateEpochInput?: (waproto.RotateEpochInput.$Properties|null)
+		deriveVirtualDeviceIdInput?: (waproto.DeriveVirtualDeviceIdInput.$Properties|null)
+		prepareAddDeviceInput?: (waproto.PrepareAddDeviceInput.$Properties|null)
+		computeClientSealTokenInput?: (waproto.ComputeClientSealTokenInput.$Properties|null)
+		openSealedThreadIdInput?: (waproto.OpenSealedThreadIdInput.$Properties|null)
+		deriveEpochsInput?: (waproto.DeriveEpochsInput.$Properties|null)
+		sealThreadIdInput?: (waproto.SealThreadIdInput.$Properties|null)
+		prepareAddPeerDeviceInput?: (waproto.PrepareAddPeerDeviceInput.$Properties|null)
+		companionTestMessageThreadIdInput?: (waproto.CompanionTestMessageThreadIdInput.$Properties|null)
+		parseCompanionTestMessageInput?: (waproto.ParseCompanionTestMessageInput.$Properties|null)
+		commandInput?: ("createBackupInput"|"encryptMessageInput"|"decryptMessageInput"|"orfThreadIdInput"|"deriveMessageKeyInput"|"rotateEpochInput"|"deriveVirtualDeviceIdInput"|"prepareAddDeviceInput"|"computeClientSealTokenInput"|"openSealedThreadIdInput"|"deriveEpochsInput"|"sealThreadIdInput"|"prepareAddPeerDeviceInput"|"companionTestMessageThreadIdInput"|"parseCompanionTestMessageInput")
 		static encode(m: waproto.LabyrinthWaCommand.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.LabyrinthWaCommand & waproto.LabyrinthWaCommand.$Shape
 	}
@@ -6746,9 +10528,58 @@ export namespace waproto {
 			encryptMessageInput?: (waproto.EncryptMessageInput.$Properties|null)
 			decryptMessageInput?: (waproto.DecryptMessageInput.$Properties|null)
 			orfThreadIdInput?: (waproto.OrfThreadIdInput.$Properties|null)
+			deriveMessageKeyInput?: (waproto.DeriveMessageKeyInput.$Properties|null)
+			rotateEpochInput?: (waproto.RotateEpochInput.$Properties|null)
+			deriveVirtualDeviceIdInput?: (waproto.DeriveVirtualDeviceIdInput.$Properties|null)
+			prepareAddDeviceInput?: (waproto.PrepareAddDeviceInput.$Properties|null)
+			computeClientSealTokenInput?: (waproto.ComputeClientSealTokenInput.$Properties|null)
+			openSealedThreadIdInput?: (waproto.OpenSealedThreadIdInput.$Properties|null)
+			deriveEpochsInput?: (waproto.DeriveEpochsInput.$Properties|null)
+			sealThreadIdInput?: (waproto.SealThreadIdInput.$Properties|null)
+			prepareAddPeerDeviceInput?: (waproto.PrepareAddPeerDeviceInput.$Properties|null)
+			companionTestMessageThreadIdInput?: (waproto.CompanionTestMessageThreadIdInput.$Properties|null)
+			parseCompanionTestMessageInput?: (waproto.ParseCompanionTestMessageInput.$Properties|null)
+			commandInput?: ("createBackupInput"|"encryptMessageInput"|"decryptMessageInput"|"orfThreadIdInput"|"deriveMessageKeyInput"|"rotateEpochInput"|"deriveVirtualDeviceIdInput"|"prepareAddDeviceInput"|"computeClientSealTokenInput"|"openSealedThreadIdInput"|"deriveEpochsInput"|"sealThreadIdInput"|"prepareAddPeerDeviceInput"|"companionTestMessageThreadIdInput"|"parseCompanionTestMessageInput")
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.LabyrinthWaCommand.$Properties
+		type $Shape = {
+  createBackupInput?: waproto.CreateBackupInput.$Shape|null
+  encryptMessageInput?: waproto.EncryptMessageInput.$Shape|null
+  decryptMessageInput?: waproto.DecryptMessageInput.$Shape|null
+  orfThreadIdInput?: waproto.OrfThreadIdInput.$Shape|null
+  deriveMessageKeyInput?: waproto.DeriveMessageKeyInput.$Shape|null
+  rotateEpochInput?: waproto.RotateEpochInput.$Shape|null
+  deriveVirtualDeviceIdInput?: waproto.DeriveVirtualDeviceIdInput.$Shape|null
+  prepareAddDeviceInput?: waproto.PrepareAddDeviceInput.$Shape|null
+  computeClientSealTokenInput?: waproto.ComputeClientSealTokenInput.$Shape|null
+  openSealedThreadIdInput?: waproto.OpenSealedThreadIdInput.$Shape|null
+  deriveEpochsInput?: waproto.DeriveEpochsInput.$Shape|null
+  sealThreadIdInput?: waproto.SealThreadIdInput.$Shape|null
+  prepareAddPeerDeviceInput?: waproto.PrepareAddPeerDeviceInput.$Shape|null
+  companionTestMessageThreadIdInput?: waproto.CompanionTestMessageThreadIdInput.$Shape|null
+  parseCompanionTestMessageInput?: waproto.ParseCompanionTestMessageInput.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ commandInput?: undefined; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "createBackupInput"; createBackupInput: waproto.CreateBackupInput.$Shape; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "encryptMessageInput"; createBackupInput?: null; encryptMessageInput: waproto.EncryptMessageInput.$Shape; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "decryptMessageInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput: waproto.DecryptMessageInput.$Shape; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "orfThreadIdInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput: waproto.OrfThreadIdInput.$Shape; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "deriveMessageKeyInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput: waproto.DeriveMessageKeyInput.$Shape; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "rotateEpochInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput: waproto.RotateEpochInput.$Shape; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "deriveVirtualDeviceIdInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput: waproto.DeriveVirtualDeviceIdInput.$Shape; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "prepareAddDeviceInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput: waproto.PrepareAddDeviceInput.$Shape; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "computeClientSealTokenInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput: waproto.ComputeClientSealTokenInput.$Shape; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "openSealedThreadIdInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput: waproto.OpenSealedThreadIdInput.$Shape; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "deriveEpochsInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput: waproto.DeriveEpochsInput.$Shape; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "sealThreadIdInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput: waproto.SealThreadIdInput.$Shape; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "prepareAddPeerDeviceInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput: waproto.PrepareAddPeerDeviceInput.$Shape; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput?: null }|{ commandInput?: "companionTestMessageThreadIdInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput: waproto.CompanionTestMessageThreadIdInput.$Shape; parseCompanionTestMessageInput?: null }|{ commandInput?: "parseCompanionTestMessageInput"; createBackupInput?: null; encryptMessageInput?: null; decryptMessageInput?: null; orfThreadIdInput?: null; deriveMessageKeyInput?: null; rotateEpochInput?: null; deriveVirtualDeviceIdInput?: null; prepareAddDeviceInput?: null; computeClientSealTokenInput?: null; openSealedThreadIdInput?: null; deriveEpochsInput?: null; sealThreadIdInput?: null; prepareAddPeerDeviceInput?: null; companionTestMessageThreadIdInput?: null; parseCompanionTestMessageInput: waproto.ParseCompanionTestMessageInput.$Shape })
+)
+	}
+	interface ILatestSenderTimestampsMsProto extends waproto.LatestSenderTimestampsMsProto.$Properties {
+	}
+	class LatestSenderTimestampsMsProto {
+		constructor(p?: waproto.LatestSenderTimestampsMsProto.$Properties)
+		$unknowns?: Uint8Array[]
+		author?: (string|null)
+		latestSenderTimestampMs?: (number|Long|null)
+		static encode(m: waproto.LatestSenderTimestampsMsProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.LatestSenderTimestampsMsProto & waproto.LatestSenderTimestampsMsProto.$Shape
+	}
+	namespace LatestSenderTimestampsMsProto {
+		interface $Properties {
+			author?: (string|null)
+			latestSenderTimestampMs?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.LatestSenderTimestampsMsProto.$Properties
 	}
 	interface ILegacyMessage extends waproto.LegacyMessage.$Properties {
 	}
@@ -6816,6 +10647,47 @@ export namespace waproto {
 		}
 		type $Shape = waproto.LocalizedName.$Properties
 	}
+	interface ILocallyTransformedMessage extends waproto.LocallyTransformedMessage.$Properties {
+	}
+	class LocallyTransformedMessage {
+		constructor(p?: waproto.LocallyTransformedMessage.$Properties)
+		$unknowns?: Uint8Array[]
+		pollUpdateMessage?: (waproto.LocallyTransformedMessage.PollUpdateAdminMessage.$Properties|null)
+		content?: "pollUpdateMessage"
+		static encode(m: waproto.LocallyTransformedMessage.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.LocallyTransformedMessage & waproto.LocallyTransformedMessage.$Shape
+	}
+	namespace LocallyTransformedMessage {
+		interface $Properties {
+			pollUpdateMessage?: (waproto.LocallyTransformedMessage.PollUpdateAdminMessage.$Properties|null)
+			content?: "pollUpdateMessage"
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  pollUpdateMessage?: waproto.LocallyTransformedMessage.PollUpdateAdminMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ content?: undefined; pollUpdateMessage?: null }|{ content?: "pollUpdateMessage"; pollUpdateMessage: waproto.LocallyTransformedMessage.PollUpdateAdminMessage.$Shape })
+)
+		interface IPollUpdateAdminMessage extends waproto.LocallyTransformedMessage.PollUpdateAdminMessage.$Properties {
+		}
+		class PollUpdateAdminMessage {
+			constructor(p?: waproto.LocallyTransformedMessage.PollUpdateAdminMessage.$Properties)
+			$unknowns?: Uint8Array[]
+			pollCreationMessageId?: (string|null)
+			pollUpdateMessageId?: (string|null)
+			static encode(m: waproto.LocallyTransformedMessage.PollUpdateAdminMessage.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.LocallyTransformedMessage.PollUpdateAdminMessage & waproto.LocallyTransformedMessage.PollUpdateAdminMessage.$Shape
+		}
+		namespace PollUpdateAdminMessage {
+			interface $Properties {
+				pollCreationMessageId?: (string|null)
+				pollUpdateMessageId?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.LocallyTransformedMessage.PollUpdateAdminMessage.$Properties
+		}
+	}
 	interface ILocation extends waproto.Location.$Properties {
 	}
 	class Location {
@@ -6835,6 +10707,30 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.Location.$Properties
+	}
+	interface IMediaBackupSchemaProto extends waproto.MediaBackupSchemaProto.$Properties {
+	}
+	class MediaBackupSchemaProto {
+		constructor(p?: waproto.MediaBackupSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		mediaBackupId?: (number|null)
+		mediaId?: (number|null)
+		objectId?: (string|null)
+		msgId?: (string|null)
+		fbid?: (string|null)
+		static encode(m: waproto.MediaBackupSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MediaBackupSchemaProto & waproto.MediaBackupSchemaProto.$Shape
+	}
+	namespace MediaBackupSchemaProto {
+		interface $Properties {
+			mediaBackupId?: (number|null)
+			mediaId?: (number|null)
+			objectId?: (string|null)
+			msgId?: (string|null)
+			fbid?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MediaBackupSchemaProto.$Properties
 	}
 	interface IMediaData extends waproto.MediaData.$Properties {
 	}
@@ -6869,6 +10765,24 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.MediaDomainInfo.$Properties
+	}
+	interface IMediaEntriesProto extends waproto.MediaEntriesProto.$Properties {
+	}
+	class MediaEntriesProto {
+		constructor(p?: waproto.MediaEntriesProto.$Properties)
+		$unknowns?: Uint8Array[]
+		msgId?: (string|null)
+		mediaEntryData?: (Uint8Array|null)
+		static encode(m: waproto.MediaEntriesProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MediaEntriesProto & waproto.MediaEntriesProto.$Shape
+	}
+	namespace MediaEntriesProto {
+		interface $Properties {
+			msgId?: (string|null)
+			mediaEntryData?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MediaEntriesProto.$Properties
 	}
 	interface IMediaEntry extends waproto.MediaEntry.$Properties {
 	}
@@ -7010,6 +10924,54 @@ export namespace waproto {
 			DECRYPTION_ERROR = 3
 		}
 	}
+	interface IMediaTableSchemaProto extends waproto.MediaTableSchemaProto.$Properties {
+	}
+	class MediaTableSchemaProto {
+		constructor(p?: waproto.MediaTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		mediaType?: (string|null)
+		plaintextHash?: (string|null)
+		size?: (number|Long|null)
+		mediaEntries: waproto.MediaEntriesProto.$Properties[]
+		ts?: (number|Long|null)
+		validatedVideoInfo?: (waproto.VideoMsgContentProto.$Properties|null)
+		validatedImageInfo?: (waproto.ImageMsgContentProto.$Properties|null)
+		validatedAudioInfo?: (waproto.AudioMsgContentProto.$Properties|null)
+		hashedPlaintextHash?: (string|null)
+		mediaId?: (number|null)
+		msgIds: string[]
+		objectId?: (string|null)
+		fbid?: (string|null)
+		validatedDocumentFileInfo?: (waproto.DocumentFileMsgContentProto.$Properties|null)
+		validatedResult?: (waproto.ValidatedResult.$Properties|null)
+		accessibilitySummaryText?: (string|null)
+		isVideoGif?: (boolean|null)
+		static encode(m: waproto.MediaTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MediaTableSchemaProto & waproto.MediaTableSchemaProto.$Shape
+	}
+	namespace MediaTableSchemaProto {
+		interface $Properties {
+			mediaType?: (string|null)
+			plaintextHash?: (string|null)
+			size?: (number|Long|null)
+			mediaEntries?: (waproto.MediaEntriesProto.$Properties[]|null)
+			ts?: (number|Long|null)
+			validatedVideoInfo?: (waproto.VideoMsgContentProto.$Properties|null)
+			validatedImageInfo?: (waproto.ImageMsgContentProto.$Properties|null)
+			validatedAudioInfo?: (waproto.AudioMsgContentProto.$Properties|null)
+			hashedPlaintextHash?: (string|null)
+			mediaId?: (number|null)
+			msgIds?: (string[]|null)
+			objectId?: (string|null)
+			fbid?: (string|null)
+			validatedDocumentFileInfo?: (waproto.DocumentFileMsgContentProto.$Properties|null)
+			validatedResult?: (waproto.ValidatedResult.$Properties|null)
+			accessibilitySummaryText?: (string|null)
+			isVideoGif?: (boolean|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MediaTableSchemaProto.$Properties
+	}
 	interface IMemberLabel extends waproto.MemberLabel.$Properties {
 	}
 	class MemberLabel {
@@ -7017,6 +10979,7 @@ export namespace waproto {
 		$unknowns?: Uint8Array[]
 		label?: (string|null)
 		labelTimestamp?: (number|Long|null)
+		showAdminBadge?: (boolean|null)
 		static encode(m: waproto.MemberLabel.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MemberLabel & waproto.MemberLabel.$Shape
 	}
@@ -7024,9 +10987,48 @@ export namespace waproto {
 		interface $Properties {
 			label?: (string|null)
 			labelTimestamp?: (number|Long|null)
+			showAdminBadge?: (boolean|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.MemberLabel.$Properties
+	}
+	interface IMembershipFormKeyFingerprintVerification extends waproto.MembershipFormKeyFingerprintVerification.$Properties {
+	}
+	class MembershipFormKeyFingerprintVerification {
+		constructor(p?: waproto.MembershipFormKeyFingerprintVerification.$Properties)
+		$unknowns?: Uint8Array[]
+		requestId?: (string|null)
+		keyId?: (string|null)
+		keyFingerprint?: (Uint8Array|null)
+		static encode(m: waproto.MembershipFormKeyFingerprintVerification.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MembershipFormKeyFingerprintVerification & waproto.MembershipFormKeyFingerprintVerification.$Shape
+	}
+	namespace MembershipFormKeyFingerprintVerification {
+		interface $Properties {
+			requestId?: (string|null)
+			keyId?: (string|null)
+			keyFingerprint?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MembershipFormKeyFingerprintVerification.$Properties
+	}
+	interface IMembershipFormPublicKeys extends waproto.MembershipFormPublicKeys.$Properties {
+	}
+	class MembershipFormPublicKeys {
+		constructor(p?: waproto.MembershipFormPublicKeys.$Properties)
+		$unknowns?: Uint8Array[]
+		mlKemPublicKey?: (Uint8Array|null)
+		x25519PublicKey?: (Uint8Array|null)
+		static encode(m: waproto.MembershipFormPublicKeys.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MembershipFormPublicKeys & waproto.MembershipFormPublicKeys.$Shape
+	}
+	namespace MembershipFormPublicKeys {
+		interface $Properties {
+			mlKemPublicKey?: (Uint8Array|null)
+			x25519PublicKey?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MembershipFormPublicKeys.$Properties
 	}
 	interface IMention extends waproto.Mention.$Properties {
 	}
@@ -7151,7 +11153,6 @@ export namespace waproto {
 		newsletterFollowerInviteMessageV2?: (waproto.Message.NewsletterFollowerInviteMessage.$Properties|null)
 		pollResultSnapshotMessageV3?: (waproto.Message.PollResultSnapshotMessage.$Properties|null)
 		newsletterAdminProfileMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
-		newsletterAdminProfileMessageV2?: (waproto.Message.FutureProofMessage.$Properties|null)
 		spoilerMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
 		pollCreationMessageV6?: (waproto.Message.PollCreationMessage.$Properties|null)
 		conditionalRevealMessage?: (waproto.Message.ConditionalRevealMessage.$Properties|null)
@@ -7163,6 +11164,19 @@ export namespace waproto {
 		newsletterAdminProfileStatusMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
 		rootSecretDistributeMessage?: (waproto.Message.RootSecretDistributeMessage.$Properties|null)
 		splitPaymentUpdateMessage?: (waproto.Message.SplitPaymentUpdateMessage.$Properties|null)
+		musicMessage?: (waproto.Message.MusicMessage.$Properties|null)
+		statusLinkPreviewMetadata?: (waproto.Message.StatusLinkPreviewMetadata.$Properties|null)
+		botPlatformRegistrationSuccessMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
+		newsletterScheduledMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
+		acp2SettingMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
+		audioStickerMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
+		instantImageMessage?: (waproto.Message.ImageMessage.$Properties|null)
+		requestLocationMessage?: (waproto.Message.RequestLocationMessage.$Properties|null)
+		botGroupParticipantMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
+		requestLocationUpdateMessage?: (waproto.Message.RequestLocationUpdateMessage.$Properties|null)
+		vpcRequestMessage?: (waproto.Message.VpcRequestMessage.$Properties|null)
+		instantVideoMessage?: (waproto.Message.VideoMessage.$Properties|null)
+		paymentDetailsMessage?: (waproto.Message.PaymentDetailsMessage.$Properties|null)
 		static encode(m: waproto.Message.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message & waproto.Message.$Shape
 	}
@@ -7264,7 +11278,6 @@ export namespace waproto {
 			newsletterFollowerInviteMessageV2?: (waproto.Message.NewsletterFollowerInviteMessage.$Properties|null)
 			pollResultSnapshotMessageV3?: (waproto.Message.PollResultSnapshotMessage.$Properties|null)
 			newsletterAdminProfileMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
-			newsletterAdminProfileMessageV2?: (waproto.Message.FutureProofMessage.$Properties|null)
 			spoilerMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
 			pollCreationMessageV6?: (waproto.Message.PollCreationMessage.$Properties|null)
 			conditionalRevealMessage?: (waproto.Message.ConditionalRevealMessage.$Properties|null)
@@ -7276,9 +11289,144 @@ export namespace waproto {
 			newsletterAdminProfileStatusMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
 			rootSecretDistributeMessage?: (waproto.Message.RootSecretDistributeMessage.$Properties|null)
 			splitPaymentUpdateMessage?: (waproto.Message.SplitPaymentUpdateMessage.$Properties|null)
+			musicMessage?: (waproto.Message.MusicMessage.$Properties|null)
+			statusLinkPreviewMetadata?: (waproto.Message.StatusLinkPreviewMetadata.$Properties|null)
+			botPlatformRegistrationSuccessMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
+			newsletterScheduledMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
+			acp2SettingMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
+			audioStickerMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
+			instantImageMessage?: (waproto.Message.ImageMessage.$Properties|null)
+			requestLocationMessage?: (waproto.Message.RequestLocationMessage.$Properties|null)
+			botGroupParticipantMessage?: (waproto.Message.FutureProofMessage.$Properties|null)
+			requestLocationUpdateMessage?: (waproto.Message.RequestLocationUpdateMessage.$Properties|null)
+			vpcRequestMessage?: (waproto.Message.VpcRequestMessage.$Properties|null)
+			instantVideoMessage?: (waproto.Message.VideoMessage.$Properties|null)
+			paymentDetailsMessage?: (waproto.Message.PaymentDetailsMessage.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.Message.$Properties
+		type $Shape = {
+  conversation?: string|null
+  senderKeyDistributionMessage?: waproto.Message.SenderKeyDistributionMessage.$Shape|null
+  imageMessage?: waproto.Message.ImageMessage.$Shape|null
+  contactMessage?: waproto.Message.ContactMessage.$Shape|null
+  locationMessage?: waproto.Message.LocationMessage.$Shape|null
+  extendedTextMessage?: waproto.Message.ExtendedTextMessage.$Shape|null
+  documentMessage?: waproto.Message.DocumentMessage.$Shape|null
+  audioMessage?: waproto.Message.AudioMessage.$Shape|null
+  videoMessage?: waproto.Message.VideoMessage.$Shape|null
+  call?: waproto.Message.Call.$Shape|null
+  chat?: waproto.Message.Chat.$Shape|null
+  protocolMessage?: waproto.Message.ProtocolMessage.$Shape|null
+  contactsArrayMessage?: waproto.Message.ContactsArrayMessage.$Shape|null
+  highlyStructuredMessage?: waproto.Message.HighlyStructuredMessage.$Shape|null
+  fastRatchetKeySenderKeyDistributionMessage?: waproto.Message.SenderKeyDistributionMessage.$Shape|null
+  sendPaymentMessage?: waproto.Message.SendPaymentMessage.$Shape|null
+  liveLocationMessage?: waproto.Message.LiveLocationMessage.$Shape|null
+  requestPaymentMessage?: waproto.Message.RequestPaymentMessage.$Shape|null
+  declinePaymentRequestMessage?: waproto.Message.DeclinePaymentRequestMessage.$Shape|null
+  cancelPaymentRequestMessage?: waproto.Message.CancelPaymentRequestMessage.$Shape|null
+  templateMessage?: waproto.Message.TemplateMessage.$Shape|null
+  stickerMessage?: waproto.Message.StickerMessage.$Shape|null
+  groupInviteMessage?: waproto.Message.GroupInviteMessage.$Shape|null
+  templateButtonReplyMessage?: waproto.Message.TemplateButtonReplyMessage.$Shape|null
+  productMessage?: waproto.Message.ProductMessage.$Shape|null
+  deviceSentMessage?: waproto.Message.DeviceSentMessage.$Shape|null
+  messageContextInfo?: waproto.MessageContextInfo.$Shape|null
+  listMessage?: waproto.Message.ListMessage.$Shape|null
+  viewOnceMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  orderMessage?: waproto.Message.OrderMessage.$Shape|null
+  listResponseMessage?: waproto.Message.ListResponseMessage.$Shape|null
+  ephemeralMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  invoiceMessage?: waproto.Message.InvoiceMessage.$Shape|null
+  buttonsMessage?: waproto.Message.ButtonsMessage.$Shape|null
+  buttonsResponseMessage?: waproto.Message.ButtonsResponseMessage.$Shape|null
+  paymentInviteMessage?: waproto.Message.PaymentInviteMessage.$Shape|null
+  interactiveMessage?: waproto.Message.InteractiveMessage.$Shape|null
+  reactionMessage?: waproto.Message.ReactionMessage.$Shape|null
+  stickerSyncRmrMessage?: waproto.Message.StickerSyncRMRMessage.$Shape|null
+  interactiveResponseMessage?: waproto.Message.InteractiveResponseMessage.$Shape|null
+  pollCreationMessage?: waproto.Message.PollCreationMessage.$Shape|null
+  pollUpdateMessage?: waproto.Message.PollUpdateMessage.$Shape|null
+  keepInChatMessage?: waproto.Message.KeepInChatMessage.$Shape|null
+  documentWithCaptionMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  requestPhoneNumberMessage?: waproto.Message.RequestPhoneNumberMessage.$Shape|null
+  viewOnceMessageV2?: waproto.Message.FutureProofMessage.$Shape|null
+  encReactionMessage?: waproto.Message.EncReactionMessage.$Shape|null
+  editedMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  viewOnceMessageV2Extension?: waproto.Message.FutureProofMessage.$Shape|null
+  pollCreationMessageV2?: waproto.Message.PollCreationMessage.$Shape|null
+  scheduledCallCreationMessage?: waproto.Message.ScheduledCallCreationMessage.$Shape|null
+  groupMentionedMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  pinInChatMessage?: waproto.Message.PinInChatMessage.$Shape|null
+  pollCreationMessageV3?: waproto.Message.PollCreationMessage.$Shape|null
+  scheduledCallEditMessage?: waproto.Message.ScheduledCallEditMessage.$Shape|null
+  ptvMessage?: waproto.Message.VideoMessage.$Shape|null
+  botInvokeMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  callLogMesssage?: waproto.Message.CallLogMessage.$Shape|null
+  messageHistoryBundle?: waproto.Message.MessageHistoryBundle.$Shape|null
+  encCommentMessage?: waproto.Message.EncCommentMessage.$Shape|null
+  bcallMessage?: waproto.Message.BCallMessage.$Shape|null
+  lottieStickerMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  eventMessage?: waproto.Message.EventMessage.$Shape|null
+  encEventResponseMessage?: waproto.Message.EncEventResponseMessage.$Shape|null
+  commentMessage?: waproto.Message.CommentMessage.$Shape|null
+  newsletterAdminInviteMessage?: waproto.Message.NewsletterAdminInviteMessage.$Shape|null
+  placeholderMessage?: waproto.Message.PlaceholderMessage.$Shape|null
+  secretEncryptedMessage?: waproto.Message.SecretEncryptedMessage.$Shape|null
+  albumMessage?: waproto.Message.AlbumMessage.$Shape|null
+  eventCoverImage?: waproto.Message.FutureProofMessage.$Shape|null
+  stickerPackMessage?: waproto.Message.StickerPackMessage.$Shape|null
+  statusMentionMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  pollResultSnapshotMessage?: waproto.Message.PollResultSnapshotMessage.$Shape|null
+  pollCreationOptionImageMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  associatedChildMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  groupStatusMentionMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  pollCreationMessageV4?: waproto.Message.FutureProofMessage.$Shape|null
+  statusAddYours?: waproto.Message.FutureProofMessage.$Shape|null
+  groupStatusMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  richResponseMessage?: waproto.AIRichResponseMessage.$Shape|null
+  statusNotificationMessage?: waproto.Message.StatusNotificationMessage.$Shape|null
+  limitSharingMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  botTaskMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  questionMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  messageHistoryNotice?: waproto.Message.MessageHistoryNotice.$Shape|null
+  groupStatusMessageV2?: waproto.Message.FutureProofMessage.$Shape|null
+  botForwardedMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  statusQuestionAnswerMessage?: waproto.Message.StatusQuestionAnswerMessage.$Shape|null
+  questionReplyMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  questionResponseMessage?: waproto.Message.QuestionResponseMessage.$Shape|null
+  statusQuotedMessage?: waproto.Message.StatusQuotedMessage.$Shape|null
+  statusStickerInteractionMessage?: waproto.Message.StatusStickerInteractionMessage.$Shape|null
+  pollCreationMessageV5?: waproto.Message.PollCreationMessage.$Shape|null
+  newsletterFollowerInviteMessageV2?: waproto.Message.NewsletterFollowerInviteMessage.$Shape|null
+  pollResultSnapshotMessageV3?: waproto.Message.PollResultSnapshotMessage.$Shape|null
+  newsletterAdminProfileMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  spoilerMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  pollCreationMessageV6?: waproto.Message.PollCreationMessage.$Shape|null
+  conditionalRevealMessage?: waproto.Message.ConditionalRevealMessage.$Shape|null
+  pollAddOptionMessage?: waproto.Message.PollAddOptionMessage.$Shape|null
+  eventInviteMessage?: waproto.Message.EventInviteMessage.$Shape|null
+  groupRootKeyShare?: waproto.GroupRootKeyShare.$Shape|null
+  paymentReminderMessage?: waproto.Message.PaymentReminderMessage.$Shape|null
+  splitPaymentMessage?: waproto.Message.SplitPaymentMessage.$Shape|null
+  newsletterAdminProfileStatusMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  rootSecretDistributeMessage?: waproto.Message.RootSecretDistributeMessage.$Shape|null
+  splitPaymentUpdateMessage?: waproto.Message.SplitPaymentUpdateMessage.$Shape|null
+  musicMessage?: waproto.Message.MusicMessage.$Shape|null
+  statusLinkPreviewMetadata?: waproto.Message.StatusLinkPreviewMetadata.$Shape|null
+  botPlatformRegistrationSuccessMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  newsletterScheduledMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  acp2SettingMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  audioStickerMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  instantImageMessage?: waproto.Message.ImageMessage.$Shape|null
+  requestLocationMessage?: waproto.Message.RequestLocationMessage.$Shape|null
+  botGroupParticipantMessage?: waproto.Message.FutureProofMessage.$Shape|null
+  requestLocationUpdateMessage?: waproto.Message.RequestLocationUpdateMessage.$Shape|null
+  vpcRequestMessage?: waproto.Message.VpcRequestMessage.$Shape|null
+  instantVideoMessage?: waproto.Message.VideoMessage.$Shape|null
+  paymentDetailsMessage?: waproto.Message.PaymentDetailsMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		enum PollType {
 			POLL = 0,
 			QUIZ = 1
@@ -7309,7 +11457,9 @@ export namespace waproto {
 			HISTORY_SYNC_CHUNK_RETRY = 10,
 			GALAXY_FLOW_ACTION = 11,
 			BUSINESS_BROADCAST_INSIGHTS_DELIVERED_TO = 12,
-			BUSINESS_BROADCAST_INSIGHTS_REFRESH = 13
+			BUSINESS_BROADCAST_INSIGHTS_REFRESH = 13,
+			CONTACT_REFRESH_REQUEST = 14,
+			RECENT_CONVERSATIONS_ON_DEMAND_REQUEST = 15
 		}
 		enum HistorySyncType {
 			INITIAL_BOOTSTRAP = 0,
@@ -7320,7 +11470,30 @@ export namespace waproto {
 			NON_BLOCKING_DATA = 5,
 			ON_DEMAND = 6,
 			NO_HISTORY = 7,
-			MESSAGE_ACCESS_STATUS = 8
+			MESSAGE_ACCESS_STATUS = 8,
+			RECENT_CONVERSATIONS_ON_DEMAND = 9
+		}
+		interface IStatusLinkPreviewMetadata extends waproto.Message.StatusLinkPreviewMetadata.$Properties {
+		}
+		class StatusLinkPreviewMetadata {
+			constructor(p?: waproto.Message.StatusLinkPreviewMetadata.$Properties)
+			$unknowns?: Uint8Array[]
+			style?: (waproto.Message.StatusLinkPreviewMetadata.Style|null)
+			static encode(m: waproto.Message.StatusLinkPreviewMetadata.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.StatusLinkPreviewMetadata & waproto.Message.StatusLinkPreviewMetadata.$Shape
+		}
+		namespace StatusLinkPreviewMetadata {
+			interface $Properties {
+				style?: (waproto.Message.StatusLinkPreviewMetadata.Style|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.Message.StatusLinkPreviewMetadata.$Properties
+			enum Style {
+				AUTO = 0,
+				COMPACT = 1,
+				FULL = 2,
+				IMMERSIVE = 3
+			}
 		}
 		interface IStickerPackMessage extends waproto.Message.StickerPackMessage.$Properties {
 		}
@@ -7378,7 +11551,31 @@ export namespace waproto {
 				stickerPackOrigin?: (waproto.Message.StickerPackMessage.StickerPackOrigin|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.StickerPackMessage.$Properties
+			type $Shape = {
+  stickerPackId?: string|null
+  name?: string|null
+  publisher?: string|null
+  stickers?: waproto.Message.StickerPackMessage.Sticker.$Shape[]|null
+  fileLength?: number|Long|null
+  fileSha256?: Uint8Array|null
+  fileEncSha256?: Uint8Array|null
+  mediaKey?: Uint8Array|null
+  directPath?: string|null
+  caption?: string|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  packDescription?: string|null
+  mediaKeyTimestamp?: number|Long|null
+  trayIconFileName?: string|null
+  thumbnailDirectPath?: string|null
+  thumbnailSha256?: Uint8Array|null
+  thumbnailEncSha256?: Uint8Array|null
+  thumbnailHeight?: number|null
+  thumbnailWidth?: number|null
+  imageDataHash?: string|null
+  stickerPackSize?: number|Long|null
+  stickerPackOrigin?: waproto.Message.StickerPackMessage.StickerPackOrigin|null
+  $unknowns?: Uint8Array[]
+}
 			enum StickerPackOrigin {
 				FIRST_PARTY = 0,
 				THIRD_PARTY = 1,
@@ -7431,7 +11628,12 @@ export namespace waproto {
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.AlbumMessage.$Properties
+			type $Shape = {
+  expectedImageCount?: number|null
+  expectedVideoCount?: number|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IPlaceholderMessage extends waproto.Message.PlaceholderMessage.$Properties {
 		}
@@ -7489,6 +11691,7 @@ export namespace waproto {
 			messageCount?: (number|Long|null)
 			nonHistoryReceivers: string[]
 			oldestMessageTimestampInBundle?: (number|Long|null)
+			includesChatTheme?: (boolean|null)
 			static encode(m: waproto.Message.MessageHistoryMetadata.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.MessageHistoryMetadata & waproto.Message.MessageHistoryMetadata.$Shape
 		}
@@ -7499,6 +11702,7 @@ export namespace waproto {
 				messageCount?: (number|Long|null)
 				nonHistoryReceivers?: (string[]|null)
 				oldestMessageTimestampInBundle?: (number|Long|null)
+				includesChatTheme?: (boolean|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.Message.MessageHistoryMetadata.$Properties
@@ -7559,7 +11763,12 @@ export namespace waproto {
 				botHistoryShareSyncMetadata?: (waproto.Message.BotHistoryShareSyncMetadata.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.MessageHistoryNotice.$Properties
+			type $Shape = {
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  messageHistoryMetadata?: waproto.Message.MessageHistoryMetadata.$Shape|null
+  botHistoryShareSyncMetadata?: waproto.Message.BotHistoryShareSyncMetadata.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IMessageHistoryBundle extends waproto.Message.MessageHistoryBundle.$Properties {
 		}
@@ -7589,7 +11798,17 @@ export namespace waproto {
 				messageHistoryMetadata?: (waproto.Message.MessageHistoryMetadata.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.MessageHistoryBundle.$Properties
+			type $Shape = {
+  mimetype?: string|null
+  fileSha256?: Uint8Array|null
+  mediaKey?: Uint8Array|null
+  fileEncSha256?: Uint8Array|null
+  directPath?: string|null
+  mediaKeyTimestamp?: number|Long|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  messageHistoryMetadata?: waproto.Message.MessageHistoryMetadata.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface ICallLogMessage extends waproto.Message.CallLogMessage.$Properties {
 		}
@@ -7777,7 +11996,21 @@ export namespace waproto {
 				reminderOffsetSec?: (number|Long|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.EventMessage.$Properties
+			type $Shape = {
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  isCanceled?: boolean|null
+  name?: string|null
+  description?: string|null
+  location?: waproto.Message.LocationMessage.$Shape|null
+  joinLink?: string|null
+  startTime?: number|Long|null
+  endTime?: number|Long|null
+  extraGuestsAllowed?: boolean|null
+  isScheduleCall?: boolean|null
+  hasReminder?: boolean|null
+  reminderOffsetSec?: number|Long|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface ICommentMessage extends waproto.Message.CommentMessage.$Properties {
 		}
@@ -7795,7 +12028,11 @@ export namespace waproto {
 				targetMessageKey?: (waproto.MessageKey.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.CommentMessage.$Properties
+			type $Shape = {
+  message?: waproto.Message.$Shape|null
+  targetMessageKey?: waproto.MessageKey.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IEncCommentMessage extends waproto.Message.EncCommentMessage.$Properties {
 		}
@@ -7962,7 +12199,13 @@ export namespace waproto {
 				pollType?: (waproto.Message.PollType|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.PollResultSnapshotMessage.$Properties
+			type $Shape = {
+  name?: string|null
+  pollVotes?: waproto.Message.PollResultSnapshotMessage.PollVote.$Shape[]|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  pollType?: waproto.Message.PollType|null
+  $unknowns?: Uint8Array[]
+}
 			interface IPollVote extends waproto.Message.PollResultSnapshotMessage.PollVote.$Properties {
 			}
 			class PollVote {
@@ -8110,7 +12353,20 @@ export namespace waproto {
 				allowAddOption?: (boolean|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.PollCreationMessage.$Properties
+			type $Shape = {
+  encKey?: Uint8Array|null
+  name?: string|null
+  options?: waproto.Message.PollCreationMessage.Option.$Shape[]|null
+  selectableOptionsCount?: number|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  pollContentType?: waproto.Message.PollContentType|null
+  pollType?: waproto.Message.PollType|null
+  correctAnswer?: waproto.Message.PollCreationMessage.Option.$Shape|null
+  endTime?: number|Long|null
+  hideParticipantName?: boolean|null
+  allowAddOption?: boolean|null
+  $unknowns?: Uint8Array[]
+}
 			interface IOption extends waproto.Message.PollCreationMessage.Option.$Properties {
 			}
 			class Option {
@@ -8178,21 +12434,31 @@ export namespace waproto {
 			constructor(p?: waproto.Message.ButtonsResponseMessage.$Properties)
 			$unknowns?: Uint8Array[]
 			selectedButtonId?: (string|null)
-			selectedDisplayText?: (string|null)
 			contextInfo?: (waproto.ContextInfo.$Properties|null)
 			type?: (waproto.Message.ButtonsResponseMessage.Type|null)
+			selectedDisplayText?: (string|null)
+			response?: "selectedDisplayText"
 			static encode(m: waproto.Message.ButtonsResponseMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ButtonsResponseMessage & waproto.Message.ButtonsResponseMessage.$Shape
 		}
 		namespace ButtonsResponseMessage {
 			interface $Properties {
 				selectedButtonId?: (string|null)
-				selectedDisplayText?: (string|null)
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				type?: (waproto.Message.ButtonsResponseMessage.Type|null)
+				selectedDisplayText?: (string|null)
+				response?: "selectedDisplayText"
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.ButtonsResponseMessage.$Properties
+			type $Shape = {
+  selectedButtonId?: string|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  type?: waproto.Message.ButtonsResponseMessage.Type|null
+  selectedDisplayText?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ response?: undefined; selectedDisplayText?: null }|{ response?: "selectedDisplayText"; selectedDisplayText: string })
+)
 			enum Type {
 				UNKNOWN = 0,
 				DISPLAY_TEXT = 1
@@ -8203,34 +12469,50 @@ export namespace waproto {
 		class ButtonsMessage {
 			constructor(p?: waproto.Message.ButtonsMessage.$Properties)
 			$unknowns?: Uint8Array[]
-			text?: (string|null)
-			documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
-			imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
-			videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
-			locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
 			contentText?: (string|null)
 			footerText?: (string|null)
 			contextInfo?: (waproto.ContextInfo.$Properties|null)
 			buttons: waproto.Message.ButtonsMessage.Button.$Properties[]
 			headerType?: (waproto.Message.ButtonsMessage.HeaderType|null)
+			text?: (string|null)
+			documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
+			imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
+			videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
+			locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
+			header?: ("text"|"documentMessage"|"imageMessage"|"videoMessage"|"locationMessage")
 			static encode(m: waproto.Message.ButtonsMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ButtonsMessage & waproto.Message.ButtonsMessage.$Shape
 		}
 		namespace ButtonsMessage {
 			interface $Properties {
-				text?: (string|null)
-				documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
-				imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
-				videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
-				locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
 				contentText?: (string|null)
 				footerText?: (string|null)
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				buttons?: (waproto.Message.ButtonsMessage.Button.$Properties[]|null)
 				headerType?: (waproto.Message.ButtonsMessage.HeaderType|null)
+				text?: (string|null)
+				documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
+				imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
+				videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
+				locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
+				header?: ("text"|"documentMessage"|"imageMessage"|"videoMessage"|"locationMessage")
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.ButtonsMessage.$Properties
+			type $Shape = {
+  contentText?: string|null
+  footerText?: string|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  buttons?: waproto.Message.ButtonsMessage.Button.$Shape[]|null
+  headerType?: waproto.Message.ButtonsMessage.HeaderType|null
+  text?: string|null
+  documentMessage?: waproto.Message.DocumentMessage.$Shape|null
+  imageMessage?: waproto.Message.ImageMessage.$Shape|null
+  videoMessage?: waproto.Message.VideoMessage.$Shape|null
+  locationMessage?: waproto.Message.LocationMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ header?: undefined; text?: null; documentMessage?: null; imageMessage?: null; videoMessage?: null; locationMessage?: null }|{ header?: "text"; text: string; documentMessage?: null; imageMessage?: null; videoMessage?: null; locationMessage?: null }|{ header?: "documentMessage"; text?: null; documentMessage: waproto.Message.DocumentMessage.$Shape; imageMessage?: null; videoMessage?: null; locationMessage?: null }|{ header?: "imageMessage"; text?: null; documentMessage?: null; imageMessage: waproto.Message.ImageMessage.$Shape; videoMessage?: null; locationMessage?: null }|{ header?: "videoMessage"; text?: null; documentMessage?: null; imageMessage?: null; videoMessage: waproto.Message.VideoMessage.$Shape; locationMessage?: null }|{ header?: "locationMessage"; text?: null; documentMessage?: null; imageMessage?: null; videoMessage?: null; locationMessage: waproto.Message.LocationMessage.$Shape })
+)
 			enum HeaderType {
 				UNKNOWN = 0,
 				EMPTY = 1,
@@ -8374,7 +12656,10 @@ export namespace waproto {
 				message?: (waproto.Message.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.FutureProofMessage.$Properties
+			type $Shape = {
+  message?: waproto.Message.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IDeviceSentMessage extends waproto.Message.DeviceSentMessage.$Properties {
 		}
@@ -8394,7 +12679,83 @@ export namespace waproto {
 				phash?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.DeviceSentMessage.$Properties
+			type $Shape = {
+  destinationJid?: string|null
+  message?: waproto.Message.$Shape|null
+  phash?: string|null
+  $unknowns?: Uint8Array[]
+}
+		}
+		interface IVpcRequestMessage extends waproto.Message.VpcRequestMessage.$Properties {
+		}
+		class VpcRequestMessage {
+			constructor(p?: waproto.Message.VpcRequestMessage.$Properties)
+			$unknowns?: Uint8Array[]
+			payloadSchemaVersion?: (number|null)
+			requestId?: (string|null)
+			scopeHint?: (waproto.Message.VpcRequestMessage.ScopeHint|null)
+			static encode(m: waproto.Message.VpcRequestMessage.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.VpcRequestMessage & waproto.Message.VpcRequestMessage.$Shape
+		}
+		namespace VpcRequestMessage {
+			interface $Properties {
+				payloadSchemaVersion?: (number|null)
+				requestId?: (string|null)
+				scopeHint?: (waproto.Message.VpcRequestMessage.ScopeHint|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.Message.VpcRequestMessage.$Properties
+			enum ScopeHint {
+				UNKNOWN = 0,
+				WA_ONLY = 1,
+				WAFFLE = 2,
+				WA_META_AI = 3,
+				META_AI_ONLY = 4,
+				FOA_ONLY = 5
+			}
+		}
+		interface IRequestLocationUpdateMessage extends waproto.Message.RequestLocationUpdateMessage.$Properties {
+		}
+		class RequestLocationUpdateMessage {
+			constructor(p?: waproto.Message.RequestLocationUpdateMessage.$Properties)
+			$unknowns?: Uint8Array[]
+			key?: (waproto.MessageKey.$Properties|null)
+			updateType?: (waproto.Message.RequestLocationUpdateMessage.UpdateType|null)
+			senderTimestampMs?: (number|Long|null)
+			static encode(m: waproto.Message.RequestLocationUpdateMessage.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.RequestLocationUpdateMessage & waproto.Message.RequestLocationUpdateMessage.$Shape
+		}
+		namespace RequestLocationUpdateMessage {
+			interface $Properties {
+				key?: (waproto.MessageKey.$Properties|null)
+				updateType?: (waproto.Message.RequestLocationUpdateMessage.UpdateType|null)
+				senderTimestampMs?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.Message.RequestLocationUpdateMessage.$Properties
+			enum UpdateType {
+				UNKNOWN = 0,
+				CANCEL = 1
+			}
+		}
+		interface IRequestLocationMessage extends waproto.Message.RequestLocationMessage.$Properties {
+		}
+		class RequestLocationMessage {
+			constructor(p?: waproto.Message.RequestLocationMessage.$Properties)
+			$unknowns?: Uint8Array[]
+			contextInfo?: (waproto.ContextInfo.$Properties|null)
+			static encode(m: waproto.Message.RequestLocationMessage.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.RequestLocationMessage & waproto.Message.RequestLocationMessage.$Shape
+		}
+		namespace RequestLocationMessage {
+			interface $Properties {
+				contextInfo?: (waproto.ContextInfo.$Properties|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IRequestPhoneNumberMessage extends waproto.Message.RequestPhoneNumberMessage.$Properties {
 		}
@@ -8410,7 +12771,10 @@ export namespace waproto {
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.RequestPhoneNumberMessage.$Properties
+			type $Shape = {
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IEventInviteMessage extends waproto.Message.EventInviteMessage.$Properties {
 		}
@@ -8426,6 +12790,10 @@ export namespace waproto {
 			isCanceled?: (boolean|null)
 			endTime?: (number|Long|null)
 			callLink?: (string|null)
+			coverImageHandle?: (string|null)
+			locationName?: (string|null)
+			lastUpdatedTsUsec?: (number|Long|null)
+			status?: (waproto.Message.EventInviteMessage.EventStatus|null)
 			static encode(m: waproto.Message.EventInviteMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.EventInviteMessage & waproto.Message.EventInviteMessage.$Shape
 		}
@@ -8440,9 +12808,37 @@ export namespace waproto {
 				isCanceled?: (boolean|null)
 				endTime?: (number|Long|null)
 				callLink?: (string|null)
+				coverImageHandle?: (string|null)
+				locationName?: (string|null)
+				lastUpdatedTsUsec?: (number|Long|null)
+				status?: (waproto.Message.EventInviteMessage.EventStatus|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.EventInviteMessage.$Properties
+			type $Shape = {
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  eventId?: string|null
+  eventTitle?: string|null
+  jpegThumbnail?: Uint8Array|null
+  startTime?: number|Long|null
+  caption?: string|null
+  isCanceled?: boolean|null
+  endTime?: number|Long|null
+  callLink?: string|null
+  coverImageHandle?: string|null
+  locationName?: string|null
+  lastUpdatedTsUsec?: number|Long|null
+  status?: waproto.Message.EventInviteMessage.EventStatus|null
+  $unknowns?: Uint8Array[]
+}
+			enum EventStatus {
+				UNKNOWN = 0,
+				ACTIVE = 1,
+				CANCELED = 2,
+				SUSPENDED = 3,
+				DELETED = 4,
+				LEFT_EVENT = 5,
+				REMOVED_FROM_INVITE_LIST = 6
+			}
 		}
 		interface INewsletterFollowerInviteMessage extends waproto.Message.NewsletterFollowerInviteMessage.$Properties {
 		}
@@ -8466,7 +12862,14 @@ export namespace waproto {
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.NewsletterFollowerInviteMessage.$Properties
+			type $Shape = {
+  newsletterJid?: string|null
+  newsletterName?: string|null
+  jpegThumbnail?: Uint8Array|null
+  caption?: string|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface INewsletterAdminInviteMessage extends waproto.Message.NewsletterAdminInviteMessage.$Properties {
 		}
@@ -8492,7 +12895,15 @@ export namespace waproto {
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.NewsletterAdminInviteMessage.$Properties
+			type $Shape = {
+  newsletterJid?: string|null
+  newsletterName?: string|null
+  jpegThumbnail?: Uint8Array|null
+  caption?: string|null
+  inviteExpiration?: number|Long|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IGroupInviteMessage extends waproto.Message.GroupInviteMessage.$Properties {
 		}
@@ -8522,7 +12933,17 @@ export namespace waproto {
 				groupType?: (waproto.Message.GroupInviteMessage.GroupType|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.GroupInviteMessage.$Properties
+			type $Shape = {
+  groupJid?: string|null
+  inviteCode?: string|null
+  inviteExpiration?: number|Long|null
+  groupName?: string|null
+  jpegThumbnail?: Uint8Array|null
+  caption?: string|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  groupType?: waproto.Message.GroupInviteMessage.GroupType|null
+  $unknowns?: Uint8Array[]
+}
 			enum GroupType {
 				DEFAULT = 0,
 				PARENT = 1
@@ -8534,19 +12955,28 @@ export namespace waproto {
 			constructor(p?: waproto.Message.InteractiveResponseMessage.$Properties)
 			$unknowns?: Uint8Array[]
 			body?: (waproto.Message.InteractiveResponseMessage.Body.$Properties|null)
-			nativeFlowResponseMessage?: (waproto.Message.InteractiveResponseMessage.NativeFlowResponseMessage.$Properties|null)
 			contextInfo?: (waproto.ContextInfo.$Properties|null)
+			nativeFlowResponseMessage?: (waproto.Message.InteractiveResponseMessage.NativeFlowResponseMessage.$Properties|null)
+			interactiveResponseMessage?: "nativeFlowResponseMessage"
 			static encode(m: waproto.Message.InteractiveResponseMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveResponseMessage & waproto.Message.InteractiveResponseMessage.$Shape
 		}
 		namespace InteractiveResponseMessage {
 			interface $Properties {
 				body?: (waproto.Message.InteractiveResponseMessage.Body.$Properties|null)
-				nativeFlowResponseMessage?: (waproto.Message.InteractiveResponseMessage.NativeFlowResponseMessage.$Properties|null)
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
+				nativeFlowResponseMessage?: (waproto.Message.InteractiveResponseMessage.NativeFlowResponseMessage.$Properties|null)
+				interactiveResponseMessage?: "nativeFlowResponseMessage"
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.InteractiveResponseMessage.$Properties
+			type $Shape = {
+  body?: waproto.Message.InteractiveResponseMessage.Body.$Shape|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  nativeFlowResponseMessage?: waproto.Message.InteractiveResponseMessage.NativeFlowResponseMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ interactiveResponseMessage?: undefined; nativeFlowResponseMessage?: null }|{ interactiveResponseMessage?: "nativeFlowResponseMessage"; nativeFlowResponseMessage: waproto.Message.InteractiveResponseMessage.NativeFlowResponseMessage.$Shape })
+)
 			interface INativeFlowResponseMessage extends waproto.Message.InteractiveResponseMessage.NativeFlowResponseMessage.$Properties {
 			}
 			class NativeFlowResponseMessage {
@@ -8598,13 +13028,14 @@ export namespace waproto {
 			header?: (waproto.Message.InteractiveMessage.Header.$Properties|null)
 			body?: (waproto.Message.InteractiveMessage.Body.$Properties|null)
 			footer?: (waproto.Message.InteractiveMessage.Footer.$Properties|null)
+			bloksWidget?: (waproto.Message.InteractiveMessage.BloksWidget.$Properties|null)
+			contextInfo?: (waproto.ContextInfo.$Properties|null)
+			urlTrackingMap?: (waproto.UrlTrackingMap.$Properties|null)
 			shopStorefrontMessage?: (waproto.Message.InteractiveMessage.ShopMessage.$Properties|null)
 			collectionMessage?: (waproto.Message.InteractiveMessage.CollectionMessage.$Properties|null)
 			nativeFlowMessage?: (waproto.Message.InteractiveMessage.NativeFlowMessage.$Properties|null)
 			carouselMessage?: (waproto.Message.InteractiveMessage.CarouselMessage.$Properties|null)
-			bloksWidget?: (waproto.Message.InteractiveMessage.BloksWidget.$Properties|null)
-			contextInfo?: (waproto.ContextInfo.$Properties|null)
-			urlTrackingMap?: (waproto.UrlTrackingMap.$Properties|null)
+			interactiveMessage?: ("shopStorefrontMessage"|"collectionMessage"|"nativeFlowMessage"|"carouselMessage")
 			static encode(m: waproto.Message.InteractiveMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage & waproto.Message.InteractiveMessage.$Shape
 		}
@@ -8613,16 +13044,31 @@ export namespace waproto {
 				header?: (waproto.Message.InteractiveMessage.Header.$Properties|null)
 				body?: (waproto.Message.InteractiveMessage.Body.$Properties|null)
 				footer?: (waproto.Message.InteractiveMessage.Footer.$Properties|null)
+				bloksWidget?: (waproto.Message.InteractiveMessage.BloksWidget.$Properties|null)
+				contextInfo?: (waproto.ContextInfo.$Properties|null)
+				urlTrackingMap?: (waproto.UrlTrackingMap.$Properties|null)
 				shopStorefrontMessage?: (waproto.Message.InteractiveMessage.ShopMessage.$Properties|null)
 				collectionMessage?: (waproto.Message.InteractiveMessage.CollectionMessage.$Properties|null)
 				nativeFlowMessage?: (waproto.Message.InteractiveMessage.NativeFlowMessage.$Properties|null)
 				carouselMessage?: (waproto.Message.InteractiveMessage.CarouselMessage.$Properties|null)
-				bloksWidget?: (waproto.Message.InteractiveMessage.BloksWidget.$Properties|null)
-				contextInfo?: (waproto.ContextInfo.$Properties|null)
-				urlTrackingMap?: (waproto.UrlTrackingMap.$Properties|null)
+				interactiveMessage?: ("shopStorefrontMessage"|"collectionMessage"|"nativeFlowMessage"|"carouselMessage")
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.InteractiveMessage.$Properties
+			type $Shape = {
+  header?: waproto.Message.InteractiveMessage.Header.$Shape|null
+  body?: waproto.Message.InteractiveMessage.Body.$Shape|null
+  footer?: waproto.Message.InteractiveMessage.Footer.$Shape|null
+  bloksWidget?: waproto.Message.InteractiveMessage.BloksWidget.$Shape|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  urlTrackingMap?: waproto.UrlTrackingMap.$Shape|null
+  shopStorefrontMessage?: waproto.Message.InteractiveMessage.ShopMessage.$Shape|null
+  collectionMessage?: waproto.Message.InteractiveMessage.CollectionMessage.$Shape|null
+  nativeFlowMessage?: waproto.Message.InteractiveMessage.NativeFlowMessage.$Shape|null
+  carouselMessage?: waproto.Message.InteractiveMessage.CarouselMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ interactiveMessage?: undefined; shopStorefrontMessage?: null; collectionMessage?: null; nativeFlowMessage?: null; carouselMessage?: null }|{ interactiveMessage?: "shopStorefrontMessage"; shopStorefrontMessage: waproto.Message.InteractiveMessage.ShopMessage.$Shape; collectionMessage?: null; nativeFlowMessage?: null; carouselMessage?: null }|{ interactiveMessage?: "collectionMessage"; shopStorefrontMessage?: null; collectionMessage: waproto.Message.InteractiveMessage.CollectionMessage.$Shape; nativeFlowMessage?: null; carouselMessage?: null }|{ interactiveMessage?: "nativeFlowMessage"; shopStorefrontMessage?: null; collectionMessage?: null; nativeFlowMessage: waproto.Message.InteractiveMessage.NativeFlowMessage.$Shape; carouselMessage?: null }|{ interactiveMessage?: "carouselMessage"; shopStorefrontMessage?: null; collectionMessage?: null; nativeFlowMessage?: null; carouselMessage: waproto.Message.InteractiveMessage.CarouselMessage.$Shape })
+)
 			interface ICarouselMessage extends waproto.Message.InteractiveMessage.CarouselMessage.$Properties {
 			}
 			class CarouselMessage {
@@ -8641,7 +13087,12 @@ export namespace waproto {
 					carouselCardType?: (waproto.Message.InteractiveMessage.CarouselMessage.CarouselCardType|null)
 					$unknowns?: Uint8Array[]
 				}
-				type $Shape = waproto.Message.InteractiveMessage.CarouselMessage.$Properties
+				type $Shape = {
+  cards?: waproto.Message.InteractiveMessage.$Shape[]|null
+  messageVersion?: number|null
+  carouselCardType?: waproto.Message.InteractiveMessage.CarouselMessage.CarouselCardType|null
+  $unknowns?: Uint8Array[]
+}
 				enum CarouselCardType {
 					UNKNOWN = 0,
 					HSCROLL_CARDS = 1,
@@ -8760,19 +13211,28 @@ export namespace waproto {
 				constructor(p?: waproto.Message.InteractiveMessage.Footer.$Properties)
 				$unknowns?: Uint8Array[]
 				text?: (string|null)
-				audioMessage?: (waproto.Message.AudioMessage.$Properties|null)
 				hasMediaAttachment?: (boolean|null)
+				audioMessage?: (waproto.Message.AudioMessage.$Properties|null)
+				media?: "audioMessage"
 				static encode(m: waproto.Message.InteractiveMessage.Footer.$Properties, w?: PbWriter): PbWriter
 				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.Footer & waproto.Message.InteractiveMessage.Footer.$Shape
 			}
 			namespace Footer {
 				interface $Properties {
 					text?: (string|null)
-					audioMessage?: (waproto.Message.AudioMessage.$Properties|null)
 					hasMediaAttachment?: (boolean|null)
+					audioMessage?: (waproto.Message.AudioMessage.$Properties|null)
+					media?: "audioMessage"
 					$unknowns?: Uint8Array[]
 				}
-				type $Shape = waproto.Message.InteractiveMessage.Footer.$Properties
+				type $Shape = {
+  text?: string|null
+  hasMediaAttachment?: boolean|null
+  audioMessage?: waproto.Message.AudioMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ media?: undefined; audioMessage?: null }|{ media?: "audioMessage"; audioMessage: waproto.Message.AudioMessage.$Shape })
+)
 			}
 			interface IBody extends waproto.Message.InteractiveMessage.Body.$Properties {
 			}
@@ -8797,14 +13257,15 @@ export namespace waproto {
 				$unknowns?: Uint8Array[]
 				title?: (string|null)
 				subtitle?: (string|null)
+				hasMediaAttachment?: (boolean|null)
+				bloksWidget?: (waproto.Message.InteractiveMessage.BloksWidget.$Properties|null)
 				documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
 				imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
-				hasMediaAttachment?: (boolean|null)
 				jpegThumbnail?: (Uint8Array|null)
 				videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
 				locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
 				productMessage?: (waproto.Message.ProductMessage.$Properties|null)
-				bloksWidget?: (waproto.Message.InteractiveMessage.BloksWidget.$Properties|null)
+				media?: ("documentMessage"|"imageMessage"|"jpegThumbnail"|"videoMessage"|"locationMessage"|"productMessage")
 				static encode(m: waproto.Message.InteractiveMessage.Header.$Properties, w?: PbWriter): PbWriter
 				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.Header & waproto.Message.InteractiveMessage.Header.$Shape
 			}
@@ -8812,17 +13273,32 @@ export namespace waproto {
 				interface $Properties {
 					title?: (string|null)
 					subtitle?: (string|null)
+					hasMediaAttachment?: (boolean|null)
+					bloksWidget?: (waproto.Message.InteractiveMessage.BloksWidget.$Properties|null)
 					documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
 					imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
-					hasMediaAttachment?: (boolean|null)
 					jpegThumbnail?: (Uint8Array|null)
 					videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
 					locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
 					productMessage?: (waproto.Message.ProductMessage.$Properties|null)
-					bloksWidget?: (waproto.Message.InteractiveMessage.BloksWidget.$Properties|null)
+					media?: ("documentMessage"|"imageMessage"|"jpegThumbnail"|"videoMessage"|"locationMessage"|"productMessage")
 					$unknowns?: Uint8Array[]
 				}
-				type $Shape = waproto.Message.InteractiveMessage.Header.$Properties
+				type $Shape = {
+  title?: string|null
+  subtitle?: string|null
+  hasMediaAttachment?: boolean|null
+  bloksWidget?: waproto.Message.InteractiveMessage.BloksWidget.$Shape|null
+  documentMessage?: waproto.Message.DocumentMessage.$Shape|null
+  imageMessage?: waproto.Message.ImageMessage.$Shape|null
+  jpegThumbnail?: Uint8Array|null
+  videoMessage?: waproto.Message.VideoMessage.$Shape|null
+  locationMessage?: waproto.Message.LocationMessage.$Shape|null
+  productMessage?: waproto.Message.ProductMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ media?: undefined; documentMessage?: null; imageMessage?: null; jpegThumbnail?: null; videoMessage?: null; locationMessage?: null; productMessage?: null }|{ media?: "documentMessage"; documentMessage: waproto.Message.DocumentMessage.$Shape; imageMessage?: null; jpegThumbnail?: null; videoMessage?: null; locationMessage?: null; productMessage?: null }|{ media?: "imageMessage"; documentMessage?: null; imageMessage: waproto.Message.ImageMessage.$Shape; jpegThumbnail?: null; videoMessage?: null; locationMessage?: null; productMessage?: null }|{ media?: "jpegThumbnail"; documentMessage?: null; imageMessage?: null; jpegThumbnail: Uint8Array; videoMessage?: null; locationMessage?: null; productMessage?: null }|{ media?: "videoMessage"; documentMessage?: null; imageMessage?: null; jpegThumbnail?: null; videoMessage: waproto.Message.VideoMessage.$Shape; locationMessage?: null; productMessage?: null }|{ media?: "locationMessage"; documentMessage?: null; imageMessage?: null; jpegThumbnail?: null; videoMessage?: null; locationMessage: waproto.Message.LocationMessage.$Shape; productMessage?: null }|{ media?: "productMessage"; documentMessage?: null; imageMessage?: null; jpegThumbnail?: null; videoMessage?: null; locationMessage?: null; productMessage: waproto.Message.ProductMessage.$Shape })
+)
 			}
 		}
 		interface IListResponseMessage extends waproto.Message.ListResponseMessage.$Properties {
@@ -8847,7 +13323,14 @@ export namespace waproto {
 				description?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.ListResponseMessage.$Properties
+			type $Shape = {
+  title?: string|null
+  listType?: waproto.Message.ListResponseMessage.ListType|null
+  singleSelectReply?: waproto.Message.ListResponseMessage.SingleSelectReply.$Shape|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  description?: string|null
+  $unknowns?: Uint8Array[]
+}
 			enum ListType {
 				UNKNOWN = 0,
 				SINGLE_SELECT = 1
@@ -8897,7 +13380,17 @@ export namespace waproto {
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.ListMessage.$Properties
+			type $Shape = {
+  title?: string|null
+  description?: string|null
+  buttonText?: string|null
+  listType?: waproto.Message.ListMessage.ListType|null
+  sections?: waproto.Message.ListMessage.Section.$Shape[]|null
+  productListInfo?: waproto.Message.ListMessage.ProductListInfo.$Shape|null
+  footerText?: string|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 			enum ListType {
 				UNKNOWN = 0,
 				SINGLE_SELECT = 1,
@@ -9056,7 +13549,24 @@ export namespace waproto {
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.OrderMessage.$Properties
+			type $Shape = {
+  orderId?: string|null
+  thumbnail?: Uint8Array|null
+  itemCount?: number|null
+  status?: waproto.Message.OrderMessage.OrderStatus|null
+  surface?: waproto.Message.OrderMessage.OrderSurface|null
+  message?: string|null
+  orderTitle?: string|null
+  sellerJid?: string|null
+  token?: string|null
+  totalAmount1000?: number|Long|null
+  totalCurrencyCode?: string|null
+  messageVersion?: number|null
+  orderRequestMessageId?: waproto.MessageKey.$Shape|null
+  catalogType?: string|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 			enum OrderSurface {
 				CATALOG = 1
 			}
@@ -9090,7 +13600,15 @@ export namespace waproto {
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.ProductMessage.$Properties
+			type $Shape = {
+  product?: waproto.Message.ProductMessage.ProductSnapshot.$Shape|null
+  businessOwnerJid?: string|null
+  catalog?: waproto.Message.ProductMessage.CatalogSnapshot.$Shape|null
+  body?: string|null
+  footer?: string|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 			interface IProductSnapshot extends waproto.Message.ProductMessage.ProductSnapshot.$Properties {
 			}
 			class ProductSnapshot {
@@ -9127,7 +13645,21 @@ export namespace waproto {
 					signedUrl?: (string|null)
 					$unknowns?: Uint8Array[]
 				}
-				type $Shape = waproto.Message.ProductMessage.ProductSnapshot.$Properties
+				type $Shape = {
+  productImage?: waproto.Message.ImageMessage.$Shape|null
+  productId?: string|null
+  title?: string|null
+  description?: string|null
+  currencyCode?: string|null
+  priceAmount1000?: number|Long|null
+  retailerId?: string|null
+  url?: string|null
+  productImageCount?: number|null
+  firstImageId?: string|null
+  salePriceAmount1000?: number|Long|null
+  signedUrl?: string|null
+  $unknowns?: Uint8Array[]
+}
 			}
 			interface ICatalogSnapshot extends waproto.Message.ProductMessage.CatalogSnapshot.$Properties {
 			}
@@ -9147,7 +13679,12 @@ export namespace waproto {
 					description?: (string|null)
 					$unknowns?: Uint8Array[]
 				}
-				type $Shape = waproto.Message.ProductMessage.CatalogSnapshot.$Properties
+				type $Shape = {
+  catalogImage?: waproto.Message.ImageMessage.$Shape|null
+  title?: string|null
+  description?: string|null
+  $unknowns?: Uint8Array[]
+}
 			}
 		}
 		interface IStatusQuotedMessage extends waproto.Message.StatusQuotedMessage.$Properties {
@@ -9197,96 +13734,145 @@ export namespace waproto {
 				selectedCarouselCardIndex?: (number|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.TemplateButtonReplyMessage.$Properties
+			type $Shape = {
+  selectedId?: string|null
+  selectedDisplayText?: string|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  selectedIndex?: number|null
+  selectedCarouselCardIndex?: number|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface ITemplateMessage extends waproto.Message.TemplateMessage.$Properties {
 		}
 		class TemplateMessage {
 			constructor(p?: waproto.Message.TemplateMessage.$Properties)
 			$unknowns?: Uint8Array[]
-			fourRowTemplate?: (waproto.Message.TemplateMessage.FourRowTemplate.$Properties|null)
-			hydratedFourRowTemplate?: (waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Properties|null)
 			contextInfo?: (waproto.ContextInfo.$Properties|null)
 			hydratedTemplate?: (waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Properties|null)
-			interactiveMessageTemplate?: (waproto.Message.InteractiveMessage.$Properties|null)
 			templateId?: (string|null)
+			fourRowTemplate?: (waproto.Message.TemplateMessage.FourRowTemplate.$Properties|null)
+			hydratedFourRowTemplate?: (waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Properties|null)
+			interactiveMessageTemplate?: (waproto.Message.InteractiveMessage.$Properties|null)
+			format?: ("fourRowTemplate"|"hydratedFourRowTemplate"|"interactiveMessageTemplate")
 			static encode(m: waproto.Message.TemplateMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.TemplateMessage & waproto.Message.TemplateMessage.$Shape
 		}
 		namespace TemplateMessage {
 			interface $Properties {
-				fourRowTemplate?: (waproto.Message.TemplateMessage.FourRowTemplate.$Properties|null)
-				hydratedFourRowTemplate?: (waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Properties|null)
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				hydratedTemplate?: (waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Properties|null)
-				interactiveMessageTemplate?: (waproto.Message.InteractiveMessage.$Properties|null)
 				templateId?: (string|null)
+				fourRowTemplate?: (waproto.Message.TemplateMessage.FourRowTemplate.$Properties|null)
+				hydratedFourRowTemplate?: (waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Properties|null)
+				interactiveMessageTemplate?: (waproto.Message.InteractiveMessage.$Properties|null)
+				format?: ("fourRowTemplate"|"hydratedFourRowTemplate"|"interactiveMessageTemplate")
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.TemplateMessage.$Properties
+			type $Shape = {
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  hydratedTemplate?: waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Shape|null
+  templateId?: string|null
+  fourRowTemplate?: waproto.Message.TemplateMessage.FourRowTemplate.$Shape|null
+  hydratedFourRowTemplate?: waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Shape|null
+  interactiveMessageTemplate?: waproto.Message.InteractiveMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ format?: undefined; fourRowTemplate?: null; hydratedFourRowTemplate?: null; interactiveMessageTemplate?: null }|{ format?: "fourRowTemplate"; fourRowTemplate: waproto.Message.TemplateMessage.FourRowTemplate.$Shape; hydratedFourRowTemplate?: null; interactiveMessageTemplate?: null }|{ format?: "hydratedFourRowTemplate"; fourRowTemplate?: null; hydratedFourRowTemplate: waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Shape; interactiveMessageTemplate?: null }|{ format?: "interactiveMessageTemplate"; fourRowTemplate?: null; hydratedFourRowTemplate?: null; interactiveMessageTemplate: waproto.Message.InteractiveMessage.$Shape })
+)
 			interface IHydratedFourRowTemplate extends waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Properties {
 			}
 			class HydratedFourRowTemplate {
 				constructor(p?: waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Properties)
 				$unknowns?: Uint8Array[]
-				documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
-				hydratedTitleText?: (string|null)
-				imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
-				videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
-				locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
 				hydratedContentText?: (string|null)
 				hydratedFooterText?: (string|null)
 				hydratedButtons: waproto.HydratedTemplateButton.$Properties[]
 				templateId?: (string|null)
 				maskLinkedDevices?: (boolean|null)
+				documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
+				hydratedTitleText?: (string|null)
+				imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
+				videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
+				locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
+				title?: ("documentMessage"|"hydratedTitleText"|"imageMessage"|"videoMessage"|"locationMessage")
 				static encode(m: waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Properties, w?: PbWriter): PbWriter
 				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.TemplateMessage.HydratedFourRowTemplate & waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Shape
 			}
 			namespace HydratedFourRowTemplate {
 				interface $Properties {
-					documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
-					hydratedTitleText?: (string|null)
-					imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
-					videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
-					locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
 					hydratedContentText?: (string|null)
 					hydratedFooterText?: (string|null)
 					hydratedButtons?: (waproto.HydratedTemplateButton.$Properties[]|null)
 					templateId?: (string|null)
 					maskLinkedDevices?: (boolean|null)
+					documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
+					hydratedTitleText?: (string|null)
+					imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
+					videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
+					locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
+					title?: ("documentMessage"|"hydratedTitleText"|"imageMessage"|"videoMessage"|"locationMessage")
 					$unknowns?: Uint8Array[]
 				}
-				type $Shape = waproto.Message.TemplateMessage.HydratedFourRowTemplate.$Properties
+				type $Shape = {
+  hydratedContentText?: string|null
+  hydratedFooterText?: string|null
+  hydratedButtons?: waproto.HydratedTemplateButton.$Shape[]|null
+  templateId?: string|null
+  maskLinkedDevices?: boolean|null
+  documentMessage?: waproto.Message.DocumentMessage.$Shape|null
+  hydratedTitleText?: string|null
+  imageMessage?: waproto.Message.ImageMessage.$Shape|null
+  videoMessage?: waproto.Message.VideoMessage.$Shape|null
+  locationMessage?: waproto.Message.LocationMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ title?: undefined; documentMessage?: null; hydratedTitleText?: null; imageMessage?: null; videoMessage?: null; locationMessage?: null }|{ title?: "documentMessage"; documentMessage: waproto.Message.DocumentMessage.$Shape; hydratedTitleText?: null; imageMessage?: null; videoMessage?: null; locationMessage?: null }|{ title?: "hydratedTitleText"; documentMessage?: null; hydratedTitleText: string; imageMessage?: null; videoMessage?: null; locationMessage?: null }|{ title?: "imageMessage"; documentMessage?: null; hydratedTitleText?: null; imageMessage: waproto.Message.ImageMessage.$Shape; videoMessage?: null; locationMessage?: null }|{ title?: "videoMessage"; documentMessage?: null; hydratedTitleText?: null; imageMessage?: null; videoMessage: waproto.Message.VideoMessage.$Shape; locationMessage?: null }|{ title?: "locationMessage"; documentMessage?: null; hydratedTitleText?: null; imageMessage?: null; videoMessage?: null; locationMessage: waproto.Message.LocationMessage.$Shape })
+)
 			}
 			interface IFourRowTemplate extends waproto.Message.TemplateMessage.FourRowTemplate.$Properties {
 			}
 			class FourRowTemplate {
 				constructor(p?: waproto.Message.TemplateMessage.FourRowTemplate.$Properties)
 				$unknowns?: Uint8Array[]
+				content?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
+				footer?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
+				buttons: waproto.TemplateButton.$Properties[]
 				documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
 				highlyStructuredMessage?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
 				imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
 				videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
 				locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
-				content?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
-				footer?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
-				buttons: waproto.TemplateButton.$Properties[]
+				title?: ("documentMessage"|"highlyStructuredMessage"|"imageMessage"|"videoMessage"|"locationMessage")
 				static encode(m: waproto.Message.TemplateMessage.FourRowTemplate.$Properties, w?: PbWriter): PbWriter
 				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.TemplateMessage.FourRowTemplate & waproto.Message.TemplateMessage.FourRowTemplate.$Shape
 			}
 			namespace FourRowTemplate {
 				interface $Properties {
+					content?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
+					footer?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
+					buttons?: (waproto.TemplateButton.$Properties[]|null)
 					documentMessage?: (waproto.Message.DocumentMessage.$Properties|null)
 					highlyStructuredMessage?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
 					imageMessage?: (waproto.Message.ImageMessage.$Properties|null)
 					videoMessage?: (waproto.Message.VideoMessage.$Properties|null)
 					locationMessage?: (waproto.Message.LocationMessage.$Properties|null)
-					content?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
-					footer?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
-					buttons?: (waproto.TemplateButton.$Properties[]|null)
+					title?: ("documentMessage"|"highlyStructuredMessage"|"imageMessage"|"videoMessage"|"locationMessage")
 					$unknowns?: Uint8Array[]
 				}
-				type $Shape = waproto.Message.TemplateMessage.FourRowTemplate.$Properties
+				type $Shape = {
+  content?: waproto.Message.HighlyStructuredMessage.$Shape|null
+  footer?: waproto.Message.HighlyStructuredMessage.$Shape|null
+  buttons?: waproto.TemplateButton.$Shape[]|null
+  documentMessage?: waproto.Message.DocumentMessage.$Shape|null
+  highlyStructuredMessage?: waproto.Message.HighlyStructuredMessage.$Shape|null
+  imageMessage?: waproto.Message.ImageMessage.$Shape|null
+  videoMessage?: waproto.Message.VideoMessage.$Shape|null
+  locationMessage?: waproto.Message.LocationMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ title?: undefined; documentMessage?: null; highlyStructuredMessage?: null; imageMessage?: null; videoMessage?: null; locationMessage?: null }|{ title?: "documentMessage"; documentMessage: waproto.Message.DocumentMessage.$Shape; highlyStructuredMessage?: null; imageMessage?: null; videoMessage?: null; locationMessage?: null }|{ title?: "highlyStructuredMessage"; documentMessage?: null; highlyStructuredMessage: waproto.Message.HighlyStructuredMessage.$Shape; imageMessage?: null; videoMessage?: null; locationMessage?: null }|{ title?: "imageMessage"; documentMessage?: null; highlyStructuredMessage?: null; imageMessage: waproto.Message.ImageMessage.$Shape; videoMessage?: null; locationMessage?: null }|{ title?: "videoMessage"; documentMessage?: null; highlyStructuredMessage?: null; imageMessage?: null; videoMessage: waproto.Message.VideoMessage.$Shape; locationMessage?: null }|{ title?: "locationMessage"; documentMessage?: null; highlyStructuredMessage?: null; imageMessage?: null; videoMessage?: null; locationMessage: waproto.Message.LocationMessage.$Shape })
+)
 			}
 		}
 		interface IStickerMessage extends waproto.Message.StickerMessage.$Properties {
@@ -9316,6 +13902,8 @@ export namespace waproto {
 			accessibilityLabel?: (string|null)
 			premium?: (number|null)
 			emojis?: (string|null)
+			audioMessage?: (waproto.Message.AudioMessage.$Properties|null)
+			audio?: "audioMessage"
 			static encode(m: waproto.Message.StickerMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.StickerMessage & waproto.Message.StickerMessage.$Shape
 		}
@@ -9343,9 +13931,38 @@ export namespace waproto {
 				accessibilityLabel?: (string|null)
 				premium?: (number|null)
 				emojis?: (string|null)
+				audioMessage?: (waproto.Message.AudioMessage.$Properties|null)
+				audio?: "audioMessage"
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.StickerMessage.$Properties
+			type $Shape = {
+  url?: string|null
+  fileSha256?: Uint8Array|null
+  fileEncSha256?: Uint8Array|null
+  mediaKey?: Uint8Array|null
+  mimetype?: string|null
+  height?: number|null
+  width?: number|null
+  directPath?: string|null
+  fileLength?: number|Long|null
+  mediaKeyTimestamp?: number|Long|null
+  firstFrameLength?: number|null
+  firstFrameSidecar?: Uint8Array|null
+  isAnimated?: boolean|null
+  pngThumbnail?: Uint8Array|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  stickerSentTs?: number|Long|null
+  isAvatar?: boolean|null
+  isAiSticker?: boolean|null
+  isLottie?: boolean|null
+  accessibilityLabel?: string|null
+  premium?: number|null
+  emojis?: string|null
+  audioMessage?: waproto.Message.AudioMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ audio?: undefined; audioMessage?: null }|{ audio?: "audioMessage"; audioMessage: waproto.Message.AudioMessage.$Shape })
+)
 		}
 		interface ILiveLocationMessage extends waproto.Message.LiveLocationMessage.$Properties {
 		}
@@ -9379,7 +13996,67 @@ export namespace waproto {
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.LiveLocationMessage.$Properties
+			type $Shape = {
+  degreesLatitude?: number|null
+  degreesLongitude?: number|null
+  accuracyInMeters?: number|null
+  speedInMps?: number|null
+  degreesClockwiseFromMagneticNorth?: number|null
+  caption?: string|null
+  sequenceNumber?: number|Long|null
+  timeOffset?: number|null
+  jpegThumbnail?: Uint8Array|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
+		}
+		interface IPaymentDetailsMessage extends waproto.Message.PaymentDetailsMessage.$Properties {
+		}
+		class PaymentDetailsMessage {
+			constructor(p?: waproto.Message.PaymentDetailsMessage.$Properties)
+			$unknowns?: Uint8Array[]
+			serviceType?: (waproto.Message.PaymentDetailsMessage.ServiceType|null)
+			amount?: (waproto.Money.$Properties|null)
+			payeeName?: (string|null)
+			payerName?: (string|null)
+			transactionTimestampMs?: (number|Long|null)
+			transactionId?: (string|null)
+			status?: (waproto.Message.PaymentDetailsMessage.Status|null)
+			contextInfo?: (waproto.ContextInfo.$Properties|null)
+			static encode(m: waproto.Message.PaymentDetailsMessage.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PaymentDetailsMessage & waproto.Message.PaymentDetailsMessage.$Shape
+		}
+		namespace PaymentDetailsMessage {
+			interface $Properties {
+				serviceType?: (waproto.Message.PaymentDetailsMessage.ServiceType|null)
+				amount?: (waproto.Money.$Properties|null)
+				payeeName?: (string|null)
+				payerName?: (string|null)
+				transactionTimestampMs?: (number|Long|null)
+				transactionId?: (string|null)
+				status?: (waproto.Message.PaymentDetailsMessage.Status|null)
+				contextInfo?: (waproto.ContextInfo.$Properties|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  serviceType?: waproto.Message.PaymentDetailsMessage.ServiceType|null
+  amount?: waproto.Money.$Shape|null
+  payeeName?: string|null
+  payerName?: string|null
+  transactionTimestampMs?: number|Long|null
+  transactionId?: string|null
+  status?: waproto.Message.PaymentDetailsMessage.Status|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
+			enum Status {
+				STATUS_UNKNOWN = 0,
+				SUCCESS = 1
+			}
+			enum ServiceType {
+				UNKNOWN = 0,
+				UPI = 1
+			}
 		}
 		interface ISplitPaymentUpdateMessage extends waproto.Message.SplitPaymentUpdateMessage.$Properties {
 		}
@@ -9449,7 +14126,16 @@ export namespace waproto {
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.SplitPaymentMessage.$Properties
+			type $Shape = {
+  splitId?: string|null
+  totalAmount?: waproto.Money.$Shape|null
+  description?: string|null
+  requesterJid?: string|null
+  participants?: waproto.Message.SplitPaymentParticipant.$Shape[]|null
+  createdAtMs?: number|Long|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IPaymentReminderMessage extends waproto.Message.PaymentReminderMessage.$Properties {
 		}
@@ -9529,7 +14215,8 @@ export namespace waproto {
 				UNKNOWN = 0,
 				FBPAY = 1,
 				NOVI = 2,
-				UPI = 3
+				UPI = 3,
+				PIX = 4
 			}
 		}
 		interface ICancelPaymentRequestMessage extends waproto.Message.CancelPaymentRequestMessage.$Properties {
@@ -9590,7 +14277,16 @@ export namespace waproto {
 				background?: (waproto.PaymentBackground.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.RequestPaymentMessage.$Properties
+			type $Shape = {
+  currencyCodeIso4217?: string|null
+  amount1000?: number|Long|null
+  requestFrom?: string|null
+  noteMessage?: waproto.Message.$Shape|null
+  expiryTimestamp?: number|Long|null
+  amount?: waproto.Money.$Shape|null
+  background?: waproto.PaymentBackground.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface ISendPaymentMessage extends waproto.Message.SendPaymentMessage.$Properties {
 		}
@@ -9612,7 +14308,13 @@ export namespace waproto {
 				transactionData?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.SendPaymentMessage.$Properties
+			type $Shape = {
+  noteMessage?: waproto.Message.$Shape|null
+  requestMessageKey?: waproto.MessageKey.$Shape|null
+  background?: waproto.PaymentBackground.$Shape|null
+  transactionData?: string|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IHighlyStructuredMessage extends waproto.Message.HighlyStructuredMessage.$Properties {
 		}
@@ -9644,7 +14346,18 @@ export namespace waproto {
 				hydratedHsm?: (waproto.Message.TemplateMessage.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.HighlyStructuredMessage.$Properties
+			type $Shape = {
+  namespace?: string|null
+  elementName?: string|null
+  params?: string[]|null
+  fallbackLg?: string|null
+  fallbackLc?: string|null
+  localizableParams?: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.$Shape[]|null
+  deterministicLg?: string|null
+  deterministicLc?: string|null
+  hydratedHsm?: waproto.Message.TemplateMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 			interface IHSMLocalizableParameter extends waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.$Properties {
 			}
 			class HSMLocalizableParameter {
@@ -9653,6 +14366,7 @@ export namespace waproto {
 				default?: (string|null)
 				currency?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMCurrency.$Properties|null)
 				dateTime?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.$Properties|null)
+				paramOneof?: ("currency"|"dateTime")
 				static encode(m: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.$Properties, w?: PbWriter): PbWriter
 				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter & waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.$Shape
 			}
@@ -9661,9 +14375,17 @@ export namespace waproto {
 					"default"?: (string|null)
 					currency?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMCurrency.$Properties|null)
 					dateTime?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.$Properties|null)
+					paramOneof?: ("currency"|"dateTime")
 					$unknowns?: Uint8Array[]
 				}
-				type $Shape = waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.$Properties
+				type $Shape = {
+  "default"?: string|null
+  currency?: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMCurrency.$Shape|null
+  dateTime?: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ paramOneof?: undefined; currency?: null; dateTime?: null }|{ paramOneof?: "currency"; currency: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMCurrency.$Shape; dateTime?: null }|{ paramOneof?: "dateTime"; currency?: null; dateTime: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.$Shape })
+)
 				interface IHSMDateTime extends waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.$Properties {
 				}
 				class HSMDateTime {
@@ -9671,6 +14393,7 @@ export namespace waproto {
 					$unknowns?: Uint8Array[]
 					component?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeComponent.$Properties|null)
 					unixEpoch?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeUnixEpoch.$Properties|null)
+					datetimeOneof?: ("component"|"unixEpoch")
 					static encode(m: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.$Properties, w?: PbWriter): PbWriter
 					static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime & waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.$Shape
 				}
@@ -9678,9 +14401,16 @@ export namespace waproto {
 					interface $Properties {
 						component?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeComponent.$Properties|null)
 						unixEpoch?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeUnixEpoch.$Properties|null)
+						datetimeOneof?: ("component"|"unixEpoch")
 						$unknowns?: Uint8Array[]
 					}
-					type $Shape = waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.$Properties
+					type $Shape = {
+  component?: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeComponent.$Shape|null
+  unixEpoch?: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeUnixEpoch.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ datetimeOneof?: undefined; component?: null; unixEpoch?: null }|{ datetimeOneof?: "component"; component: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeComponent.$Shape; unixEpoch?: null }|{ datetimeOneof?: "unixEpoch"; component?: null; unixEpoch: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeUnixEpoch.$Shape })
+)
 					interface IHSMDateTimeUnixEpoch extends waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeUnixEpoch.$Properties {
 					}
 					class HSMDateTimeUnixEpoch {
@@ -9777,7 +14507,12 @@ export namespace waproto {
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.ContactsArrayMessage.$Properties
+			type $Shape = {
+  displayName?: string|null
+  contacts?: waproto.Message.ContactMessage.$Shape[]|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IInitialSecurityNotificationSettingSync extends waproto.Message.InitialSecurityNotificationSettingSync.$Properties {
 		}
@@ -9813,7 +14548,12 @@ export namespace waproto {
 				peerDataOperationResult?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.$Properties[]|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.PeerDataOperationRequestResponseMessage.$Properties
+			type $Shape = {
+  peerDataOperationRequestType?: waproto.Message.PeerDataOperationRequestType|null
+  stanzaId?: string|null
+  peerDataOperationResult?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.$Shape[]|null
+  $unknowns?: Uint8Array[]
+}
 			interface IPeerDataOperationResult extends waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.$Properties {
 			}
 			class PeerDataOperationResult {
@@ -9831,6 +14571,7 @@ export namespace waproto {
 				historySyncChunkRetryResponse?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.HistorySyncChunkRetryResponse.$Properties|null)
 				flowResponsesCsvBundle?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FlowResponsesCsvBundle.$Properties|null)
 				bizBroadcastInsightsContactListResponse?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.BizBroadcastInsightsContactListResponse.$Properties|null)
+				contactRefreshResponse?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ContactRefreshResponse.$Properties|null)
 				static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.$Properties, w?: PbWriter): PbWriter
 				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult & waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.$Shape
 			}
@@ -9848,9 +14589,25 @@ export namespace waproto {
 					historySyncChunkRetryResponse?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.HistorySyncChunkRetryResponse.$Properties|null)
 					flowResponsesCsvBundle?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FlowResponsesCsvBundle.$Properties|null)
 					bizBroadcastInsightsContactListResponse?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.BizBroadcastInsightsContactListResponse.$Properties|null)
+					contactRefreshResponse?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ContactRefreshResponse.$Properties|null)
 					$unknowns?: Uint8Array[]
 				}
-				type $Shape = waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.$Properties
+				type $Shape = {
+  mediaUploadResult?: waproto.MediaRetryNotification.ResultType|null
+  stickerMessage?: waproto.Message.StickerMessage.$Shape|null
+  linkPreviewResponse?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.$Shape|null
+  placeholderMessageResendResponse?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.PlaceholderMessageResendResponse.$Shape|null
+  waffleNonceFetchRequestResponse?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.WaffleNonceFetchResponse.$Shape|null
+  fullHistorySyncOnDemandRequestResponse?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FullHistorySyncOnDemandRequestResponse.$Shape|null
+  companionMetaNonceFetchRequestResponse?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.CompanionMetaNonceFetchResponse.$Shape|null
+  syncdSnapshotFatalRecoveryResponse?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.SyncDSnapshotFatalRecoveryResponse.$Shape|null
+  companionCanonicalUserNonceFetchRequestResponse?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.CompanionCanonicalUserNonceFetchResponse.$Shape|null
+  historySyncChunkRetryResponse?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.HistorySyncChunkRetryResponse.$Shape|null
+  flowResponsesCsvBundle?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FlowResponsesCsvBundle.$Shape|null
+  bizBroadcastInsightsContactListResponse?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.BizBroadcastInsightsContactListResponse.$Shape|null
+  contactRefreshResponse?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ContactRefreshResponse.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 				enum HistorySyncChunkRetryResponseCode {
 					GENERATION_ERROR = 1,
 					CHUNK_CONSUMED = 2,
@@ -9902,6 +14659,28 @@ export namespace waproto {
 						$unknowns?: Uint8Array[]
 					}
 					type $Shape = waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FlowResponsesCsvBundle.$Properties
+				}
+				interface IContactRefreshResponse extends waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ContactRefreshResponse.$Properties {
+				}
+				class ContactRefreshResponse {
+					constructor(p?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ContactRefreshResponse.$Properties)
+					$unknowns?: Uint8Array[]
+					coveredRequestIds: string[]
+					collectionVersion?: (number|Long|null)
+					primaryDurationMs?: (number|Long|null)
+					uniqueContactCount?: (number|null)
+					static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ContactRefreshResponse.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ContactRefreshResponse & waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ContactRefreshResponse.$Shape
+				}
+				namespace ContactRefreshResponse {
+					interface $Properties {
+						coveredRequestIds?: (string[]|null)
+						collectionVersion?: (number|Long|null)
+						primaryDurationMs?: (number|Long|null)
+						uniqueContactCount?: (number|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ContactRefreshResponse.$Properties
 				}
 				interface IBizBroadcastInsightsContactListResponse extends waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.BizBroadcastInsightsContactListResponse.$Properties {
 				}
@@ -10172,6 +14951,7 @@ export namespace waproto {
 			companionCanonicalUserNonceFetchRequest?: (waproto.Message.PeerDataOperationRequestMessage.CompanionCanonicalUserNonceFetchRequest.$Properties|null)
 			bizBroadcastInsightsContactListRequest?: (waproto.Message.PeerDataOperationRequestMessage.BizBroadcastInsightsContactListRequest.$Properties|null)
 			bizBroadcastInsightsRefreshRequest?: (waproto.Message.PeerDataOperationRequestMessage.BizBroadcastInsightsRefreshRequest.$Properties|null)
+			recentConversationsOnDemandRequest?: (waproto.Message.PeerDataOperationRequestMessage.RecentConversationsOnDemandRequest.$Properties|null)
 			static encode(m: waproto.Message.PeerDataOperationRequestMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage & waproto.Message.PeerDataOperationRequestMessage.$Shape
 		}
@@ -10189,9 +14969,28 @@ export namespace waproto {
 				companionCanonicalUserNonceFetchRequest?: (waproto.Message.PeerDataOperationRequestMessage.CompanionCanonicalUserNonceFetchRequest.$Properties|null)
 				bizBroadcastInsightsContactListRequest?: (waproto.Message.PeerDataOperationRequestMessage.BizBroadcastInsightsContactListRequest.$Properties|null)
 				bizBroadcastInsightsRefreshRequest?: (waproto.Message.PeerDataOperationRequestMessage.BizBroadcastInsightsRefreshRequest.$Properties|null)
+				recentConversationsOnDemandRequest?: (waproto.Message.PeerDataOperationRequestMessage.RecentConversationsOnDemandRequest.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.Message.PeerDataOperationRequestMessage.$Properties
+			interface IRecentConversationsOnDemandRequest extends waproto.Message.PeerDataOperationRequestMessage.RecentConversationsOnDemandRequest.$Properties {
+			}
+			class RecentConversationsOnDemandRequest {
+				constructor(p?: waproto.Message.PeerDataOperationRequestMessage.RecentConversationsOnDemandRequest.$Properties)
+				$unknowns?: Uint8Array[]
+				conversationCount?: (number|null)
+				messagesPerConversation?: (number|null)
+				static encode(m: waproto.Message.PeerDataOperationRequestMessage.RecentConversationsOnDemandRequest.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.RecentConversationsOnDemandRequest & waproto.Message.PeerDataOperationRequestMessage.RecentConversationsOnDemandRequest.$Shape
+			}
+			namespace RecentConversationsOnDemandRequest {
+				interface $Properties {
+					conversationCount?: (number|null)
+					messagesPerConversation?: (number|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Message.PeerDataOperationRequestMessage.RecentConversationsOnDemandRequest.$Properties
+			}
 			interface IBizBroadcastInsightsRefreshRequest extends waproto.Message.PeerDataOperationRequestMessage.BizBroadcastInsightsRefreshRequest.$Properties {
 			}
 			class BizBroadcastInsightsRefreshRequest {
@@ -10356,6 +15155,7 @@ export namespace waproto {
 				oldestMsgTimestampMs?: (number|Long|null)
 				accountLid?: (string|null)
 				supportInlineResponse?: (boolean|null)
+				mode?: (waproto.Message.PeerDataOperationRequestMessage.HistorySyncOnDemandRequest.Mode|null)
 				static encode(m: waproto.Message.PeerDataOperationRequestMessage.HistorySyncOnDemandRequest.$Properties, w?: PbWriter): PbWriter
 				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.HistorySyncOnDemandRequest & waproto.Message.PeerDataOperationRequestMessage.HistorySyncOnDemandRequest.$Shape
 			}
@@ -10368,9 +15168,14 @@ export namespace waproto {
 					oldestMsgTimestampMs?: (number|Long|null)
 					accountLid?: (string|null)
 					supportInlineResponse?: (boolean|null)
+					mode?: (waproto.Message.PeerDataOperationRequestMessage.HistorySyncOnDemandRequest.Mode|null)
 					$unknowns?: Uint8Array[]
 				}
 				type $Shape = waproto.Message.PeerDataOperationRequestMessage.HistorySyncOnDemandRequest.$Properties
+				enum Mode {
+					MODE_UNSPECIFIED = 0,
+					INITIAL_REVERSE_HISTORY = 1
+				}
 			}
 			interface IRequestUrlPreview extends waproto.Message.PeerDataOperationRequestMessage.RequestUrlPreview.$Properties {
 			}
@@ -10433,6 +15238,7 @@ export namespace waproto {
 			requestId?: (string|null)
 			businessProduct?: (string|null)
 			opaqueClientData?: (Uint8Array|null)
+			connection?: (waproto.Message.CoexConnectionDescriptor.$Properties|null)
 			static encode(m: waproto.Message.FullHistorySyncOnDemandRequestMetadata.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.FullHistorySyncOnDemandRequestMetadata & waproto.Message.FullHistorySyncOnDemandRequestMetadata.$Shape
 		}
@@ -10441,9 +15247,28 @@ export namespace waproto {
 				requestId?: (string|null)
 				businessProduct?: (string|null)
 				opaqueClientData?: (Uint8Array|null)
+				connection?: (waproto.Message.CoexConnectionDescriptor.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.Message.FullHistorySyncOnDemandRequestMetadata.$Properties
+		}
+		interface ICoexConnectionDescriptor extends waproto.Message.CoexConnectionDescriptor.$Properties {
+		}
+		class CoexConnectionDescriptor {
+			constructor(p?: waproto.Message.CoexConnectionDescriptor.$Properties)
+			$unknowns?: Uint8Array[]
+			providerId?: (number|Long|null)
+			product?: (string|null)
+			static encode(m: waproto.Message.CoexConnectionDescriptor.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.CoexConnectionDescriptor & waproto.Message.CoexConnectionDescriptor.$Shape
+		}
+		namespace CoexConnectionDescriptor {
+			interface $Properties {
+				providerId?: (number|Long|null)
+				product?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.Message.CoexConnectionDescriptor.$Properties
 		}
 		interface IAppStateFatalExceptionNotification extends waproto.Message.AppStateFatalExceptionNotification.$Properties {
 		}
@@ -10462,6 +15287,63 @@ export namespace waproto {
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.Message.AppStateFatalExceptionNotification.$Properties
+		}
+		interface ISharedDeviceContactHashKeyRequest extends waproto.Message.SharedDeviceContactHashKeyRequest.$Properties {
+		}
+		class SharedDeviceContactHashKeyRequest {
+			constructor(p?: waproto.Message.SharedDeviceContactHashKeyRequest.$Properties)
+			$unknowns?: Uint8Array[]
+			knownEpoch?: (number|null)
+			static encode(m: waproto.Message.SharedDeviceContactHashKeyRequest.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.SharedDeviceContactHashKeyRequest & waproto.Message.SharedDeviceContactHashKeyRequest.$Shape
+		}
+		namespace SharedDeviceContactHashKeyRequest {
+			interface $Properties {
+				knownEpoch?: (number|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.Message.SharedDeviceContactHashKeyRequest.$Properties
+		}
+		interface ISharedDeviceContactHashKeyShare extends waproto.Message.SharedDeviceContactHashKeyShare.$Properties {
+		}
+		class SharedDeviceContactHashKeyShare {
+			constructor(p?: waproto.Message.SharedDeviceContactHashKeyShare.$Properties)
+			$unknowns?: Uint8Array[]
+			keys: waproto.Message.SharedDeviceContactHashKey.$Properties[]
+			static encode(m: waproto.Message.SharedDeviceContactHashKeyShare.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.SharedDeviceContactHashKeyShare & waproto.Message.SharedDeviceContactHashKeyShare.$Shape
+		}
+		namespace SharedDeviceContactHashKeyShare {
+			interface $Properties {
+				keys?: (waproto.Message.SharedDeviceContactHashKey.$Properties[]|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.Message.SharedDeviceContactHashKeyShare.$Properties
+		}
+		interface ISharedDeviceContactHashKey extends waproto.Message.SharedDeviceContactHashKey.$Properties {
+		}
+		class SharedDeviceContactHashKey {
+			constructor(p?: waproto.Message.SharedDeviceContactHashKey.$Properties)
+			$unknowns?: Uint8Array[]
+			epoch?: (number|null)
+			kind?: (waproto.Message.SharedDeviceContactHashKey.Kind|null)
+			keyData?: (Uint8Array|null)
+			static encode(m: waproto.Message.SharedDeviceContactHashKey.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.SharedDeviceContactHashKey & waproto.Message.SharedDeviceContactHashKey.$Shape
+		}
+		namespace SharedDeviceContactHashKey {
+			interface $Properties {
+				epoch?: (number|null)
+				kind?: (waproto.Message.SharedDeviceContactHashKey.Kind|null)
+				keyData?: (Uint8Array|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.Message.SharedDeviceContactHashKey.$Properties
+			enum Kind {
+				UNKNOWN = 0,
+				LID = 1,
+				PHONE_NUMBER = 2
+			}
 		}
 		interface IAppStateSyncKeyRequest extends waproto.Message.AppStateSyncKeyRequest.$Properties {
 		}
@@ -10657,6 +15539,24 @@ export namespace waproto {
 				NON_EMPTY = 1
 			}
 		}
+		interface IChatAnimatedWallpaper extends waproto.Message.ChatAnimatedWallpaper.$Properties {
+		}
+		class ChatAnimatedWallpaper {
+			constructor(p?: waproto.Message.ChatAnimatedWallpaper.$Properties)
+			$unknowns?: Uint8Array[]
+			animatedWallpaperId?: (string|null)
+			dimLevel?: (number|null)
+			static encode(m: waproto.Message.ChatAnimatedWallpaper.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ChatAnimatedWallpaper & waproto.Message.ChatAnimatedWallpaper.$Shape
+		}
+		namespace ChatAnimatedWallpaper {
+			interface $Properties {
+				animatedWallpaperId?: (string|null)
+				dimLevel?: (number|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.Message.ChatAnimatedWallpaper.$Properties
+		}
 		interface IChatStockImageWallpaper extends waproto.Message.ChatStockImageWallpaper.$Properties {
 		}
 		class ChatStockImageWallpaper {
@@ -10680,17 +15580,21 @@ export namespace waproto {
 		class ChatSolidColorWallpaper {
 			constructor(p?: waproto.Message.ChatSolidColorWallpaper.$Properties)
 			$unknowns?: Uint8Array[]
-			colorLight?: (string|null)
-			colorDark?: (string|null)
+			backgroundLightArgb?: (number|null)
+			backgroundDarkArgb?: (number|null)
 			isDoodleEnabled?: (boolean|null)
+			doodleLightArgb?: (number|null)
+			doodleDarkArgb?: (number|null)
 			static encode(m: waproto.Message.ChatSolidColorWallpaper.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ChatSolidColorWallpaper & waproto.Message.ChatSolidColorWallpaper.$Shape
 		}
 		namespace ChatSolidColorWallpaper {
 			interface $Properties {
-				colorLight?: (string|null)
-				colorDark?: (string|null)
+				backgroundLightArgb?: (number|null)
+				backgroundDarkArgb?: (number|null)
 				isDoodleEnabled?: (boolean|null)
+				doodleLightArgb?: (number|null)
+				doodleDarkArgb?: (number|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.Message.ChatSolidColorWallpaper.$Properties
@@ -10747,6 +15651,8 @@ export namespace waproto {
 			solidColor?: (waproto.Message.ChatSolidColorWallpaper.$Properties|null)
 			stockImage?: (waproto.Message.ChatStockImageWallpaper.$Properties|null)
 			customImage?: (waproto.Message.ChatCustomImageWallpaper.$Properties|null)
+			animatedWallpaper?: (waproto.Message.ChatAnimatedWallpaper.$Properties|null)
+			wallpaper?: ("defaultWallpaper"|"solidColor"|"stockImage"|"customImage"|"animatedWallpaper")
 			static encode(m: waproto.Message.ChatThemeSetting.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ChatThemeSetting & waproto.Message.ChatThemeSetting.$Shape
 		}
@@ -10759,9 +15665,23 @@ export namespace waproto {
 				solidColor?: (waproto.Message.ChatSolidColorWallpaper.$Properties|null)
 				stockImage?: (waproto.Message.ChatStockImageWallpaper.$Properties|null)
 				customImage?: (waproto.Message.ChatCustomImageWallpaper.$Properties|null)
+				animatedWallpaper?: (waproto.Message.ChatAnimatedWallpaper.$Properties|null)
+				wallpaper?: ("defaultWallpaper"|"solidColor"|"stockImage"|"customImage"|"animatedWallpaper")
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.ChatThemeSetting.$Properties
+			type $Shape = {
+  settingTimestampMs?: number|Long|null
+  clearTheme?: boolean|null
+  colorSchemeId?: string|null
+  defaultWallpaper?: waproto.Message.ChatDefaultWallpaper.$Shape|null
+  solidColor?: waproto.Message.ChatSolidColorWallpaper.$Shape|null
+  stockImage?: waproto.Message.ChatStockImageWallpaper.$Shape|null
+  customImage?: waproto.Message.ChatCustomImageWallpaper.$Shape|null
+  animatedWallpaper?: waproto.Message.ChatAnimatedWallpaper.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ wallpaper?: undefined; defaultWallpaper?: null; solidColor?: null; stockImage?: null; customImage?: null; animatedWallpaper?: null }|{ wallpaper?: "defaultWallpaper"; defaultWallpaper: waproto.Message.ChatDefaultWallpaper.$Shape; solidColor?: null; stockImage?: null; customImage?: null; animatedWallpaper?: null }|{ wallpaper?: "solidColor"; defaultWallpaper?: null; solidColor: waproto.Message.ChatSolidColorWallpaper.$Shape; stockImage?: null; customImage?: null; animatedWallpaper?: null }|{ wallpaper?: "stockImage"; defaultWallpaper?: null; solidColor?: null; stockImage: waproto.Message.ChatStockImageWallpaper.$Shape; customImage?: null; animatedWallpaper?: null }|{ wallpaper?: "customImage"; defaultWallpaper?: null; solidColor?: null; stockImage?: null; customImage: waproto.Message.ChatCustomImageWallpaper.$Shape; animatedWallpaper?: null }|{ wallpaper?: "animatedWallpaper"; defaultWallpaper?: null; solidColor?: null; stockImage?: null; customImage?: null; animatedWallpaper: waproto.Message.ChatAnimatedWallpaper.$Shape })
+)
 		}
 		interface IMarkAsVerifiedAction extends waproto.Message.MarkAsVerifiedAction.$Properties {
 		}
@@ -10820,6 +15740,13 @@ export namespace waproto {
 			aiMetadataOperation?: (waproto.AIMetadataOperation.$Properties|null)
 			markAsVerifiedAction?: (waproto.Message.MarkAsVerifiedAction.$Properties|null)
 			coexStateSync?: (waproto.CoexStateSync.$Properties|null)
+			acp2Setting?: (waproto.ACP2Setting.$Properties|null)
+			sharedDeviceContactHashKeyShare?: (waproto.Message.SharedDeviceContactHashKeyShare.$Properties|null)
+			sharedDeviceContactHashKeyRequest?: (waproto.Message.SharedDeviceContactHashKeyRequest.$Properties|null)
+			additionalPromptIds: string[]
+			groupRootKeyRequest?: (waproto.GroupRootKeyRequest.$Properties|null)
+			membershipFormKeyFingerprintVerification?: (waproto.MembershipFormKeyFingerprintVerification.$Properties|null)
+			groupRootKeyShare?: (waproto.GroupRootKeyShare.$Properties|null)
 			static encode(m: waproto.Message.ProtocolMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ProtocolMessage & waproto.Message.ProtocolMessage.$Shape
 		}
@@ -10855,9 +15782,55 @@ export namespace waproto {
 				aiMetadataOperation?: (waproto.AIMetadataOperation.$Properties|null)
 				markAsVerifiedAction?: (waproto.Message.MarkAsVerifiedAction.$Properties|null)
 				coexStateSync?: (waproto.CoexStateSync.$Properties|null)
+				acp2Setting?: (waproto.ACP2Setting.$Properties|null)
+				sharedDeviceContactHashKeyShare?: (waproto.Message.SharedDeviceContactHashKeyShare.$Properties|null)
+				sharedDeviceContactHashKeyRequest?: (waproto.Message.SharedDeviceContactHashKeyRequest.$Properties|null)
+				additionalPromptIds?: (string[]|null)
+				groupRootKeyRequest?: (waproto.GroupRootKeyRequest.$Properties|null)
+				membershipFormKeyFingerprintVerification?: (waproto.MembershipFormKeyFingerprintVerification.$Properties|null)
+				groupRootKeyShare?: (waproto.GroupRootKeyShare.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.ProtocolMessage.$Properties
+			type $Shape = {
+  key?: waproto.MessageKey.$Shape|null
+  type?: waproto.Message.ProtocolMessage.Type|null
+  ephemeralExpiration?: number|null
+  ephemeralSettingTimestamp?: number|Long|null
+  historySyncNotification?: waproto.Message.HistorySyncNotification.$Shape|null
+  appStateSyncKeyShare?: waproto.Message.AppStateSyncKeyShare.$Shape|null
+  appStateSyncKeyRequest?: waproto.Message.AppStateSyncKeyRequest.$Shape|null
+  initialSecurityNotificationSettingSync?: waproto.Message.InitialSecurityNotificationSettingSync.$Shape|null
+  appStateFatalExceptionNotification?: waproto.Message.AppStateFatalExceptionNotification.$Shape|null
+  disappearingMode?: waproto.DisappearingMode.$Shape|null
+  editedMessage?: waproto.Message.$Shape|null
+  timestampMs?: number|Long|null
+  peerDataOperationRequestMessage?: waproto.Message.PeerDataOperationRequestMessage.$Shape|null
+  peerDataOperationRequestResponseMessage?: waproto.Message.PeerDataOperationRequestResponseMessage.$Shape|null
+  botFeedbackMessage?: waproto.BotFeedbackMessage.$Shape|null
+  invokerJid?: string|null
+  requestWelcomeMessageMetadata?: waproto.Message.RequestWelcomeMessageMetadata.$Shape|null
+  mediaNotifyMessage?: waproto.MediaNotifyMessage.$Shape|null
+  cloudApiThreadControlNotification?: waproto.Message.CloudAPIThreadControlNotification.$Shape|null
+  lidMigrationMappingSyncMessage?: waproto.LIDMigrationMappingSyncMessage.$Shape|null
+  limitSharing?: waproto.LimitSharing.$Shape|null
+  aiPsiMetadata?: Uint8Array|null
+  aiQueryFanout?: waproto.AIQueryFanout.$Shape|null
+  memberLabel?: waproto.MemberLabel.$Shape|null
+  aiMediaCollectionMessage?: waproto.AIMediaCollectionMessage.$Shape|null
+  afterReadDuration?: number|null
+  chatThemeSetting?: waproto.Message.ChatThemeSetting.$Shape|null
+  aiMetadataOperation?: waproto.AIMetadataOperation.$Shape|null
+  markAsVerifiedAction?: waproto.Message.MarkAsVerifiedAction.$Shape|null
+  coexStateSync?: waproto.CoexStateSync.$Shape|null
+  acp2Setting?: waproto.ACP2Setting.$Shape|null
+  sharedDeviceContactHashKeyShare?: waproto.Message.SharedDeviceContactHashKeyShare.$Shape|null
+  sharedDeviceContactHashKeyRequest?: waproto.Message.SharedDeviceContactHashKeyRequest.$Shape|null
+  additionalPromptIds?: string[]|null
+  groupRootKeyRequest?: waproto.GroupRootKeyRequest.$Shape|null
+  membershipFormKeyFingerprintVerification?: waproto.MembershipFormKeyFingerprintVerification.$Shape|null
+  groupRootKeyShare?: waproto.GroupRootKeyShare.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 			enum Type {
 				REVOKE = 0,
 				EPHEMERAL_SETTING = 3,
@@ -10890,7 +15863,13 @@ export namespace waproto {
 				CHAT_THEME_SETTING = 34,
 				AI_METADATA_OPERATION = 35,
 				MARK_AS_VERIFIED_ACTION = 36,
-				COEX_STATE_SYNC = 37
+				COEX_STATE_SYNC = 37,
+				ACP2_SETTING = 39,
+				SHARED_DEVICE_CONTACT_HASH_KEY_SHARE = 40,
+				SHARED_DEVICE_CONTACT_HASH_KEY_REQUEST = 41,
+				GROUP_ROOT_KEY_REQUEST = 42,
+				MEMBERSHIP_FORM_KEY_FINGERPRINT_VERIFICATION = 43,
+				GROUP_ROOT_KEY_SHARE = 44
 			}
 		}
 		interface ICloudAPIThreadControlNotification extends waproto.Message.CloudAPIThreadControlNotification.$Properties {
@@ -10977,6 +15956,7 @@ export namespace waproto {
 			deeplinkPayload?: (string|null)
 			messageContextInfo?: (waproto.MessageContextInfo.$Properties|null)
 			callEntryPoint?: (number|null)
+			callReason?: (string|null)
 			static encode(m: waproto.Message.Call.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.Call & waproto.Message.Call.$Shape
 		}
@@ -10993,9 +15973,24 @@ export namespace waproto {
 				deeplinkPayload?: (string|null)
 				messageContextInfo?: (waproto.MessageContextInfo.$Properties|null)
 				callEntryPoint?: (number|null)
+				callReason?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.Call.$Properties
+			type $Shape = {
+  callKey?: Uint8Array|null
+  conversionSource?: string|null
+  conversionData?: Uint8Array|null
+  conversionDelaySeconds?: number|null
+  ctwaSignals?: string|null
+  ctwaPayload?: Uint8Array|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  nativeFlowCallButtonPayload?: string|null
+  deeplinkPayload?: string|null
+  messageContextInfo?: waproto.MessageContextInfo.$Shape|null
+  callEntryPoint?: number|null
+  callReason?: string|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IVideoMessage extends waproto.Message.VideoMessage.$Properties {
 		}
@@ -11032,6 +16027,8 @@ export namespace waproto {
 			motionPhotoPresentationOffsetMs?: (number|Long|null)
 			metadataUrl?: (string|null)
 			videoSourceType?: (waproto.Message.VideoMessage.VideoSourceType|null)
+			dashManifestUrl?: (string|null)
+			smartThumbnailTs?: (number|Long|null)
 			static encode(m: waproto.Message.VideoMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.VideoMessage & waproto.Message.VideoMessage.$Shape
 		}
@@ -11067,9 +16064,45 @@ export namespace waproto {
 				motionPhotoPresentationOffsetMs?: (number|Long|null)
 				metadataUrl?: (string|null)
 				videoSourceType?: (waproto.Message.VideoMessage.VideoSourceType|null)
+				dashManifestUrl?: (string|null)
+				smartThumbnailTs?: (number|Long|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.VideoMessage.$Properties
+			type $Shape = {
+  url?: string|null
+  mimetype?: string|null
+  fileSha256?: Uint8Array|null
+  fileLength?: number|Long|null
+  seconds?: number|null
+  mediaKey?: Uint8Array|null
+  caption?: string|null
+  gifPlayback?: boolean|null
+  height?: number|null
+  width?: number|null
+  fileEncSha256?: Uint8Array|null
+  interactiveAnnotations?: waproto.InteractiveAnnotation.$Shape[]|null
+  directPath?: string|null
+  mediaKeyTimestamp?: number|Long|null
+  jpegThumbnail?: Uint8Array|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  streamingSidecar?: Uint8Array|null
+  gifAttribution?: waproto.Message.VideoMessage.Attribution|null
+  viewOnce?: boolean|null
+  thumbnailDirectPath?: string|null
+  thumbnailSha256?: Uint8Array|null
+  thumbnailEncSha256?: Uint8Array|null
+  staticUrl?: string|null
+  annotations?: waproto.InteractiveAnnotation.$Shape[]|null
+  accessibilityLabel?: string|null
+  processedVideos?: waproto.ProcessedVideo.$Shape[]|null
+  externalShareFullVideoDurationInSeconds?: number|null
+  motionPhotoPresentationOffsetMs?: number|Long|null
+  metadataUrl?: string|null
+  videoSourceType?: waproto.Message.VideoMessage.VideoSourceType|null
+  dashManifestUrl?: string|null
+  smartThumbnailTs?: number|Long|null
+  $unknowns?: Uint8Array[]
+}
 			enum VideoSourceType {
 				USER_VIDEO = 0,
 				AI_GENERATED = 1
@@ -11079,6 +16112,106 @@ export namespace waproto {
 				GIPHY = 1,
 				TENOR = 2,
 				KLIPY = 3
+			}
+		}
+		interface IMusicMessage extends waproto.Message.MusicMessage.$Properties {
+		}
+		class MusicMessage {
+			constructor(p?: waproto.Message.MusicMessage.$Properties)
+			$unknowns?: Uint8Array[]
+			embeddedMusic?: (waproto.EmbeddedMusic.$Properties|null)
+			songUri?: (string|null)
+			artworkUri?: (string|null)
+			style?: (number|null)
+			contextInfo?: (waproto.ContextInfo.$Properties|null)
+			lyrics?: (waproto.Message.MusicMessage.Lyrics.$Properties|null)
+			static encode(m: waproto.Message.MusicMessage.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.MusicMessage & waproto.Message.MusicMessage.$Shape
+		}
+		namespace MusicMessage {
+			interface $Properties {
+				embeddedMusic?: (waproto.EmbeddedMusic.$Properties|null)
+				songUri?: (string|null)
+				artworkUri?: (string|null)
+				style?: (number|null)
+				contextInfo?: (waproto.ContextInfo.$Properties|null)
+				lyrics?: (waproto.Message.MusicMessage.Lyrics.$Properties|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  embeddedMusic?: waproto.EmbeddedMusic.$Shape|null
+  songUri?: string|null
+  artworkUri?: string|null
+  style?: number|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  lyrics?: waproto.Message.MusicMessage.Lyrics.$Shape|null
+  $unknowns?: Uint8Array[]
+}
+			enum MusicMessageStyle {
+				UNKNOWN = 0,
+				VINYL = 1,
+				MESSAGE_BUBBLE = 2,
+				LYRICS = 3
+			}
+			interface ILyrics extends waproto.Message.MusicMessage.Lyrics.$Properties {
+			}
+			class Lyrics {
+				constructor(p?: waproto.Message.MusicMessage.Lyrics.$Properties)
+				$unknowns?: Uint8Array[]
+				lines: waproto.Message.MusicMessage.Lyrics.Line.$Properties[]
+				static encode(m: waproto.Message.MusicMessage.Lyrics.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.MusicMessage.Lyrics & waproto.Message.MusicMessage.Lyrics.$Shape
+			}
+			namespace Lyrics {
+				interface $Properties {
+					lines?: (waproto.Message.MusicMessage.Lyrics.Line.$Properties[]|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.Message.MusicMessage.Lyrics.$Properties
+				interface ILine extends waproto.Message.MusicMessage.Lyrics.Line.$Properties {
+				}
+				class Line {
+					constructor(p?: waproto.Message.MusicMessage.Lyrics.Line.$Properties)
+					$unknowns?: Uint8Array[]
+					startTimeInMs?: (number|Long|null)
+					endTimeInMs?: (number|Long|null)
+					text?: (string|null)
+					wordOffsets: waproto.Message.MusicMessage.Lyrics.Line.WordOffset.$Properties[]
+					static encode(m: waproto.Message.MusicMessage.Lyrics.Line.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.MusicMessage.Lyrics.Line & waproto.Message.MusicMessage.Lyrics.Line.$Shape
+				}
+				namespace Line {
+					interface $Properties {
+						startTimeInMs?: (number|Long|null)
+						endTimeInMs?: (number|Long|null)
+						text?: (string|null)
+						wordOffsets?: (waproto.Message.MusicMessage.Lyrics.Line.WordOffset.$Properties[]|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.Message.MusicMessage.Lyrics.Line.$Properties
+					interface IWordOffset extends waproto.Message.MusicMessage.Lyrics.Line.WordOffset.$Properties {
+					}
+					class WordOffset {
+						constructor(p?: waproto.Message.MusicMessage.Lyrics.Line.WordOffset.$Properties)
+						$unknowns?: Uint8Array[]
+						startIndex?: (number|null)
+						endIndex?: (number|null)
+						startOffsetMs?: (number|Long|null)
+						endOffsetMs?: (number|Long|null)
+						static encode(m: waproto.Message.MusicMessage.Lyrics.Line.WordOffset.$Properties, w?: PbWriter): PbWriter
+						static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.MusicMessage.Lyrics.Line.WordOffset & waproto.Message.MusicMessage.Lyrics.Line.WordOffset.$Shape
+					}
+					namespace WordOffset {
+						interface $Properties {
+							startIndex?: (number|null)
+							endIndex?: (number|null)
+							startOffsetMs?: (number|Long|null)
+							endOffsetMs?: (number|Long|null)
+							$unknowns?: Uint8Array[]
+						}
+						type $Shape = waproto.Message.MusicMessage.Lyrics.Line.WordOffset.$Properties
+					}
+				}
 			}
 		}
 		interface IAudioMessage extends waproto.Message.AudioMessage.$Properties {
@@ -11125,7 +16258,25 @@ export namespace waproto {
 				accessibilityLabel?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.AudioMessage.$Properties
+			type $Shape = {
+  url?: string|null
+  mimetype?: string|null
+  fileSha256?: Uint8Array|null
+  fileLength?: number|Long|null
+  seconds?: number|null
+  ptt?: boolean|null
+  mediaKey?: Uint8Array|null
+  fileEncSha256?: Uint8Array|null
+  directPath?: string|null
+  mediaKeyTimestamp?: number|Long|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  streamingSidecar?: Uint8Array|null
+  waveform?: Uint8Array|null
+  backgroundArgb?: number|null
+  viewOnce?: boolean|null
+  accessibilityLabel?: string|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IDocumentMessage extends waproto.Message.DocumentMessage.$Properties {
 		}
@@ -11153,6 +16304,7 @@ export namespace waproto {
 			thumbnailWidth?: (number|null)
 			caption?: (string|null)
 			accessibilityLabel?: (string|null)
+			qrUrl?: (string|null)
 			static encode(m: waproto.Message.DocumentMessage.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.DocumentMessage & waproto.Message.DocumentMessage.$Shape
 		}
@@ -11179,9 +16331,34 @@ export namespace waproto {
 				thumbnailWidth?: (number|null)
 				caption?: (string|null)
 				accessibilityLabel?: (string|null)
+				qrUrl?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.DocumentMessage.$Properties
+			type $Shape = {
+  url?: string|null
+  mimetype?: string|null
+  title?: string|null
+  fileSha256?: Uint8Array|null
+  fileLength?: number|Long|null
+  pageCount?: number|null
+  mediaKey?: Uint8Array|null
+  fileName?: string|null
+  fileEncSha256?: Uint8Array|null
+  directPath?: string|null
+  mediaKeyTimestamp?: number|Long|null
+  contactVcard?: boolean|null
+  thumbnailDirectPath?: string|null
+  thumbnailSha256?: Uint8Array|null
+  thumbnailEncSha256?: Uint8Array|null
+  jpegThumbnail?: Uint8Array|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  thumbnailHeight?: number|null
+  thumbnailWidth?: number|null
+  caption?: string|null
+  accessibilityLabel?: string|null
+  qrUrl?: string|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IExtendedTextMessage extends waproto.Message.ExtendedTextMessage.$Properties {
 		}
@@ -11259,7 +16436,41 @@ export namespace waproto {
 				paymentExtendedMetadata?: (waproto.Message.PaymentExtendedMetadata.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.ExtendedTextMessage.$Properties
+			type $Shape = {
+  text?: string|null
+  matchedText?: string|null
+  description?: string|null
+  title?: string|null
+  textArgb?: number|null
+  backgroundArgb?: number|null
+  font?: waproto.Message.ExtendedTextMessage.FontType|null
+  previewType?: waproto.Message.ExtendedTextMessage.PreviewType|null
+  jpegThumbnail?: Uint8Array|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  doNotPlayInline?: boolean|null
+  thumbnailDirectPath?: string|null
+  thumbnailSha256?: Uint8Array|null
+  thumbnailEncSha256?: Uint8Array|null
+  mediaKey?: Uint8Array|null
+  mediaKeyTimestamp?: number|Long|null
+  thumbnailHeight?: number|null
+  thumbnailWidth?: number|null
+  inviteLinkGroupType?: waproto.Message.ExtendedTextMessage.InviteLinkGroupType|null
+  inviteLinkParentGroupSubjectV2?: string|null
+  inviteLinkParentGroupThumbnailV2?: Uint8Array|null
+  inviteLinkGroupTypeV2?: waproto.Message.ExtendedTextMessage.InviteLinkGroupType|null
+  viewOnce?: boolean|null
+  videoHeight?: number|null
+  videoWidth?: number|null
+  faviconMmsMetadata?: waproto.Message.MMSThumbnailMetadata.$Shape|null
+  linkPreviewMetadata?: waproto.Message.LinkPreviewMetadata.$Shape|null
+  paymentLinkMetadata?: waproto.Message.PaymentLinkMetadata.$Shape|null
+  endCardTiles?: waproto.Message.VideoEndCard.$Shape[]|null
+  videoContentUrl?: string|null
+  musicMetadata?: waproto.EmbeddedMusic.$Shape|null
+  paymentExtendedMetadata?: waproto.Message.PaymentExtendedMetadata.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 			enum InviteLinkGroupType {
 				DEFAULT = 0,
 				PARENT = 1,
@@ -11299,6 +16510,7 @@ export namespace waproto {
 			videoContentUrl?: (string|null)
 			musicMetadata?: (waproto.EmbeddedMusic.$Properties|null)
 			videoContentCaption?: (string|null)
+			videoId?: (string|null)
 			static encode(m: waproto.Message.LinkPreviewMetadata.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.LinkPreviewMetadata & waproto.Message.LinkPreviewMetadata.$Shape
 		}
@@ -11313,6 +16525,7 @@ export namespace waproto {
 				videoContentUrl?: (string|null)
 				musicMetadata?: (waproto.EmbeddedMusic.$Properties|null)
 				videoContentCaption?: (string|null)
+				videoId?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.Message.LinkPreviewMetadata.$Properties
@@ -11497,7 +16710,21 @@ export namespace waproto {
 				contextInfo?: (waproto.ContextInfo.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.LocationMessage.$Properties
+			type $Shape = {
+  degreesLatitude?: number|null
+  degreesLongitude?: number|null
+  name?: string|null
+  address?: string|null
+  url?: string|null
+  isLive?: boolean|null
+  accuracyInMeters?: number|null
+  speedInMps?: number|null
+  degreesClockwiseFromMagneticNorth?: number|null
+  comment?: string|null
+  jpegThumbnail?: Uint8Array|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IStatusNotificationMessage extends waproto.Message.StatusNotificationMessage.$Properties {
 		}
@@ -11522,7 +16749,8 @@ export namespace waproto {
 				UNKNOWN = 0,
 				STATUS_ADD_YOURS = 1,
 				STATUS_RESHARE = 2,
-				STATUS_QUESTION_ANSWER_RESHARE = 3
+				STATUS_QUESTION_ANSWER_RESHARE = 3,
+				STATUS_GROUP_STATUS_REPLY = 4
 			}
 		}
 		interface IContactMessage extends waproto.Message.ContactMessage.$Properties {
@@ -11545,7 +16773,13 @@ export namespace waproto {
 				isSelfContact?: (boolean|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.ContactMessage.$Properties
+			type $Shape = {
+  displayName?: string|null
+  vcard?: string|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  isSelfContact?: boolean|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IInvoiceMessage extends waproto.Message.InvoiceMessage.$Properties {
 		}
@@ -11657,7 +16891,39 @@ export namespace waproto {
 				qrUrl?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.Message.ImageMessage.$Properties
+			type $Shape = {
+  url?: string|null
+  mimetype?: string|null
+  caption?: string|null
+  fileSha256?: Uint8Array|null
+  fileLength?: number|Long|null
+  height?: number|null
+  width?: number|null
+  mediaKey?: Uint8Array|null
+  fileEncSha256?: Uint8Array|null
+  interactiveAnnotations?: waproto.InteractiveAnnotation.$Shape[]|null
+  directPath?: string|null
+  mediaKeyTimestamp?: number|Long|null
+  jpegThumbnail?: Uint8Array|null
+  contextInfo?: waproto.ContextInfo.$Shape|null
+  firstScanSidecar?: Uint8Array|null
+  firstScanLength?: number|null
+  experimentGroupId?: number|null
+  scansSidecar?: Uint8Array|null
+  scanLengths?: number[]|null
+  midQualityFileSha256?: Uint8Array|null
+  midQualityFileEncSha256?: Uint8Array|null
+  viewOnce?: boolean|null
+  thumbnailDirectPath?: string|null
+  thumbnailSha256?: Uint8Array|null
+  thumbnailEncSha256?: Uint8Array|null
+  staticUrl?: string|null
+  annotations?: waproto.InteractiveAnnotation.$Shape[]|null
+  imageSourceType?: waproto.Message.ImageMessage.ImageSourceType|null
+  accessibilityLabel?: string|null
+  qrUrl?: string|null
+  $unknowns?: Uint8Array[]
+}
 			enum ImageSourceType {
 				USER_IMAGE = 0,
 				AI_GENERATED = 1,
@@ -11750,13 +17016,24 @@ export namespace waproto {
 			legacyMessage?: (waproto.LegacyMessage.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.MessageAddOn.$Properties
+		type $Shape = {
+  messageAddOnType?: waproto.MessageAddOn.MessageAddOnType|null
+  messageAddOn?: waproto.Message.$Shape|null
+  senderTimestampMs?: number|Long|null
+  serverTimestampMs?: number|Long|null
+  status?: waproto.WebMessageInfo.Status|null
+  addOnContextInfo?: waproto.MessageAddOnContextInfo.$Shape|null
+  messageAddOnKey?: waproto.MessageKey.$Shape|null
+  legacyMessage?: waproto.LegacyMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		enum MessageAddOnType {
 			UNDEFINED = 0,
 			REACTION = 1,
 			EVENT_RESPONSE = 2,
 			POLL_UPDATE = 3,
-			PIN_IN_CHAT = 4
+			PIN_IN_CHAT = 4,
+			REQUEST_LOCATION_UPDATE = 5
 		}
 	}
 	interface IMessageAddOnContextInfo extends waproto.MessageAddOnContextInfo.$Properties {
@@ -11776,6 +17053,282 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.MessageAddOnContextInfo.$Properties
+	}
+	interface IMessageApplication extends waproto.MessageApplication.$Properties {
+	}
+	class MessageApplication {
+		constructor(p?: waproto.MessageApplication.$Properties)
+		$unknowns?: Uint8Array[]
+		payload?: (waproto.MessageApplication.Payload.$Properties|null)
+		metadata?: (waproto.MessageApplication.Metadata.$Properties|null)
+		static encode(m: waproto.MessageApplication.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageApplication & waproto.MessageApplication.$Shape
+	}
+	namespace MessageApplication {
+		interface $Properties {
+			payload?: (waproto.MessageApplication.Payload.$Properties|null)
+			metadata?: (waproto.MessageApplication.Metadata.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  payload?: waproto.MessageApplication.Payload.$Shape|null
+  metadata?: waproto.MessageApplication.Metadata.$Shape|null
+  $unknowns?: Uint8Array[]
+}
+		interface IMetadata extends waproto.MessageApplication.Metadata.$Properties {
+		}
+		class Metadata {
+			constructor(p?: waproto.MessageApplication.Metadata.$Properties)
+			$unknowns?: Uint8Array[]
+			forwardingScore?: (number|null)
+			isForwarded?: (boolean|null)
+			businessMetadata?: (waproto.SubProtocol.$Properties|null)
+			frankingKey?: (Uint8Array|null)
+			frankingVersion?: (number|null)
+			quotedMessage?: (waproto.MessageApplication.Metadata.QuotedMessage.$Properties|null)
+			threadType?: (waproto.MESSAGE_APPLICATION_METADATA_THREAD_TYPE|null)
+			readonlyMetadataDataclass?: (string|null)
+			groupId?: (string|null)
+			groupSize?: (number|null)
+			groupIndex?: (number|null)
+			botResponseId?: (string|null)
+			collapsibleId?: (string|null)
+			secondaryOtid?: (string|null)
+			chatEphemeralSetting?: (waproto.MessageApplication.EphemeralSetting.$Properties|null)
+			ephemeralSettingList?: (waproto.MessageApplication.Metadata.EphemeralSettingMap.$Properties|null)
+			ephemeralSharedSecret?: (Uint8Array|null)
+			ephemeral?: ("chatEphemeralSetting"|"ephemeralSettingList"|"ephemeralSharedSecret")
+			static encode(m: waproto.MessageApplication.Metadata.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageApplication.Metadata & waproto.MessageApplication.Metadata.$Shape
+		}
+		namespace Metadata {
+			interface $Properties {
+				forwardingScore?: (number|null)
+				isForwarded?: (boolean|null)
+				businessMetadata?: (waproto.SubProtocol.$Properties|null)
+				frankingKey?: (Uint8Array|null)
+				frankingVersion?: (number|null)
+				quotedMessage?: (waproto.MessageApplication.Metadata.QuotedMessage.$Properties|null)
+				threadType?: (waproto.MESSAGE_APPLICATION_METADATA_THREAD_TYPE|null)
+				readonlyMetadataDataclass?: (string|null)
+				groupId?: (string|null)
+				groupSize?: (number|null)
+				groupIndex?: (number|null)
+				botResponseId?: (string|null)
+				collapsibleId?: (string|null)
+				secondaryOtid?: (string|null)
+				chatEphemeralSetting?: (waproto.MessageApplication.EphemeralSetting.$Properties|null)
+				ephemeralSettingList?: (waproto.MessageApplication.Metadata.EphemeralSettingMap.$Properties|null)
+				ephemeralSharedSecret?: (Uint8Array|null)
+				ephemeral?: ("chatEphemeralSetting"|"ephemeralSettingList"|"ephemeralSharedSecret")
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  forwardingScore?: number|null
+  isForwarded?: boolean|null
+  businessMetadata?: waproto.SubProtocol.$Shape|null
+  frankingKey?: Uint8Array|null
+  frankingVersion?: number|null
+  quotedMessage?: waproto.MessageApplication.Metadata.QuotedMessage.$Shape|null
+  threadType?: waproto.MESSAGE_APPLICATION_METADATA_THREAD_TYPE|null
+  readonlyMetadataDataclass?: string|null
+  groupId?: string|null
+  groupSize?: number|null
+  groupIndex?: number|null
+  botResponseId?: string|null
+  collapsibleId?: string|null
+  secondaryOtid?: string|null
+  chatEphemeralSetting?: waproto.MessageApplication.EphemeralSetting.$Shape|null
+  ephemeralSettingList?: waproto.MessageApplication.Metadata.EphemeralSettingMap.$Shape|null
+  ephemeralSharedSecret?: Uint8Array|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ ephemeral?: undefined; chatEphemeralSetting?: null; ephemeralSettingList?: null; ephemeralSharedSecret?: null }|{ ephemeral?: "chatEphemeralSetting"; chatEphemeralSetting: waproto.MessageApplication.EphemeralSetting.$Shape; ephemeralSettingList?: null; ephemeralSharedSecret?: null }|{ ephemeral?: "ephemeralSettingList"; chatEphemeralSetting?: null; ephemeralSettingList: waproto.MessageApplication.Metadata.EphemeralSettingMap.$Shape; ephemeralSharedSecret?: null }|{ ephemeral?: "ephemeralSharedSecret"; chatEphemeralSetting?: null; ephemeralSettingList?: null; ephemeralSharedSecret: Uint8Array })
+)
+			interface IQuotedMessage extends waproto.MessageApplication.Metadata.QuotedMessage.$Properties {
+			}
+			class QuotedMessage {
+				constructor(p?: waproto.MessageApplication.Metadata.QuotedMessage.$Properties)
+				$unknowns?: Uint8Array[]
+				stanzaId?: (string|null)
+				remoteJid?: (string|null)
+				participant?: (string|null)
+				payload?: (waproto.MessageApplication.Payload.$Properties|null)
+				static encode(m: waproto.MessageApplication.Metadata.QuotedMessage.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageApplication.Metadata.QuotedMessage & waproto.MessageApplication.Metadata.QuotedMessage.$Shape
+			}
+			namespace QuotedMessage {
+				interface $Properties {
+					stanzaId?: (string|null)
+					remoteJid?: (string|null)
+					participant?: (string|null)
+					payload?: (waproto.MessageApplication.Payload.$Properties|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = {
+  stanzaId?: string|null
+  remoteJid?: string|null
+  participant?: string|null
+  payload?: waproto.MessageApplication.Payload.$Shape|null
+  $unknowns?: Uint8Array[]
+}
+			}
+			interface IEphemeralSettingMap extends waproto.MessageApplication.Metadata.EphemeralSettingMap.$Properties {
+			}
+			class EphemeralSettingMap {
+				constructor(p?: waproto.MessageApplication.Metadata.EphemeralSettingMap.$Properties)
+				$unknowns?: Uint8Array[]
+				chatJid?: (string|null)
+				ephemeralSetting?: (waproto.MessageApplication.EphemeralSetting.$Properties|null)
+				static encode(m: waproto.MessageApplication.Metadata.EphemeralSettingMap.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageApplication.Metadata.EphemeralSettingMap & waproto.MessageApplication.Metadata.EphemeralSettingMap.$Shape
+			}
+			namespace EphemeralSettingMap {
+				interface $Properties {
+					chatJid?: (string|null)
+					ephemeralSetting?: (waproto.MessageApplication.EphemeralSetting.$Properties|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.MessageApplication.Metadata.EphemeralSettingMap.$Properties
+			}
+		}
+		interface IPayload extends waproto.MessageApplication.Payload.$Properties {
+		}
+		class Payload {
+			constructor(p?: waproto.MessageApplication.Payload.$Properties)
+			$unknowns?: Uint8Array[]
+			coreContent?: (waproto.MessageApplication.Content.$Properties|null)
+			signal?: (waproto.MessageApplication.Signal.$Properties|null)
+			applicationData?: (waproto.MessageApplication.ApplicationData.$Properties|null)
+			subProtocol?: (waproto.MessageApplication.SubProtocolPayload.$Properties|null)
+			content?: ("coreContent"|"signal"|"applicationData"|"subProtocol")
+			static encode(m: waproto.MessageApplication.Payload.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageApplication.Payload & waproto.MessageApplication.Payload.$Shape
+		}
+		namespace Payload {
+			interface $Properties {
+				coreContent?: (waproto.MessageApplication.Content.$Properties|null)
+				signal?: (waproto.MessageApplication.Signal.$Properties|null)
+				applicationData?: (waproto.MessageApplication.ApplicationData.$Properties|null)
+				subProtocol?: (waproto.MessageApplication.SubProtocolPayload.$Properties|null)
+				content?: ("coreContent"|"signal"|"applicationData"|"subProtocol")
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  coreContent?: waproto.MessageApplication.Content.$Shape|null
+  signal?: waproto.MessageApplication.Signal.$Shape|null
+  applicationData?: waproto.MessageApplication.ApplicationData.$Shape|null
+  subProtocol?: waproto.MessageApplication.SubProtocolPayload.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ content?: undefined; coreContent?: null; signal?: null; applicationData?: null; subProtocol?: null }|{ content?: "coreContent"; coreContent: waproto.MessageApplication.Content.$Shape; signal?: null; applicationData?: null; subProtocol?: null }|{ content?: "signal"; coreContent?: null; signal: waproto.MessageApplication.Signal.$Shape; applicationData?: null; subProtocol?: null }|{ content?: "applicationData"; coreContent?: null; signal?: null; applicationData: waproto.MessageApplication.ApplicationData.$Shape; subProtocol?: null }|{ content?: "subProtocol"; coreContent?: null; signal?: null; applicationData?: null; subProtocol: waproto.MessageApplication.SubProtocolPayload.$Shape })
+)
+		}
+		interface ISubProtocolPayload extends waproto.MessageApplication.SubProtocolPayload.$Properties {
+		}
+		class SubProtocolPayload {
+			constructor(p?: waproto.MessageApplication.SubProtocolPayload.$Properties)
+			$unknowns?: Uint8Array[]
+			futureProof?: (waproto.FUTURE_PROOF_BEHAVIOR|null)
+			consumerMessage?: (waproto.SubProtocol.$Properties|null)
+			businessMessage?: (waproto.SubProtocol.$Properties|null)
+			paymentMessage?: (waproto.SubProtocol.$Properties|null)
+			multiDevice?: (waproto.SubProtocol.$Properties|null)
+			voip?: (waproto.SubProtocol.$Properties|null)
+			armadillo?: (waproto.SubProtocol.$Properties|null)
+			subProtocol?: ("consumerMessage"|"businessMessage"|"paymentMessage"|"multiDevice"|"voip"|"armadillo")
+			static encode(m: waproto.MessageApplication.SubProtocolPayload.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageApplication.SubProtocolPayload & waproto.MessageApplication.SubProtocolPayload.$Shape
+		}
+		namespace SubProtocolPayload {
+			interface $Properties {
+				futureProof?: (waproto.FUTURE_PROOF_BEHAVIOR|null)
+				consumerMessage?: (waproto.SubProtocol.$Properties|null)
+				businessMessage?: (waproto.SubProtocol.$Properties|null)
+				paymentMessage?: (waproto.SubProtocol.$Properties|null)
+				multiDevice?: (waproto.SubProtocol.$Properties|null)
+				voip?: (waproto.SubProtocol.$Properties|null)
+				armadillo?: (waproto.SubProtocol.$Properties|null)
+				subProtocol?: ("consumerMessage"|"businessMessage"|"paymentMessage"|"multiDevice"|"voip"|"armadillo")
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  futureProof?: waproto.FUTURE_PROOF_BEHAVIOR|null
+  consumerMessage?: waproto.SubProtocol.$Shape|null
+  businessMessage?: waproto.SubProtocol.$Shape|null
+  paymentMessage?: waproto.SubProtocol.$Shape|null
+  multiDevice?: waproto.SubProtocol.$Shape|null
+  voip?: waproto.SubProtocol.$Shape|null
+  armadillo?: waproto.SubProtocol.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ subProtocol?: undefined; consumerMessage?: null; businessMessage?: null; paymentMessage?: null; multiDevice?: null; voip?: null; armadillo?: null }|{ subProtocol?: "consumerMessage"; consumerMessage: waproto.SubProtocol.$Shape; businessMessage?: null; paymentMessage?: null; multiDevice?: null; voip?: null; armadillo?: null }|{ subProtocol?: "businessMessage"; consumerMessage?: null; businessMessage: waproto.SubProtocol.$Shape; paymentMessage?: null; multiDevice?: null; voip?: null; armadillo?: null }|{ subProtocol?: "paymentMessage"; consumerMessage?: null; businessMessage?: null; paymentMessage: waproto.SubProtocol.$Shape; multiDevice?: null; voip?: null; armadillo?: null }|{ subProtocol?: "multiDevice"; consumerMessage?: null; businessMessage?: null; paymentMessage?: null; multiDevice: waproto.SubProtocol.$Shape; voip?: null; armadillo?: null }|{ subProtocol?: "voip"; consumerMessage?: null; businessMessage?: null; paymentMessage?: null; multiDevice?: null; voip: waproto.SubProtocol.$Shape; armadillo?: null }|{ subProtocol?: "armadillo"; consumerMessage?: null; businessMessage?: null; paymentMessage?: null; multiDevice?: null; voip?: null; armadillo: waproto.SubProtocol.$Shape })
+)
+		}
+		interface IApplicationData extends waproto.MessageApplication.ApplicationData.$Properties {
+		}
+		class ApplicationData {
+			constructor(p?: waproto.MessageApplication.ApplicationData.$Properties)
+			$unknowns?: Uint8Array[]
+			static encode(m: waproto.MessageApplication.ApplicationData.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageApplication.ApplicationData & waproto.MessageApplication.ApplicationData.$Shape
+		}
+		namespace ApplicationData {
+			interface $Properties {
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MessageApplication.ApplicationData.$Properties
+		}
+		interface ISignal extends waproto.MessageApplication.Signal.$Properties {
+		}
+		class Signal {
+			constructor(p?: waproto.MessageApplication.Signal.$Properties)
+			$unknowns?: Uint8Array[]
+			static encode(m: waproto.MessageApplication.Signal.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageApplication.Signal & waproto.MessageApplication.Signal.$Shape
+		}
+		namespace Signal {
+			interface $Properties {
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MessageApplication.Signal.$Properties
+		}
+		interface IContent extends waproto.MessageApplication.Content.$Properties {
+		}
+		class Content {
+			constructor(p?: waproto.MessageApplication.Content.$Properties)
+			$unknowns?: Uint8Array[]
+			static encode(m: waproto.MessageApplication.Content.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageApplication.Content & waproto.MessageApplication.Content.$Shape
+		}
+		namespace Content {
+			interface $Properties {
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MessageApplication.Content.$Properties
+		}
+		interface IEphemeralSetting extends waproto.MessageApplication.EphemeralSetting.$Properties {
+		}
+		class EphemeralSetting {
+			constructor(p?: waproto.MessageApplication.EphemeralSetting.$Properties)
+			$unknowns?: Uint8Array[]
+			ephemeralExpiration?: (number|null)
+			ephemeralSettingTimestamp?: (number|Long|null)
+			isEphemeralSettingReset?: (boolean|null)
+			ephemeralityType?: (waproto.MESSAGE_APPLICATION_EPHEMERAL_SETTING_EPHEMERALITY_TYPE|null)
+			static encode(m: waproto.MessageApplication.EphemeralSetting.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageApplication.EphemeralSetting & waproto.MessageApplication.EphemeralSetting.$Shape
+		}
+		namespace EphemeralSetting {
+			interface $Properties {
+				ephemeralExpiration?: (number|null)
+				ephemeralSettingTimestamp?: (number|Long|null)
+				isEphemeralSettingReset?: (boolean|null)
+				ephemeralityType?: (waproto.MESSAGE_APPLICATION_EPHEMERAL_SETTING_EPHEMERALITY_TYPE|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MessageApplication.EphemeralSetting.$Properties
+		}
 	}
 	interface IMessageAssociation extends waproto.MessageAssociation.$Properties {
 	}
@@ -11817,7 +17370,11 @@ export namespace waproto {
 			STATUS_ADD_YOURS_DIWALI = 17,
 			STATUS_REACTION = 18,
 			HEVC_VIDEO_DUAL_UPLOAD = 19,
-			POLL_ADD_OPTION = 20
+			POLL_ADD_OPTION = 20,
+			AV1_VIDEO_DUAL_UPLOAD = 21,
+			STREAMED_HD_VIDEO_DUAL_UPLOAD = 22,
+			ORIGINAL_VIDEO_DUAL_UPLOAD = 23,
+			ORIGINAL_IMAGE_DUAL_UPLOAD = 24
 		}
 	}
 	interface IMessageContextInfo extends waproto.MessageContextInfo.$Properties {
@@ -11844,6 +17401,9 @@ export namespace waproto {
 		teeBotMetadata?: (Uint8Array|null)
 		accountEncryptionAttestation?: (waproto.NonE2EEAttestation.$Properties|null)
 		associatedPrimaryIdentityKey?: (Uint8Array|null)
+		teeContextAnchorMessageId?: (string|null)
+		acp2Setting?: (waproto.ACP2Setting.$Properties|null)
+		lightE2Ee?: (boolean|null)
 		static encode(m: waproto.MessageContextInfo.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageContextInfo & waproto.MessageContextInfo.$Shape
 	}
@@ -11868,6 +17428,9 @@ export namespace waproto {
 			teeBotMetadata?: (Uint8Array|null)
 			accountEncryptionAttestation?: (waproto.NonE2EEAttestation.$Properties|null)
 			associatedPrimaryIdentityKey?: (Uint8Array|null)
+			teeContextAnchorMessageId?: (string|null)
+			acp2Setting?: (waproto.ACP2Setting.$Properties|null)
+			lightE2Ee?: (boolean|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.MessageContextInfo.$Properties
@@ -11940,6 +17503,1667 @@ export namespace waproto {
 		}
 		type $Shape = waproto.MessageText.$Properties
 	}
+	interface IMessageTransport extends waproto.MessageTransport.$Properties {
+	}
+	class MessageTransport {
+		constructor(p?: waproto.MessageTransport.$Properties)
+		$unknowns?: Uint8Array[]
+		payload?: (waproto.MessageTransport.Payload.$Properties|null)
+		protocol?: (waproto.MessageTransport.Protocol.$Properties|null)
+		static encode(m: waproto.MessageTransport.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageTransport & waproto.MessageTransport.$Shape
+	}
+	namespace MessageTransport {
+		interface $Properties {
+			payload?: (waproto.MessageTransport.Payload.$Properties|null)
+			protocol?: (waproto.MessageTransport.Protocol.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MessageTransport.$Properties
+		interface IPayload extends waproto.MessageTransport.Payload.$Properties {
+		}
+		class Payload {
+			constructor(p?: waproto.MessageTransport.Payload.$Properties)
+			$unknowns?: Uint8Array[]
+			applicationPayload?: (waproto.SubProtocol.$Properties|null)
+			futureProof?: (waproto.FUTURE_PROOF_BEHAVIOR|null)
+			static encode(m: waproto.MessageTransport.Payload.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageTransport.Payload & waproto.MessageTransport.Payload.$Shape
+		}
+		namespace Payload {
+			interface $Properties {
+				applicationPayload?: (waproto.SubProtocol.$Properties|null)
+				futureProof?: (waproto.FUTURE_PROOF_BEHAVIOR|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MessageTransport.Payload.$Properties
+		}
+		interface IProtocol extends waproto.MessageTransport.Protocol.$Properties {
+		}
+		class Protocol {
+			constructor(p?: waproto.MessageTransport.Protocol.$Properties)
+			$unknowns?: Uint8Array[]
+			integral?: (waproto.MessageTransport.Protocol.Integral.$Properties|null)
+			ancillary?: (waproto.MessageTransport.Protocol.Ancillary.$Properties|null)
+			static encode(m: waproto.MessageTransport.Protocol.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageTransport.Protocol & waproto.MessageTransport.Protocol.$Shape
+		}
+		namespace Protocol {
+			interface $Properties {
+				integral?: (waproto.MessageTransport.Protocol.Integral.$Properties|null)
+				ancillary?: (waproto.MessageTransport.Protocol.Ancillary.$Properties|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MessageTransport.Protocol.$Properties
+			interface IAncillary extends waproto.MessageTransport.Protocol.Ancillary.$Properties {
+			}
+			class Ancillary {
+				constructor(p?: waproto.MessageTransport.Protocol.Ancillary.$Properties)
+				$unknowns?: Uint8Array[]
+				skdm?: (waproto.MessageTransport.Protocol.Ancillary.SenderKeyDistributionMessage.$Properties|null)
+				deviceListMetadata?: (waproto.DeviceListMetadata.$Properties|null)
+				icdc?: (waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.$Properties|null)
+				backupDirective?: (waproto.MessageTransport.Protocol.Ancillary.BackupDirective.$Properties|null)
+				static encode(m: waproto.MessageTransport.Protocol.Ancillary.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageTransport.Protocol.Ancillary & waproto.MessageTransport.Protocol.Ancillary.$Shape
+			}
+			namespace Ancillary {
+				interface $Properties {
+					skdm?: (waproto.MessageTransport.Protocol.Ancillary.SenderKeyDistributionMessage.$Properties|null)
+					deviceListMetadata?: (waproto.DeviceListMetadata.$Properties|null)
+					icdc?: (waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.$Properties|null)
+					backupDirective?: (waproto.MessageTransport.Protocol.Ancillary.BackupDirective.$Properties|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.MessageTransport.Protocol.Ancillary.$Properties
+				interface IBackupDirective extends waproto.MessageTransport.Protocol.Ancillary.BackupDirective.$Properties {
+				}
+				class BackupDirective {
+					constructor(p?: waproto.MessageTransport.Protocol.Ancillary.BackupDirective.$Properties)
+					$unknowns?: Uint8Array[]
+					messageId?: (string|null)
+					actionType?: (waproto.MESSAGE_TRANSPORT_PROTOCOL_ANCILLARY_BACKUP_DIRECTIVE_ACTION_TYPE|null)
+					supplementalKey?: (string|null)
+					static encode(m: waproto.MessageTransport.Protocol.Ancillary.BackupDirective.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageTransport.Protocol.Ancillary.BackupDirective & waproto.MessageTransport.Protocol.Ancillary.BackupDirective.$Shape
+				}
+				namespace BackupDirective {
+					interface $Properties {
+						messageId?: (string|null)
+						actionType?: (waproto.MESSAGE_TRANSPORT_PROTOCOL_ANCILLARY_BACKUP_DIRECTIVE_ACTION_TYPE|null)
+						supplementalKey?: (string|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.MessageTransport.Protocol.Ancillary.BackupDirective.$Properties
+				}
+				interface IICDCParticipantDevices extends waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.$Properties {
+				}
+				class ICDCParticipantDevices {
+					constructor(p?: waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.$Properties)
+					$unknowns?: Uint8Array[]
+					senderIdentity?: (waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.ICDCIdentityListDescription.$Properties|null)
+					recipientIdentities: waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.ICDCIdentityListDescription.$Properties[]
+					recipientUserJids: string[]
+					static encode(m: waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices & waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.$Shape
+				}
+				namespace ICDCParticipantDevices {
+					interface $Properties {
+						senderIdentity?: (waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.ICDCIdentityListDescription.$Properties|null)
+						recipientIdentities?: (waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.ICDCIdentityListDescription.$Properties[]|null)
+						recipientUserJids?: (string[]|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.$Properties
+					interface IICDCIdentityListDescription extends waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.ICDCIdentityListDescription.$Properties {
+					}
+					class ICDCIdentityListDescription {
+						constructor(p?: waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.ICDCIdentityListDescription.$Properties)
+						$unknowns?: Uint8Array[]
+						seq?: (number|null)
+						signingDevice?: (Uint8Array|null)
+						unknownDevices: Uint8Array[]
+						unknownDeviceIds: number[]
+						static encode(m: waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.ICDCIdentityListDescription.$Properties, w?: PbWriter): PbWriter
+						static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.ICDCIdentityListDescription & waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.ICDCIdentityListDescription.$Shape
+					}
+					namespace ICDCIdentityListDescription {
+						interface $Properties {
+							seq?: (number|null)
+							signingDevice?: (Uint8Array|null)
+							unknownDevices?: (Uint8Array[]|null)
+							unknownDeviceIds?: (number[]|null)
+							$unknowns?: Uint8Array[]
+						}
+						type $Shape = waproto.MessageTransport.Protocol.Ancillary.ICDCParticipantDevices.ICDCIdentityListDescription.$Properties
+					}
+				}
+				interface ISenderKeyDistributionMessage extends waproto.MessageTransport.Protocol.Ancillary.SenderKeyDistributionMessage.$Properties {
+				}
+				class SenderKeyDistributionMessage {
+					constructor(p?: waproto.MessageTransport.Protocol.Ancillary.SenderKeyDistributionMessage.$Properties)
+					$unknowns?: Uint8Array[]
+					groupId?: (string|null)
+					axolotlSenderKeyDistributionMessage?: (Uint8Array|null)
+					static encode(m: waproto.MessageTransport.Protocol.Ancillary.SenderKeyDistributionMessage.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageTransport.Protocol.Ancillary.SenderKeyDistributionMessage & waproto.MessageTransport.Protocol.Ancillary.SenderKeyDistributionMessage.$Shape
+				}
+				namespace SenderKeyDistributionMessage {
+					interface $Properties {
+						groupId?: (string|null)
+						axolotlSenderKeyDistributionMessage?: (Uint8Array|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.MessageTransport.Protocol.Ancillary.SenderKeyDistributionMessage.$Properties
+				}
+			}
+			interface IIntegral extends waproto.MessageTransport.Protocol.Integral.$Properties {
+			}
+			class Integral {
+				constructor(p?: waproto.MessageTransport.Protocol.Integral.$Properties)
+				$unknowns?: Uint8Array[]
+				padding?: (Uint8Array|null)
+				dsm?: (waproto.MessageTransport.Protocol.Integral.DeviceSentMessage.$Properties|null)
+				static encode(m: waproto.MessageTransport.Protocol.Integral.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageTransport.Protocol.Integral & waproto.MessageTransport.Protocol.Integral.$Shape
+			}
+			namespace Integral {
+				interface $Properties {
+					padding?: (Uint8Array|null)
+					dsm?: (waproto.MessageTransport.Protocol.Integral.DeviceSentMessage.$Properties|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.MessageTransport.Protocol.Integral.$Properties
+				interface IDeviceSentMessage extends waproto.MessageTransport.Protocol.Integral.DeviceSentMessage.$Properties {
+				}
+				class DeviceSentMessage {
+					constructor(p?: waproto.MessageTransport.Protocol.Integral.DeviceSentMessage.$Properties)
+					$unknowns?: Uint8Array[]
+					destinationJid?: (string|null)
+					phash?: (string|null)
+					static encode(m: waproto.MessageTransport.Protocol.Integral.DeviceSentMessage.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageTransport.Protocol.Integral.DeviceSentMessage & waproto.MessageTransport.Protocol.Integral.DeviceSentMessage.$Shape
+				}
+				namespace DeviceSentMessage {
+					interface $Properties {
+						destinationJid?: (string|null)
+						phash?: (string|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.MessageTransport.Protocol.Integral.DeviceSentMessage.$Properties
+				}
+			}
+		}
+	}
+	interface IMessagesTableSchemaProto extends waproto.MessagesTableSchemaProto.$Properties {
+	}
+	class MessagesTableSchemaProto {
+		constructor(p?: waproto.MessagesTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		type?: (string|null)
+		ts?: (number|Long|null)
+		externalId?: (string|null)
+		msgId?: (string|null)
+		author?: (string|null)
+		ack?: (number|null)
+		resendCount?: (number|null)
+		msgContent?: (waproto.MsgContentProto.$Properties|null)
+		altIndex?: (string|null)
+		forwardingScore?: (number|null)
+		quote?: (waproto.DbQuotedMsgProto.$Properties|null)
+		messageExpirationTs?: (number|Long|null)
+		ephemeralSetting?: (waproto.EphemeralSettingProto.$Properties|null)
+		revokedExternalId?: (string|null)
+		isForwarded?: (boolean|null)
+		originalTs?: (number|Long|null)
+		sortOrderMs?: (number|Long|null)
+		reportingMeta?: (waproto.ReportingMetaProto.$Properties|null)
+		messageDeleteTs?: (number|Long|null)
+		ephemeralCounterStarted?: (boolean|null)
+		quoteExternalId?: (string|null)
+		unsendMsgContentDeleteTs?: (number|Long|null)
+		rowId?: (number|null)
+		thread?: (number|null)
+		mediaId?: (number|null)
+		ephemeralMsgDisappeared?: (boolean|null)
+		threadJid?: (string|null)
+		xmaId?: (number|null)
+		specialTextSize?: (number|null)
+		xmaMessageType?: (number|null)
+		isExpiredXmaMsg?: (boolean|null)
+		ravenEphemeralType?: (number|null)
+		ravenEphemeralMediaState?: (number|null)
+		editCount?: (number|null)
+		groupId?: (string|null)
+		groupIndex?: (number|Long|null)
+		groupSize?: (number|Long|null)
+		receiverFetchId?: (string|null)
+		source?: (string|null)
+		quoteExpirationTs?: (number|Long|null)
+		applicationErrorCode?: (number|null)
+		hdType?: (number|null)
+		pollStanzaId?: (string|null)
+		collapsibleId?: (string|null)
+		isCollapsed?: (boolean|null)
+		static encode(m: waproto.MessagesTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessagesTableSchemaProto & waproto.MessagesTableSchemaProto.$Shape
+	}
+	namespace MessagesTableSchemaProto {
+		interface $Properties {
+			type?: (string|null)
+			ts?: (number|Long|null)
+			externalId?: (string|null)
+			msgId?: (string|null)
+			author?: (string|null)
+			ack?: (number|null)
+			resendCount?: (number|null)
+			msgContent?: (waproto.MsgContentProto.$Properties|null)
+			altIndex?: (string|null)
+			forwardingScore?: (number|null)
+			quote?: (waproto.DbQuotedMsgProto.$Properties|null)
+			messageExpirationTs?: (number|Long|null)
+			ephemeralSetting?: (waproto.EphemeralSettingProto.$Properties|null)
+			revokedExternalId?: (string|null)
+			isForwarded?: (boolean|null)
+			originalTs?: (number|Long|null)
+			sortOrderMs?: (number|Long|null)
+			reportingMeta?: (waproto.ReportingMetaProto.$Properties|null)
+			messageDeleteTs?: (number|Long|null)
+			ephemeralCounterStarted?: (boolean|null)
+			quoteExternalId?: (string|null)
+			unsendMsgContentDeleteTs?: (number|Long|null)
+			rowId?: (number|null)
+			thread?: (number|null)
+			mediaId?: (number|null)
+			ephemeralMsgDisappeared?: (boolean|null)
+			threadJid?: (string|null)
+			xmaId?: (number|null)
+			specialTextSize?: (number|null)
+			xmaMessageType?: (number|null)
+			isExpiredXmaMsg?: (boolean|null)
+			ravenEphemeralType?: (number|null)
+			ravenEphemeralMediaState?: (number|null)
+			editCount?: (number|null)
+			groupId?: (string|null)
+			groupIndex?: (number|Long|null)
+			groupSize?: (number|Long|null)
+			receiverFetchId?: (string|null)
+			source?: (string|null)
+			quoteExpirationTs?: (number|Long|null)
+			applicationErrorCode?: (number|null)
+			hdType?: (number|null)
+			pollStanzaId?: (string|null)
+			collapsibleId?: (string|null)
+			isCollapsed?: (boolean|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MessagesTableSchemaProto.$Properties
+	}
+	interface IMetaBtProof extends waproto.MetaBtProof.$Properties {
+	}
+	class MetaBtProof {
+		constructor(p?: waproto.MetaBtProof.$Properties)
+		$unknowns?: Uint8Array[]
+		checkpoint?: (Uint8Array|null)
+		leafIndex?: (number|Long|null)
+		treeSize?: (number|Long|null)
+		auditPath: Uint8Array[]
+		namespace?: (string|null)
+		digest?: (Uint8Array|null)
+		aad?: (Uint8Array|null)
+		static encode(m: waproto.MetaBtProof.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MetaBtProof & waproto.MetaBtProof.$Shape
+	}
+	namespace MetaBtProof {
+		interface $Properties {
+			checkpoint?: (Uint8Array|null)
+			leafIndex?: (number|Long|null)
+			treeSize?: (number|Long|null)
+			auditPath?: (Uint8Array[]|null)
+			namespace?: (string|null)
+			digest?: (Uint8Array|null)
+			aad?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MetaBtProof.$Properties
+	}
+	interface IMetaSyncActionProto extends waproto.MetaSyncActionProto.$Properties {
+	}
+	class MetaSyncActionProto {
+		constructor(p?: waproto.MetaSyncActionProto.$Properties)
+		$unknowns?: Uint8Array[]
+		chatAction?: (waproto.MetaSyncChatActionProto.$Properties|null)
+		messageAction?: (waproto.MetaSyncMessageActionProto.$Properties|null)
+		action?: ("chatAction"|"messageAction")
+		static encode(m: waproto.MetaSyncActionProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MetaSyncActionProto & waproto.MetaSyncActionProto.$Shape
+	}
+	namespace MetaSyncActionProto {
+		interface $Properties {
+			chatAction?: (waproto.MetaSyncChatActionProto.$Properties|null)
+			messageAction?: (waproto.MetaSyncMessageActionProto.$Properties|null)
+			action?: ("chatAction"|"messageAction")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  chatAction?: waproto.MetaSyncChatActionProto.$Shape|null
+  messageAction?: waproto.MetaSyncMessageActionProto.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ action?: undefined; chatAction?: null; messageAction?: null }|{ action?: "chatAction"; chatAction: waproto.MetaSyncChatActionProto.$Shape; messageAction?: null }|{ action?: "messageAction"; chatAction?: null; messageAction: waproto.MetaSyncMessageActionProto.$Shape })
+)
+	}
+	interface IMetaSyncAppDataProto extends waproto.MetaSyncAppDataProto.$Properties {
+	}
+	class MetaSyncAppDataProto {
+		constructor(p?: waproto.MetaSyncAppDataProto.$Properties)
+		$unknowns?: Uint8Array[]
+		actions: waproto.MetaSyncActionProto.$Properties[]
+		static encode(m: waproto.MetaSyncAppDataProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MetaSyncAppDataProto & waproto.MetaSyncAppDataProto.$Shape
+	}
+	namespace MetaSyncAppDataProto {
+		interface $Properties {
+			actions?: (waproto.MetaSyncActionProto.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  actions?: waproto.MetaSyncActionProto.$Shape[]|null
+  $unknowns?: Uint8Array[]
+}
+	}
+	interface IMetaSyncChatActionProto extends waproto.MetaSyncChatActionProto.$Properties {
+	}
+	class MetaSyncChatActionProto {
+		constructor(p?: waproto.MetaSyncChatActionProto.$Properties)
+		$unknowns?: Uint8Array[]
+		type?: (string|null)
+		chatJid?: (string|null)
+		archived?: (boolean|null)
+		ts?: (number|Long|null)
+		messageRange?: (waproto.MetaSyncMessageRangeProto.$Properties|null)
+		read?: (boolean|null)
+		static encode(m: waproto.MetaSyncChatActionProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MetaSyncChatActionProto & waproto.MetaSyncChatActionProto.$Shape
+	}
+	namespace MetaSyncChatActionProto {
+		interface $Properties {
+			type?: (string|null)
+			chatJid?: (string|null)
+			archived?: (boolean|null)
+			ts?: (number|Long|null)
+			messageRange?: (waproto.MetaSyncMessageRangeProto.$Properties|null)
+			read?: (boolean|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MetaSyncChatActionProto.$Properties
+	}
+	interface IMetaSyncMessageActionProto extends waproto.MetaSyncMessageActionProto.$Properties {
+	}
+	class MetaSyncMessageActionProto {
+		constructor(p?: waproto.MetaSyncMessageActionProto.$Properties)
+		$unknowns?: Uint8Array[]
+		type?: (string|null)
+		protocolMsgId?: (waproto.ProtocolMsgId.$Properties|null)
+		static encode(m: waproto.MetaSyncMessageActionProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MetaSyncMessageActionProto & waproto.MetaSyncMessageActionProto.$Shape
+	}
+	namespace MetaSyncMessageActionProto {
+		interface $Properties {
+			type?: (string|null)
+			protocolMsgId?: (waproto.ProtocolMsgId.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MetaSyncMessageActionProto.$Properties
+	}
+	interface IMetaSyncMessageKeyProto extends waproto.MetaSyncMessageKeyProto.$Properties {
+	}
+	class MetaSyncMessageKeyProto {
+		constructor(p?: waproto.MetaSyncMessageKeyProto.$Properties)
+		$unknowns?: Uint8Array[]
+		fromMe?: (boolean|null)
+		id?: (string|null)
+		static encode(m: waproto.MetaSyncMessageKeyProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MetaSyncMessageKeyProto & waproto.MetaSyncMessageKeyProto.$Shape
+	}
+	namespace MetaSyncMessageKeyProto {
+		interface $Properties {
+			fromMe?: (boolean|null)
+			id?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MetaSyncMessageKeyProto.$Properties
+	}
+	interface IMetaSyncMessageProto extends waproto.MetaSyncMessageProto.$Properties {
+	}
+	class MetaSyncMessageProto {
+		constructor(p?: waproto.MetaSyncMessageProto.$Properties)
+		$unknowns?: Uint8Array[]
+		key?: (waproto.MetaSyncMessageKeyProto.$Properties|null)
+		ts?: (number|Long|null)
+		static encode(m: waproto.MetaSyncMessageProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MetaSyncMessageProto & waproto.MetaSyncMessageProto.$Shape
+	}
+	namespace MetaSyncMessageProto {
+		interface $Properties {
+			key?: (waproto.MetaSyncMessageKeyProto.$Properties|null)
+			ts?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MetaSyncMessageProto.$Properties
+	}
+	interface IMetaSyncMessageRangeProto extends waproto.MetaSyncMessageRangeProto.$Properties {
+	}
+	class MetaSyncMessageRangeProto {
+		constructor(p?: waproto.MetaSyncMessageRangeProto.$Properties)
+		$unknowns?: Uint8Array[]
+		lastMessageTimestamp?: (number|Long|null)
+		lastSystemMessageTimestamp?: (number|Long|null)
+		messages: waproto.MetaSyncMessageProto.$Properties[]
+		static encode(m: waproto.MetaSyncMessageRangeProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MetaSyncMessageRangeProto & waproto.MetaSyncMessageRangeProto.$Shape
+	}
+	namespace MetaSyncMessageRangeProto {
+		interface $Properties {
+			lastMessageTimestamp?: (number|Long|null)
+			lastSystemMessageTimestamp?: (number|Long|null)
+			messages?: (waproto.MetaSyncMessageProto.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MetaSyncMessageRangeProto.$Properties
+	}
+	interface IMetadata extends waproto.Metadata.$Properties {
+	}
+	class Metadata {
+		constructor(p?: waproto.Metadata.$Properties)
+		$unknowns?: Uint8Array[]
+		senderId?: (string|null)
+		messageId?: (string|null)
+		timestampMs?: (number|Long|null)
+		frankingMetadata?: (waproto.FrankingMetadata.$Properties|null)
+		payloadVersion?: (number|null)
+		futureProofBehavior?: (number|null)
+		threadTypeTag?: (number|null)
+		clientTimestampMs?: (number|Long|null)
+		static encode(m: waproto.Metadata.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.Metadata & waproto.Metadata.$Shape
+	}
+	namespace Metadata {
+		interface $Properties {
+			senderId?: (string|null)
+			messageId?: (string|null)
+			timestampMs?: (number|Long|null)
+			frankingMetadata?: (waproto.FrankingMetadata.$Properties|null)
+			payloadVersion?: (number|null)
+			futureProofBehavior?: (number|null)
+			threadTypeTag?: (number|null)
+			clientTimestampMs?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.Metadata.$Properties
+	}
+	interface IMiTransportAdminMessage extends waproto.MiTransportAdminMessage.$Properties {
+	}
+	class MiTransportAdminMessage {
+		constructor(p?: waproto.MiTransportAdminMessage.$Properties)
+		$unknowns?: Uint8Array[]
+		skipBumpThread?: (boolean|null)
+		skipSnippetUpdate?: (boolean|null)
+		readonlyMetadataDataclass?: (string|null)
+		chatThemeChanged?: (waproto.MiTransportAdminMessage.ChatThemeChanged.$Properties|null)
+		nicknameChanged?: (waproto.MiTransportAdminMessage.NicknameChanged.$Properties|null)
+		groupParticipantChanged?: (waproto.MiTransportAdminMessage.GroupParticipantChanged.$Properties|null)
+		groupAdminChanged?: (waproto.MiTransportAdminMessage.GroupAdminChanged.$Properties|null)
+		groupNameChanged?: (waproto.MiTransportAdminMessage.GroupNameChanged.$Properties|null)
+		groupMembershipAddModeChanged?: (waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged.$Properties|null)
+		messagePinned?: (waproto.MiTransportAdminMessage.MessagePinned.$Properties|null)
+		groupImageChanged?: (waproto.MiTransportAdminMessage.GroupImageChanged.$Properties|null)
+		quickReactionChanged?: (waproto.MiTransportAdminMessage.QuickReactionChanged.$Properties|null)
+		linkCta?: (waproto.MiTransportAdminMessage.LinkCta.$Properties|null)
+		iconChanged?: (waproto.MiTransportAdminMessage.IconChanged.$Properties|null)
+		disappearingSettingChanged?: (waproto.MiTransportAdminMessage.DisappearingSettingChanged.$Properties|null)
+		limitSharingChanged?: (waproto.MiTransportAdminMessage.LimitSharingChanged.$Properties|null)
+		xmatDisappearingSetting?: (waproto.MiTransportAdminMessage.XmatDisappearingSetting.$Properties|null)
+		xmatFriendRequestConfirmedEncrypted?: (waproto.MiTransportAdminMessage.XmatFriendRequestConfirmedEncrypted.$Properties|null)
+		xmatInstantGameEncryptedDynamicCustomUpdate?: (waproto.MiTransportAdminMessage.XmatInstantGameEncryptedDynamicCustomUpdate.$Properties|null)
+		xmatLinkCta?: (waproto.MiTransportAdminMessage.XmatLinkCTA.$Properties|null)
+		xmatMagicWords?: (waproto.MiTransportAdminMessage.XmatMagicWords.$Properties|null)
+		xmatMessagingLimitSharing?: (waproto.MiTransportAdminMessage.XmatMessagingLimitSharing.$Properties|null)
+		xmatMessengerQrCodeScanned?: (waproto.MiTransportAdminMessage.XmatMessengerQRCodeScanned.$Properties|null)
+		xmatMessengerSharedAlbumAddition?: (waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumAddition.$Properties|null)
+		xmatMessengerSharedAlbumContentRemoval?: (waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.$Properties|null)
+		xmatMessengerSharedAlbumDeletion?: (waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumDeletion.$Properties|null)
+		xmatMessengerSharedAlbumRename?: (waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumRename.$Properties|null)
+		xmatMessengerSharedAlbum?: (waproto.MiTransportAdminMessage.XmatMessengerSharedAlbum.$Properties|null)
+		xmatThemeColor?: (waproto.MiTransportAdminMessage.XmatThemeColor.$Properties|null)
+		xmatThreadIcon?: (waproto.MiTransportAdminMessage.XmatThreadIcon.$Properties|null)
+		xmatThreadNickname?: (waproto.MiTransportAdminMessage.XmatThreadNickname.$Properties|null)
+		xmatThreadQuickReaction?: (waproto.MiTransportAdminMessage.XmatThreadQuickReaction.$Properties|null)
+		xmatUpdatePayments?: (waproto.MiTransportAdminMessage.XmatUpdatePayments.$Properties|null)
+		xmatPinMessageV2?: (waproto.MiTransportAdminMessage.XmatPinMessageV2.$Properties|null)
+		xmatUnpinMessageV2?: (waproto.MiTransportAdminMessage.XmatUnpinMessageV2.$Properties|null)
+		xmatGenaiTaskAdd?: (waproto.MiTransportAdminMessage.XmatGenAITaskAdd.$Properties|null)
+		xmatAddParticipants?: (waproto.MiTransportAdminMessage.XmatAddParticipants.$Properties|null)
+		xmatRemoveParticipant?: (waproto.MiTransportAdminMessage.XmatRemoveParticipant.$Properties|null)
+		xmatChangeThreadAdmins?: (waproto.MiTransportAdminMessage.XmatChangeThreadAdmins.$Properties|null)
+		xmatChangeThreadName?: (waproto.MiTransportAdminMessage.XmatChangeThreadName.$Properties|null)
+		xmatGroupThreadCreated?: (waproto.MiTransportAdminMessage.XmatGroupThreadCreated.$Properties|null)
+		xmatSetParticipantUpdateMode?: (waproto.MiTransportAdminMessage.XmatSetParticipantUpdateMode.$Properties|null)
+		xmatMessengerMessageReminderSet?: (waproto.MiTransportAdminMessage.XmatMessengerMessageReminderSet.$Properties|null)
+		xmatMessengerMessageReminderTriggered?: (waproto.MiTransportAdminMessage.XmatMessengerMessageReminderTriggered.$Properties|null)
+		xmatGenaiRateLimitUpsell?: (waproto.MiTransportAdminMessage.XmatGenAIRateLimitUpsell.$Properties|null)
+		xmatPetInteraction?: (waproto.MiTransportAdminMessage.XmatPetInteraction.$Properties|null)
+		xmatHomebaseActionSummary?: (waproto.MiTransportAdminMessage.XmatHomebaseActionSummary.$Properties|null)
+		xmatMessengerChatFontChange?: (waproto.MiTransportAdminMessage.XmatMessengerChatFontChange.$Properties|null)
+		xmatHomebaseStatusChanged?: (waproto.MiTransportAdminMessage.XmatHomebaseStatusChanged.$Properties|null)
+		content?: ("chatThemeChanged"|"nicknameChanged"|"groupParticipantChanged"|"groupAdminChanged"|"groupNameChanged"|"groupMembershipAddModeChanged"|"messagePinned"|"groupImageChanged"|"quickReactionChanged"|"linkCta"|"iconChanged"|"disappearingSettingChanged"|"limitSharingChanged"|"xmatDisappearingSetting"|"xmatFriendRequestConfirmedEncrypted"|"xmatInstantGameEncryptedDynamicCustomUpdate"|"xmatLinkCta"|"xmatMagicWords"|"xmatMessagingLimitSharing"|"xmatMessengerQrCodeScanned"|"xmatMessengerSharedAlbumAddition"|"xmatMessengerSharedAlbumContentRemoval"|"xmatMessengerSharedAlbumDeletion"|"xmatMessengerSharedAlbumRename"|"xmatMessengerSharedAlbum"|"xmatThemeColor"|"xmatThreadIcon"|"xmatThreadNickname"|"xmatThreadQuickReaction"|"xmatUpdatePayments"|"xmatPinMessageV2"|"xmatUnpinMessageV2"|"xmatGenaiTaskAdd"|"xmatAddParticipants"|"xmatRemoveParticipant"|"xmatChangeThreadAdmins"|"xmatChangeThreadName"|"xmatGroupThreadCreated"|"xmatSetParticipantUpdateMode"|"xmatMessengerMessageReminderSet"|"xmatMessengerMessageReminderTriggered"|"xmatGenaiRateLimitUpsell"|"xmatPetInteraction"|"xmatHomebaseActionSummary"|"xmatMessengerChatFontChange"|"xmatHomebaseStatusChanged")
+		static encode(m: waproto.MiTransportAdminMessage.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage & waproto.MiTransportAdminMessage.$Shape
+	}
+	namespace MiTransportAdminMessage {
+		interface $Properties {
+			skipBumpThread?: (boolean|null)
+			skipSnippetUpdate?: (boolean|null)
+			readonlyMetadataDataclass?: (string|null)
+			chatThemeChanged?: (waproto.MiTransportAdminMessage.ChatThemeChanged.$Properties|null)
+			nicknameChanged?: (waproto.MiTransportAdminMessage.NicknameChanged.$Properties|null)
+			groupParticipantChanged?: (waproto.MiTransportAdminMessage.GroupParticipantChanged.$Properties|null)
+			groupAdminChanged?: (waproto.MiTransportAdminMessage.GroupAdminChanged.$Properties|null)
+			groupNameChanged?: (waproto.MiTransportAdminMessage.GroupNameChanged.$Properties|null)
+			groupMembershipAddModeChanged?: (waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged.$Properties|null)
+			messagePinned?: (waproto.MiTransportAdminMessage.MessagePinned.$Properties|null)
+			groupImageChanged?: (waproto.MiTransportAdminMessage.GroupImageChanged.$Properties|null)
+			quickReactionChanged?: (waproto.MiTransportAdminMessage.QuickReactionChanged.$Properties|null)
+			linkCta?: (waproto.MiTransportAdminMessage.LinkCta.$Properties|null)
+			iconChanged?: (waproto.MiTransportAdminMessage.IconChanged.$Properties|null)
+			disappearingSettingChanged?: (waproto.MiTransportAdminMessage.DisappearingSettingChanged.$Properties|null)
+			limitSharingChanged?: (waproto.MiTransportAdminMessage.LimitSharingChanged.$Properties|null)
+			xmatDisappearingSetting?: (waproto.MiTransportAdminMessage.XmatDisappearingSetting.$Properties|null)
+			xmatFriendRequestConfirmedEncrypted?: (waproto.MiTransportAdminMessage.XmatFriendRequestConfirmedEncrypted.$Properties|null)
+			xmatInstantGameEncryptedDynamicCustomUpdate?: (waproto.MiTransportAdminMessage.XmatInstantGameEncryptedDynamicCustomUpdate.$Properties|null)
+			xmatLinkCta?: (waproto.MiTransportAdminMessage.XmatLinkCTA.$Properties|null)
+			xmatMagicWords?: (waproto.MiTransportAdminMessage.XmatMagicWords.$Properties|null)
+			xmatMessagingLimitSharing?: (waproto.MiTransportAdminMessage.XmatMessagingLimitSharing.$Properties|null)
+			xmatMessengerQrCodeScanned?: (waproto.MiTransportAdminMessage.XmatMessengerQRCodeScanned.$Properties|null)
+			xmatMessengerSharedAlbumAddition?: (waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumAddition.$Properties|null)
+			xmatMessengerSharedAlbumContentRemoval?: (waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.$Properties|null)
+			xmatMessengerSharedAlbumDeletion?: (waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumDeletion.$Properties|null)
+			xmatMessengerSharedAlbumRename?: (waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumRename.$Properties|null)
+			xmatMessengerSharedAlbum?: (waproto.MiTransportAdminMessage.XmatMessengerSharedAlbum.$Properties|null)
+			xmatThemeColor?: (waproto.MiTransportAdminMessage.XmatThemeColor.$Properties|null)
+			xmatThreadIcon?: (waproto.MiTransportAdminMessage.XmatThreadIcon.$Properties|null)
+			xmatThreadNickname?: (waproto.MiTransportAdminMessage.XmatThreadNickname.$Properties|null)
+			xmatThreadQuickReaction?: (waproto.MiTransportAdminMessage.XmatThreadQuickReaction.$Properties|null)
+			xmatUpdatePayments?: (waproto.MiTransportAdminMessage.XmatUpdatePayments.$Properties|null)
+			xmatPinMessageV2?: (waproto.MiTransportAdminMessage.XmatPinMessageV2.$Properties|null)
+			xmatUnpinMessageV2?: (waproto.MiTransportAdminMessage.XmatUnpinMessageV2.$Properties|null)
+			xmatGenaiTaskAdd?: (waproto.MiTransportAdminMessage.XmatGenAITaskAdd.$Properties|null)
+			xmatAddParticipants?: (waproto.MiTransportAdminMessage.XmatAddParticipants.$Properties|null)
+			xmatRemoveParticipant?: (waproto.MiTransportAdminMessage.XmatRemoveParticipant.$Properties|null)
+			xmatChangeThreadAdmins?: (waproto.MiTransportAdminMessage.XmatChangeThreadAdmins.$Properties|null)
+			xmatChangeThreadName?: (waproto.MiTransportAdminMessage.XmatChangeThreadName.$Properties|null)
+			xmatGroupThreadCreated?: (waproto.MiTransportAdminMessage.XmatGroupThreadCreated.$Properties|null)
+			xmatSetParticipantUpdateMode?: (waproto.MiTransportAdminMessage.XmatSetParticipantUpdateMode.$Properties|null)
+			xmatMessengerMessageReminderSet?: (waproto.MiTransportAdminMessage.XmatMessengerMessageReminderSet.$Properties|null)
+			xmatMessengerMessageReminderTriggered?: (waproto.MiTransportAdminMessage.XmatMessengerMessageReminderTriggered.$Properties|null)
+			xmatGenaiRateLimitUpsell?: (waproto.MiTransportAdminMessage.XmatGenAIRateLimitUpsell.$Properties|null)
+			xmatPetInteraction?: (waproto.MiTransportAdminMessage.XmatPetInteraction.$Properties|null)
+			xmatHomebaseActionSummary?: (waproto.MiTransportAdminMessage.XmatHomebaseActionSummary.$Properties|null)
+			xmatMessengerChatFontChange?: (waproto.MiTransportAdminMessage.XmatMessengerChatFontChange.$Properties|null)
+			xmatHomebaseStatusChanged?: (waproto.MiTransportAdminMessage.XmatHomebaseStatusChanged.$Properties|null)
+			content?: ("chatThemeChanged"|"nicknameChanged"|"groupParticipantChanged"|"groupAdminChanged"|"groupNameChanged"|"groupMembershipAddModeChanged"|"messagePinned"|"groupImageChanged"|"quickReactionChanged"|"linkCta"|"iconChanged"|"disappearingSettingChanged"|"limitSharingChanged"|"xmatDisappearingSetting"|"xmatFriendRequestConfirmedEncrypted"|"xmatInstantGameEncryptedDynamicCustomUpdate"|"xmatLinkCta"|"xmatMagicWords"|"xmatMessagingLimitSharing"|"xmatMessengerQrCodeScanned"|"xmatMessengerSharedAlbumAddition"|"xmatMessengerSharedAlbumContentRemoval"|"xmatMessengerSharedAlbumDeletion"|"xmatMessengerSharedAlbumRename"|"xmatMessengerSharedAlbum"|"xmatThemeColor"|"xmatThreadIcon"|"xmatThreadNickname"|"xmatThreadQuickReaction"|"xmatUpdatePayments"|"xmatPinMessageV2"|"xmatUnpinMessageV2"|"xmatGenaiTaskAdd"|"xmatAddParticipants"|"xmatRemoveParticipant"|"xmatChangeThreadAdmins"|"xmatChangeThreadName"|"xmatGroupThreadCreated"|"xmatSetParticipantUpdateMode"|"xmatMessengerMessageReminderSet"|"xmatMessengerMessageReminderTriggered"|"xmatGenaiRateLimitUpsell"|"xmatPetInteraction"|"xmatHomebaseActionSummary"|"xmatMessengerChatFontChange"|"xmatHomebaseStatusChanged")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  skipBumpThread?: boolean|null
+  skipSnippetUpdate?: boolean|null
+  readonlyMetadataDataclass?: string|null
+  chatThemeChanged?: waproto.MiTransportAdminMessage.ChatThemeChanged.$Shape|null
+  nicknameChanged?: waproto.MiTransportAdminMessage.NicknameChanged.$Shape|null
+  groupParticipantChanged?: waproto.MiTransportAdminMessage.GroupParticipantChanged.$Shape|null
+  groupAdminChanged?: waproto.MiTransportAdminMessage.GroupAdminChanged.$Shape|null
+  groupNameChanged?: waproto.MiTransportAdminMessage.GroupNameChanged.$Shape|null
+  groupMembershipAddModeChanged?: waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged.$Shape|null
+  messagePinned?: waproto.MiTransportAdminMessage.MessagePinned.$Shape|null
+  groupImageChanged?: waproto.MiTransportAdminMessage.GroupImageChanged.$Shape|null
+  quickReactionChanged?: waproto.MiTransportAdminMessage.QuickReactionChanged.$Shape|null
+  linkCta?: waproto.MiTransportAdminMessage.LinkCta.$Shape|null
+  iconChanged?: waproto.MiTransportAdminMessage.IconChanged.$Shape|null
+  disappearingSettingChanged?: waproto.MiTransportAdminMessage.DisappearingSettingChanged.$Shape|null
+  limitSharingChanged?: waproto.MiTransportAdminMessage.LimitSharingChanged.$Shape|null
+  xmatDisappearingSetting?: waproto.MiTransportAdminMessage.XmatDisappearingSetting.$Shape|null
+  xmatFriendRequestConfirmedEncrypted?: waproto.MiTransportAdminMessage.XmatFriendRequestConfirmedEncrypted.$Shape|null
+  xmatInstantGameEncryptedDynamicCustomUpdate?: waproto.MiTransportAdminMessage.XmatInstantGameEncryptedDynamicCustomUpdate.$Shape|null
+  xmatLinkCta?: waproto.MiTransportAdminMessage.XmatLinkCTA.$Shape|null
+  xmatMagicWords?: waproto.MiTransportAdminMessage.XmatMagicWords.$Shape|null
+  xmatMessagingLimitSharing?: waproto.MiTransportAdminMessage.XmatMessagingLimitSharing.$Shape|null
+  xmatMessengerQrCodeScanned?: waproto.MiTransportAdminMessage.XmatMessengerQRCodeScanned.$Shape|null
+  xmatMessengerSharedAlbumAddition?: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumAddition.$Shape|null
+  xmatMessengerSharedAlbumContentRemoval?: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.$Shape|null
+  xmatMessengerSharedAlbumDeletion?: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumDeletion.$Shape|null
+  xmatMessengerSharedAlbumRename?: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumRename.$Shape|null
+  xmatMessengerSharedAlbum?: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbum.$Shape|null
+  xmatThemeColor?: waproto.MiTransportAdminMessage.XmatThemeColor.$Shape|null
+  xmatThreadIcon?: waproto.MiTransportAdminMessage.XmatThreadIcon.$Shape|null
+  xmatThreadNickname?: waproto.MiTransportAdminMessage.XmatThreadNickname.$Shape|null
+  xmatThreadQuickReaction?: waproto.MiTransportAdminMessage.XmatThreadQuickReaction.$Shape|null
+  xmatUpdatePayments?: waproto.MiTransportAdminMessage.XmatUpdatePayments.$Shape|null
+  xmatPinMessageV2?: waproto.MiTransportAdminMessage.XmatPinMessageV2.$Shape|null
+  xmatUnpinMessageV2?: waproto.MiTransportAdminMessage.XmatUnpinMessageV2.$Shape|null
+  xmatGenaiTaskAdd?: waproto.MiTransportAdminMessage.XmatGenAITaskAdd.$Shape|null
+  xmatAddParticipants?: waproto.MiTransportAdminMessage.XmatAddParticipants.$Shape|null
+  xmatRemoveParticipant?: waproto.MiTransportAdminMessage.XmatRemoveParticipant.$Shape|null
+  xmatChangeThreadAdmins?: waproto.MiTransportAdminMessage.XmatChangeThreadAdmins.$Shape|null
+  xmatChangeThreadName?: waproto.MiTransportAdminMessage.XmatChangeThreadName.$Shape|null
+  xmatGroupThreadCreated?: waproto.MiTransportAdminMessage.XmatGroupThreadCreated.$Shape|null
+  xmatSetParticipantUpdateMode?: waproto.MiTransportAdminMessage.XmatSetParticipantUpdateMode.$Shape|null
+  xmatMessengerMessageReminderSet?: waproto.MiTransportAdminMessage.XmatMessengerMessageReminderSet.$Shape|null
+  xmatMessengerMessageReminderTriggered?: waproto.MiTransportAdminMessage.XmatMessengerMessageReminderTriggered.$Shape|null
+  xmatGenaiRateLimitUpsell?: waproto.MiTransportAdminMessage.XmatGenAIRateLimitUpsell.$Shape|null
+  xmatPetInteraction?: waproto.MiTransportAdminMessage.XmatPetInteraction.$Shape|null
+  xmatHomebaseActionSummary?: waproto.MiTransportAdminMessage.XmatHomebaseActionSummary.$Shape|null
+  xmatMessengerChatFontChange?: waproto.MiTransportAdminMessage.XmatMessengerChatFontChange.$Shape|null
+  xmatHomebaseStatusChanged?: waproto.MiTransportAdminMessage.XmatHomebaseStatusChanged.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ content?: undefined; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "chatThemeChanged"; chatThemeChanged: waproto.MiTransportAdminMessage.ChatThemeChanged.$Shape; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "nicknameChanged"; chatThemeChanged?: null; nicknameChanged: waproto.MiTransportAdminMessage.NicknameChanged.$Shape; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "groupParticipantChanged"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged: waproto.MiTransportAdminMessage.GroupParticipantChanged.$Shape; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "groupAdminChanged"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged: waproto.MiTransportAdminMessage.GroupAdminChanged.$Shape; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "groupNameChanged"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged: waproto.MiTransportAdminMessage.GroupNameChanged.$Shape; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "groupMembershipAddModeChanged"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged: waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged.$Shape; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "messagePinned"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned: waproto.MiTransportAdminMessage.MessagePinned.$Shape; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "groupImageChanged"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged: waproto.MiTransportAdminMessage.GroupImageChanged.$Shape; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "quickReactionChanged"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged: waproto.MiTransportAdminMessage.QuickReactionChanged.$Shape; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "linkCta"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta: waproto.MiTransportAdminMessage.LinkCta.$Shape; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "iconChanged"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged: waproto.MiTransportAdminMessage.IconChanged.$Shape; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "disappearingSettingChanged"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged: waproto.MiTransportAdminMessage.DisappearingSettingChanged.$Shape; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "limitSharingChanged"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged: waproto.MiTransportAdminMessage.LimitSharingChanged.$Shape; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatDisappearingSetting"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting: waproto.MiTransportAdminMessage.XmatDisappearingSetting.$Shape; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatFriendRequestConfirmedEncrypted"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted: waproto.MiTransportAdminMessage.XmatFriendRequestConfirmedEncrypted.$Shape; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatInstantGameEncryptedDynamicCustomUpdate"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate: waproto.MiTransportAdminMessage.XmatInstantGameEncryptedDynamicCustomUpdate.$Shape; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatLinkCta"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta: waproto.MiTransportAdminMessage.XmatLinkCTA.$Shape; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatMagicWords"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords: waproto.MiTransportAdminMessage.XmatMagicWords.$Shape; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatMessagingLimitSharing"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing: waproto.MiTransportAdminMessage.XmatMessagingLimitSharing.$Shape; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatMessengerQrCodeScanned"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned: waproto.MiTransportAdminMessage.XmatMessengerQRCodeScanned.$Shape; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatMessengerSharedAlbumAddition"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumAddition.$Shape; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatMessengerSharedAlbumContentRemoval"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.$Shape; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatMessengerSharedAlbumDeletion"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumDeletion.$Shape; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatMessengerSharedAlbumRename"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumRename.$Shape; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatMessengerSharedAlbum"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbum.$Shape; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatThemeColor"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor: waproto.MiTransportAdminMessage.XmatThemeColor.$Shape; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatThreadIcon"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon: waproto.MiTransportAdminMessage.XmatThreadIcon.$Shape; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatThreadNickname"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname: waproto.MiTransportAdminMessage.XmatThreadNickname.$Shape; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatThreadQuickReaction"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction: waproto.MiTransportAdminMessage.XmatThreadQuickReaction.$Shape; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatUpdatePayments"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments: waproto.MiTransportAdminMessage.XmatUpdatePayments.$Shape; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatPinMessageV2"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2: waproto.MiTransportAdminMessage.XmatPinMessageV2.$Shape; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatUnpinMessageV2"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2: waproto.MiTransportAdminMessage.XmatUnpinMessageV2.$Shape; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatGenaiTaskAdd"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd: waproto.MiTransportAdminMessage.XmatGenAITaskAdd.$Shape; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatAddParticipants"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants: waproto.MiTransportAdminMessage.XmatAddParticipants.$Shape; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatRemoveParticipant"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant: waproto.MiTransportAdminMessage.XmatRemoveParticipant.$Shape; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatChangeThreadAdmins"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins: waproto.MiTransportAdminMessage.XmatChangeThreadAdmins.$Shape; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatChangeThreadName"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName: waproto.MiTransportAdminMessage.XmatChangeThreadName.$Shape; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatGroupThreadCreated"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated: waproto.MiTransportAdminMessage.XmatGroupThreadCreated.$Shape; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatSetParticipantUpdateMode"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode: waproto.MiTransportAdminMessage.XmatSetParticipantUpdateMode.$Shape; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatMessengerMessageReminderSet"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet: waproto.MiTransportAdminMessage.XmatMessengerMessageReminderSet.$Shape; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatMessengerMessageReminderTriggered"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered: waproto.MiTransportAdminMessage.XmatMessengerMessageReminderTriggered.$Shape; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatGenaiRateLimitUpsell"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell: waproto.MiTransportAdminMessage.XmatGenAIRateLimitUpsell.$Shape; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatPetInteraction"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction: waproto.MiTransportAdminMessage.XmatPetInteraction.$Shape; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatHomebaseActionSummary"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary: waproto.MiTransportAdminMessage.XmatHomebaseActionSummary.$Shape; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged?: null }|{ content?: "xmatMessengerChatFontChange"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange: waproto.MiTransportAdminMessage.XmatMessengerChatFontChange.$Shape; xmatHomebaseStatusChanged?: null }|{ content?: "xmatHomebaseStatusChanged"; chatThemeChanged?: null; nicknameChanged?: null; groupParticipantChanged?: null; groupAdminChanged?: null; groupNameChanged?: null; groupMembershipAddModeChanged?: null; messagePinned?: null; groupImageChanged?: null; quickReactionChanged?: null; linkCta?: null; iconChanged?: null; disappearingSettingChanged?: null; limitSharingChanged?: null; xmatDisappearingSetting?: null; xmatFriendRequestConfirmedEncrypted?: null; xmatInstantGameEncryptedDynamicCustomUpdate?: null; xmatLinkCta?: null; xmatMagicWords?: null; xmatMessagingLimitSharing?: null; xmatMessengerQrCodeScanned?: null; xmatMessengerSharedAlbumAddition?: null; xmatMessengerSharedAlbumContentRemoval?: null; xmatMessengerSharedAlbumDeletion?: null; xmatMessengerSharedAlbumRename?: null; xmatMessengerSharedAlbum?: null; xmatThemeColor?: null; xmatThreadIcon?: null; xmatThreadNickname?: null; xmatThreadQuickReaction?: null; xmatUpdatePayments?: null; xmatPinMessageV2?: null; xmatUnpinMessageV2?: null; xmatGenaiTaskAdd?: null; xmatAddParticipants?: null; xmatRemoveParticipant?: null; xmatChangeThreadAdmins?: null; xmatChangeThreadName?: null; xmatGroupThreadCreated?: null; xmatSetParticipantUpdateMode?: null; xmatMessengerMessageReminderSet?: null; xmatMessengerMessageReminderTriggered?: null; xmatGenaiRateLimitUpsell?: null; xmatPetInteraction?: null; xmatHomebaseActionSummary?: null; xmatMessengerChatFontChange?: null; xmatHomebaseStatusChanged: waproto.MiTransportAdminMessage.XmatHomebaseStatusChanged.$Shape })
+)
+		interface IXmatMessengerChatFontChange extends waproto.MiTransportAdminMessage.XmatMessengerChatFontChange.$Properties {
+		}
+		class XmatMessengerChatFontChange {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatMessengerChatFontChange.$Properties)
+			$unknowns?: Uint8Array[]
+			actorId?: (number|Long|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatMessengerChatFontChange.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMessengerChatFontChange & waproto.MiTransportAdminMessage.XmatMessengerChatFontChange.$Shape
+		}
+		namespace XmatMessengerChatFontChange {
+			interface $Properties {
+				actorId?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatMessengerChatFontChange.$Properties
+		}
+		interface IXmatHomebaseStatusChanged extends waproto.MiTransportAdminMessage.XmatHomebaseStatusChanged.$Properties {
+		}
+		class XmatHomebaseStatusChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatHomebaseStatusChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			statusType?: (string|null)
+			actorId?: (number|Long|null)
+			actorName?: (string|null)
+			pauseDurationSeconds?: (number|Long|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatHomebaseStatusChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatHomebaseStatusChanged & waproto.MiTransportAdminMessage.XmatHomebaseStatusChanged.$Shape
+		}
+		namespace XmatHomebaseStatusChanged {
+			interface $Properties {
+				statusType?: (string|null)
+				actorId?: (number|Long|null)
+				actorName?: (string|null)
+				pauseDurationSeconds?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatHomebaseStatusChanged.$Properties
+		}
+		interface IXmatHomebaseActionSummary extends waproto.MiTransportAdminMessage.XmatHomebaseActionSummary.$Properties {
+		}
+		class XmatHomebaseActionSummary {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatHomebaseActionSummary.$Properties)
+			$unknowns?: Uint8Array[]
+			text?: (string|null)
+			fullText?: (string|null)
+			ctaText?: (string|null)
+			householdId?: (number|Long|null)
+			destinationViewId?: (string|null)
+			destinationViewName?: (string|null)
+			destinationWidgetType?: (string|null)
+			sourceMessageId?: (string|null)
+			actionContentBlob?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatHomebaseActionSummary.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatHomebaseActionSummary & waproto.MiTransportAdminMessage.XmatHomebaseActionSummary.$Shape
+		}
+		namespace XmatHomebaseActionSummary {
+			interface $Properties {
+				text?: (string|null)
+				fullText?: (string|null)
+				ctaText?: (string|null)
+				householdId?: (number|Long|null)
+				destinationViewId?: (string|null)
+				destinationViewName?: (string|null)
+				destinationWidgetType?: (string|null)
+				sourceMessageId?: (string|null)
+				actionContentBlob?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatHomebaseActionSummary.$Properties
+		}
+		interface IXmatPetInteraction extends waproto.MiTransportAdminMessage.XmatPetInteraction.$Properties {
+		}
+		class XmatPetInteraction {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatPetInteraction.$Properties)
+			$unknowns?: Uint8Array[]
+			petName?: (string|null)
+			actionKey?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatPetInteraction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatPetInteraction & waproto.MiTransportAdminMessage.XmatPetInteraction.$Shape
+		}
+		namespace XmatPetInteraction {
+			interface $Properties {
+				petName?: (string|null)
+				actionKey?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatPetInteraction.$Properties
+		}
+		interface IXmatMessengerMessageReminderTriggered extends waproto.MiTransportAdminMessage.XmatMessengerMessageReminderTriggered.$Properties {
+		}
+		class XmatMessengerMessageReminderTriggered {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatMessengerMessageReminderTriggered.$Properties)
+			$unknowns?: Uint8Array[]
+			offlineThreadingId?: (number|Long|null)
+			scheduledTime?: (string|null)
+			scheduledTimeMs?: (number|Long|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatMessengerMessageReminderTriggered.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMessengerMessageReminderTriggered & waproto.MiTransportAdminMessage.XmatMessengerMessageReminderTriggered.$Shape
+		}
+		namespace XmatMessengerMessageReminderTriggered {
+			interface $Properties {
+				offlineThreadingId?: (number|Long|null)
+				scheduledTime?: (string|null)
+				scheduledTimeMs?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatMessengerMessageReminderTriggered.$Properties
+		}
+		interface IXmatMessengerMessageReminderSet extends waproto.MiTransportAdminMessage.XmatMessengerMessageReminderSet.$Properties {
+		}
+		class XmatMessengerMessageReminderSet {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatMessengerMessageReminderSet.$Properties)
+			$unknowns?: Uint8Array[]
+			offlineThreadingId?: (number|Long|null)
+			scheduledTime?: (string|null)
+			scheduledTimeMs?: (number|Long|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatMessengerMessageReminderSet.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMessengerMessageReminderSet & waproto.MiTransportAdminMessage.XmatMessengerMessageReminderSet.$Shape
+		}
+		namespace XmatMessengerMessageReminderSet {
+			interface $Properties {
+				offlineThreadingId?: (number|Long|null)
+				scheduledTime?: (string|null)
+				scheduledTimeMs?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatMessengerMessageReminderSet.$Properties
+		}
+		interface IXmatSetParticipantUpdateMode extends waproto.MiTransportAdminMessage.XmatSetParticipantUpdateMode.$Properties {
+		}
+		class XmatSetParticipantUpdateMode {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatSetParticipantUpdateMode.$Properties)
+			$unknowns?: Uint8Array[]
+			participantUpdateMode?: (string|null)
+			setterId?: (number|Long|null)
+			transportThreadFbid?: (number|Long|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatSetParticipantUpdateMode.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatSetParticipantUpdateMode & waproto.MiTransportAdminMessage.XmatSetParticipantUpdateMode.$Shape
+		}
+		namespace XmatSetParticipantUpdateMode {
+			interface $Properties {
+				participantUpdateMode?: (string|null)
+				setterId?: (number|Long|null)
+				transportThreadFbid?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatSetParticipantUpdateMode.$Properties
+		}
+		interface IXmatGroupThreadCreated extends waproto.MiTransportAdminMessage.XmatGroupThreadCreated.$Properties {
+		}
+		class XmatGroupThreadCreated {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatGroupThreadCreated.$Properties)
+			$unknowns?: Uint8Array[]
+			threadSubtype?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatGroupThreadCreated.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatGroupThreadCreated & waproto.MiTransportAdminMessage.XmatGroupThreadCreated.$Shape
+		}
+		namespace XmatGroupThreadCreated {
+			interface $Properties {
+				threadSubtype?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatGroupThreadCreated.$Properties
+		}
+		interface IXmatChangeThreadName extends waproto.MiTransportAdminMessage.XmatChangeThreadName.$Properties {
+		}
+		class XmatChangeThreadName {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatChangeThreadName.$Properties)
+			$unknowns?: Uint8Array[]
+			newThreadName?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatChangeThreadName.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatChangeThreadName & waproto.MiTransportAdminMessage.XmatChangeThreadName.$Shape
+		}
+		namespace XmatChangeThreadName {
+			interface $Properties {
+				newThreadName?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatChangeThreadName.$Properties
+		}
+		interface IXmatChangeThreadAdmins extends waproto.MiTransportAdminMessage.XmatChangeThreadAdmins.$Properties {
+		}
+		class XmatChangeThreadAdmins {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatChangeThreadAdmins.$Properties)
+			$unknowns?: Uint8Array[]
+			adminEvent?: (string|null)
+			targetId?: (number|Long|null)
+			threadCategory?: (string|null)
+			adminType?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatChangeThreadAdmins.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatChangeThreadAdmins & waproto.MiTransportAdminMessage.XmatChangeThreadAdmins.$Shape
+		}
+		namespace XmatChangeThreadAdmins {
+			interface $Properties {
+				adminEvent?: (string|null)
+				targetId?: (number|Long|null)
+				threadCategory?: (string|null)
+				adminType?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatChangeThreadAdmins.$Properties
+		}
+		interface IXmatRemoveParticipant extends waproto.MiTransportAdminMessage.XmatRemoveParticipant.$Properties {
+		}
+		class XmatRemoveParticipant {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatRemoveParticipant.$Properties)
+			$unknowns?: Uint8Array[]
+			removedParticipantFbid?: (number|Long|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatRemoveParticipant.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatRemoveParticipant & waproto.MiTransportAdminMessage.XmatRemoveParticipant.$Shape
+		}
+		namespace XmatRemoveParticipant {
+			interface $Properties {
+				removedParticipantFbid?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatRemoveParticipant.$Properties
+		}
+		interface IXmatAddParticipants extends waproto.MiTransportAdminMessage.XmatAddParticipants.$Properties {
+		}
+		class XmatAddParticipants {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatAddParticipants.$Properties)
+			$unknowns?: Uint8Array[]
+			participantsAdded: (number|Long)[]
+			addedThroughJoinRequests?: (boolean|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatAddParticipants.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatAddParticipants & waproto.MiTransportAdminMessage.XmatAddParticipants.$Shape
+		}
+		namespace XmatAddParticipants {
+			interface $Properties {
+				participantsAdded?: ((number|Long)[]|null)
+				addedThroughJoinRequests?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatAddParticipants.$Properties
+		}
+		interface IXmatGenAIRateLimitUpsell extends waproto.MiTransportAdminMessage.XmatGenAIRateLimitUpsell.$Properties {
+		}
+		class XmatGenAIRateLimitUpsell {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatGenAIRateLimitUpsell.$Properties)
+			$unknowns?: Uint8Array[]
+			adminText?: (string|null)
+			rateLimitUntilSec?: (number|Long|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatGenAIRateLimitUpsell.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatGenAIRateLimitUpsell & waproto.MiTransportAdminMessage.XmatGenAIRateLimitUpsell.$Shape
+		}
+		namespace XmatGenAIRateLimitUpsell {
+			interface $Properties {
+				adminText?: (string|null)
+				rateLimitUntilSec?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatGenAIRateLimitUpsell.$Properties
+		}
+		interface IXmatGenAITaskAdd extends waproto.MiTransportAdminMessage.XmatGenAITaskAdd.$Properties {
+		}
+		class XmatGenAITaskAdd {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatGenAITaskAdd.$Properties)
+			$unknowns?: Uint8Array[]
+			taskId?: (number|Long|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatGenAITaskAdd.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatGenAITaskAdd & waproto.MiTransportAdminMessage.XmatGenAITaskAdd.$Shape
+		}
+		namespace XmatGenAITaskAdd {
+			interface $Properties {
+				taskId?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatGenAITaskAdd.$Properties
+		}
+		interface IXmatUnpinMessageV2 extends waproto.MiTransportAdminMessage.XmatUnpinMessageV2.$Properties {
+		}
+		class XmatUnpinMessageV2 {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatUnpinMessageV2.$Properties)
+			$unknowns?: Uint8Array[]
+			pinnedMessageId?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatUnpinMessageV2.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatUnpinMessageV2 & waproto.MiTransportAdminMessage.XmatUnpinMessageV2.$Shape
+		}
+		namespace XmatUnpinMessageV2 {
+			interface $Properties {
+				pinnedMessageId?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatUnpinMessageV2.$Properties
+		}
+		interface IXmatPinMessageV2 extends waproto.MiTransportAdminMessage.XmatPinMessageV2.$Properties {
+		}
+		class XmatPinMessageV2 {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatPinMessageV2.$Properties)
+			$unknowns?: Uint8Array[]
+			pinnedMessageId?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatPinMessageV2.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatPinMessageV2 & waproto.MiTransportAdminMessage.XmatPinMessageV2.$Shape
+		}
+		namespace XmatPinMessageV2 {
+			interface $Properties {
+				pinnedMessageId?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatPinMessageV2.$Properties
+		}
+		interface IXmatUpdatePayments extends waproto.MiTransportAdminMessage.XmatUpdatePayments.$Properties {
+		}
+		class XmatUpdatePayments {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatUpdatePayments.$Properties)
+			$unknowns?: Uint8Array[]
+			receiverName?: (string|null)
+			senderName?: (string|null)
+			amount?: (number|null)
+			transactionId?: (number|Long|null)
+			transactionStatus?: (number|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatUpdatePayments.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatUpdatePayments & waproto.MiTransportAdminMessage.XmatUpdatePayments.$Shape
+		}
+		namespace XmatUpdatePayments {
+			interface $Properties {
+				receiverName?: (string|null)
+				senderName?: (string|null)
+				amount?: (number|null)
+				transactionId?: (number|Long|null)
+				transactionStatus?: (number|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatUpdatePayments.$Properties
+		}
+		interface IXmatThreadQuickReaction extends waproto.MiTransportAdminMessage.XmatThreadQuickReaction.$Properties {
+		}
+		class XmatThreadQuickReaction {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatThreadQuickReaction.$Properties)
+			$unknowns?: Uint8Array[]
+			threadQuickReactionEmoji?: (string|null)
+			threadQuickReactionInstructionKeyId?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatThreadQuickReaction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatThreadQuickReaction & waproto.MiTransportAdminMessage.XmatThreadQuickReaction.$Shape
+		}
+		namespace XmatThreadQuickReaction {
+			interface $Properties {
+				threadQuickReactionEmoji?: (string|null)
+				threadQuickReactionInstructionKeyId?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatThreadQuickReaction.$Properties
+		}
+		interface IXmatThreadNickname extends waproto.MiTransportAdminMessage.XmatThreadNickname.$Properties {
+		}
+		class XmatThreadNickname {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatThreadNickname.$Properties)
+			$unknowns?: Uint8Array[]
+			participantId?: (number|Long|null)
+			nickname?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatThreadNickname.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatThreadNickname & waproto.MiTransportAdminMessage.XmatThreadNickname.$Shape
+		}
+		namespace XmatThreadNickname {
+			interface $Properties {
+				participantId?: (number|Long|null)
+				nickname?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatThreadNickname.$Properties
+		}
+		interface IXmatThreadIcon extends waproto.MiTransportAdminMessage.XmatThreadIcon.$Properties {
+		}
+		class XmatThreadIcon {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatThreadIcon.$Properties)
+			$unknowns?: Uint8Array[]
+			threadIcon?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatThreadIcon.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatThreadIcon & waproto.MiTransportAdminMessage.XmatThreadIcon.$Shape
+		}
+		namespace XmatThreadIcon {
+			interface $Properties {
+				threadIcon?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatThreadIcon.$Properties
+		}
+		interface IXmatThemeColor extends waproto.MiTransportAdminMessage.XmatThemeColor.$Properties {
+		}
+		class XmatThemeColor {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatThemeColor.$Properties)
+			$unknowns?: Uint8Array[]
+			themeId?: (string|null)
+			themeColor?: (string|null)
+			gradient: string[]
+			shouldShowIcon?: (boolean|null)
+			themeType?: (number|null)
+			accessibilityLabel?: (string|null)
+			themeNameWithSubtitle?: (string|null)
+			themeEmoji?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatThemeColor.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatThemeColor & waproto.MiTransportAdminMessage.XmatThemeColor.$Shape
+		}
+		namespace XmatThemeColor {
+			interface $Properties {
+				themeId?: (string|null)
+				themeColor?: (string|null)
+				gradient?: (string[]|null)
+				shouldShowIcon?: (boolean|null)
+				themeType?: (number|null)
+				accessibilityLabel?: (string|null)
+				themeNameWithSubtitle?: (string|null)
+				themeEmoji?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatThemeColor.$Properties
+		}
+		interface IXmatMessengerSharedAlbum extends waproto.MiTransportAdminMessage.XmatMessengerSharedAlbum.$Properties {
+		}
+		class XmatMessengerSharedAlbum {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbum.$Properties)
+			$unknowns?: Uint8Array[]
+			xmaDataclass?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbum.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMessengerSharedAlbum & waproto.MiTransportAdminMessage.XmatMessengerSharedAlbum.$Shape
+		}
+		namespace XmatMessengerSharedAlbum {
+			interface $Properties {
+				xmaDataclass?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatMessengerSharedAlbum.$Properties
+		}
+		interface IXmatMessengerSharedAlbumRename extends waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumRename.$Properties {
+		}
+		class XmatMessengerSharedAlbumRename {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumRename.$Properties)
+			$unknowns?: Uint8Array[]
+			sharedAlbumId?: (number|Long|null)
+			oldAlbumTitle?: (string|null)
+			newAlbumTitle?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumRename.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumRename & waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumRename.$Shape
+		}
+		namespace XmatMessengerSharedAlbumRename {
+			interface $Properties {
+				sharedAlbumId?: (number|Long|null)
+				oldAlbumTitle?: (string|null)
+				newAlbumTitle?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumRename.$Properties
+		}
+		interface IXmatMessengerSharedAlbumDeletion extends waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumDeletion.$Properties {
+		}
+		class XmatMessengerSharedAlbumDeletion {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumDeletion.$Properties)
+			$unknowns?: Uint8Array[]
+			sharedAlbumId?: (number|Long|null)
+			albumTitle?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumDeletion.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumDeletion & waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumDeletion.$Shape
+		}
+		namespace XmatMessengerSharedAlbumDeletion {
+			interface $Properties {
+				sharedAlbumId?: (number|Long|null)
+				albumTitle?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumDeletion.$Properties
+		}
+		interface IXmatMessengerSharedAlbumContentRemoval extends waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.$Properties {
+		}
+		class XmatMessengerSharedAlbumContentRemoval {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.$Properties)
+			$unknowns?: Uint8Array[]
+			sharedAlbumId?: (number|Long|null)
+			removedContentMap: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.RemovedContentTuple.$Properties[]
+			removedContentCount?: (number|Long|null)
+			albumTitle?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval & waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.$Shape
+		}
+		namespace XmatMessengerSharedAlbumContentRemoval {
+			interface $Properties {
+				sharedAlbumId?: (number|Long|null)
+				removedContentMap?: (waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.RemovedContentTuple.$Properties[]|null)
+				removedContentCount?: (number|Long|null)
+				albumTitle?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.$Properties
+			interface IRemovedContentTuple extends waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.RemovedContentTuple.$Properties {
+			}
+			class RemovedContentTuple {
+				constructor(p?: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.RemovedContentTuple.$Properties)
+				$unknowns?: Uint8Array[]
+				key?: (number|Long|null)
+				value?: (string|null)
+				static encode(m: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.RemovedContentTuple.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.RemovedContentTuple & waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.RemovedContentTuple.$Shape
+			}
+			namespace RemovedContentTuple {
+				interface $Properties {
+					key?: (number|Long|null)
+					value?: (string|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumContentRemoval.RemovedContentTuple.$Properties
+			}
+		}
+		interface IXmatMessengerSharedAlbumAddition extends waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumAddition.$Properties {
+		}
+		class XmatMessengerSharedAlbumAddition {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumAddition.$Properties)
+			$unknowns?: Uint8Array[]
+			sharedAlbumId?: (number|Long|null)
+			albumTitle?: (string|null)
+			numOfAttachments?: (number|Long|null)
+			isAlbumCreation?: (boolean|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumAddition.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumAddition & waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumAddition.$Shape
+		}
+		namespace XmatMessengerSharedAlbumAddition {
+			interface $Properties {
+				sharedAlbumId?: (number|Long|null)
+				albumTitle?: (string|null)
+				numOfAttachments?: (number|Long|null)
+				isAlbumCreation?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatMessengerSharedAlbumAddition.$Properties
+		}
+		interface IXmatMessengerQRCodeScanned extends waproto.MiTransportAdminMessage.XmatMessengerQRCodeScanned.$Properties {
+		}
+		class XmatMessengerQRCodeScanned {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatMessengerQRCodeScanned.$Properties)
+			$unknowns?: Uint8Array[]
+			receiverName?: (string|null)
+			senderName?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatMessengerQRCodeScanned.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMessengerQRCodeScanned & waproto.MiTransportAdminMessage.XmatMessengerQRCodeScanned.$Shape
+		}
+		namespace XmatMessengerQRCodeScanned {
+			interface $Properties {
+				receiverName?: (string|null)
+				senderName?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatMessengerQRCodeScanned.$Properties
+		}
+		interface IXmatMessagingLimitSharing extends waproto.MiTransportAdminMessage.XmatMessagingLimitSharing.$Properties {
+		}
+		class XmatMessagingLimitSharing {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatMessagingLimitSharing.$Properties)
+			$unknowns?: Uint8Array[]
+			senderName?: (string|null)
+			senderId?: (string|null)
+			limitSharingType?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatMessagingLimitSharing.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMessagingLimitSharing & waproto.MiTransportAdminMessage.XmatMessagingLimitSharing.$Shape
+		}
+		namespace XmatMessagingLimitSharing {
+			interface $Properties {
+				senderName?: (string|null)
+				senderId?: (string|null)
+				limitSharingType?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatMessagingLimitSharing.$Properties
+		}
+		interface IXmatMagicWords extends waproto.MiTransportAdminMessage.XmatMagicWords.$Properties {
+		}
+		class XmatMagicWords {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatMagicWords.$Properties)
+			$unknowns?: Uint8Array[]
+			newMagicWordCount?: (number|Long|null)
+			removedMagicWordCount?: (number|Long|null)
+			magicWord?: (string|null)
+			emojiEffect?: (string|null)
+			isAllEdited?: (boolean|null)
+			themeName?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatMagicWords.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatMagicWords & waproto.MiTransportAdminMessage.XmatMagicWords.$Shape
+		}
+		namespace XmatMagicWords {
+			interface $Properties {
+				newMagicWordCount?: (number|Long|null)
+				removedMagicWordCount?: (number|Long|null)
+				magicWord?: (string|null)
+				emojiEffect?: (string|null)
+				isAllEdited?: (boolean|null)
+				themeName?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatMagicWords.$Properties
+		}
+		interface IXmatLinkCTA extends waproto.MiTransportAdminMessage.XmatLinkCTA.$Properties {
+		}
+		class XmatLinkCTA {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatLinkCTA.$Properties)
+			$unknowns?: Uint8Array[]
+			linkCtaXmatPrimaryText?: (string|null)
+			linkCtaXmatCtaText?: (string|null)
+			linkCtaXmatCtaUrl?: (string|null)
+			linkCtaXmatCtaIosUrl?: (string|null)
+			androidUri?: (string|null)
+			asyncUrl?: (string|null)
+			wwwIsAsyncUrl?: (boolean|null)
+			msiteEnabled?: (boolean|null)
+			hideUriInFallback?: (boolean|null)
+			showConfirmationDialog?: (boolean|null)
+			graphPayload?: (string|null)
+			identifierName?: (string|null)
+			threadId?: (string|null)
+			hideCtaInFallback?: (boolean|null)
+			ctxAdConversationStarterInfo?: (string|null)
+			fbmUri?: (string|null)
+			initiatorUserId?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatLinkCTA.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatLinkCTA & waproto.MiTransportAdminMessage.XmatLinkCTA.$Shape
+		}
+		namespace XmatLinkCTA {
+			interface $Properties {
+				linkCtaXmatPrimaryText?: (string|null)
+				linkCtaXmatCtaText?: (string|null)
+				linkCtaXmatCtaUrl?: (string|null)
+				linkCtaXmatCtaIosUrl?: (string|null)
+				androidUri?: (string|null)
+				asyncUrl?: (string|null)
+				wwwIsAsyncUrl?: (boolean|null)
+				msiteEnabled?: (boolean|null)
+				hideUriInFallback?: (boolean|null)
+				showConfirmationDialog?: (boolean|null)
+				graphPayload?: (string|null)
+				identifierName?: (string|null)
+				threadId?: (string|null)
+				hideCtaInFallback?: (boolean|null)
+				ctxAdConversationStarterInfo?: (string|null)
+				fbmUri?: (string|null)
+				initiatorUserId?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatLinkCTA.$Properties
+		}
+		interface IXmatInstantGameEncryptedDynamicCustomUpdate extends waproto.MiTransportAdminMessage.XmatInstantGameEncryptedDynamicCustomUpdate.$Properties {
+		}
+		class XmatInstantGameEncryptedDynamicCustomUpdate {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatInstantGameEncryptedDynamicCustomUpdate.$Properties)
+			$unknowns?: Uint8Array[]
+			senderName?: (string|null)
+			muteManagementAdminTextType?: (string|null)
+			gameName?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatInstantGameEncryptedDynamicCustomUpdate.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatInstantGameEncryptedDynamicCustomUpdate & waproto.MiTransportAdminMessage.XmatInstantGameEncryptedDynamicCustomUpdate.$Shape
+		}
+		namespace XmatInstantGameEncryptedDynamicCustomUpdate {
+			interface $Properties {
+				senderName?: (string|null)
+				muteManagementAdminTextType?: (string|null)
+				gameName?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatInstantGameEncryptedDynamicCustomUpdate.$Properties
+		}
+		interface IXmatFriendRequestConfirmedEncrypted extends waproto.MiTransportAdminMessage.XmatFriendRequestConfirmedEncrypted.$Properties {
+		}
+		class XmatFriendRequestConfirmedEncrypted {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatFriendRequestConfirmedEncrypted.$Properties)
+			$unknowns?: Uint8Array[]
+			otherUserName?: (string|null)
+			isTurnOnCohort?: (string|null)
+			userWhoAcceptedFriendRequest?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatFriendRequestConfirmedEncrypted.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatFriendRequestConfirmedEncrypted & waproto.MiTransportAdminMessage.XmatFriendRequestConfirmedEncrypted.$Shape
+		}
+		namespace XmatFriendRequestConfirmedEncrypted {
+			interface $Properties {
+				otherUserName?: (string|null)
+				isTurnOnCohort?: (string|null)
+				userWhoAcceptedFriendRequest?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatFriendRequestConfirmedEncrypted.$Properties
+		}
+		interface IXmatDisappearingSetting extends waproto.MiTransportAdminMessage.XmatDisappearingSetting.$Properties {
+		}
+		class XmatDisappearingSetting {
+			constructor(p?: waproto.MiTransportAdminMessage.XmatDisappearingSetting.$Properties)
+			$unknowns?: Uint8Array[]
+			disappearingSettingTime?: (number|Long|null)
+			oldDisappearingSettingTime?: (number|Long|null)
+			disappearingSettingActorFbid?: (number|Long|null)
+			newEphemeralityType?: (number|Long|null)
+			oldEphemeralityType?: (number|Long|null)
+			static encode(m: waproto.MiTransportAdminMessage.XmatDisappearingSetting.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.XmatDisappearingSetting & waproto.MiTransportAdminMessage.XmatDisappearingSetting.$Shape
+		}
+		namespace XmatDisappearingSetting {
+			interface $Properties {
+				disappearingSettingTime?: (number|Long|null)
+				oldDisappearingSettingTime?: (number|Long|null)
+				disappearingSettingActorFbid?: (number|Long|null)
+				newEphemeralityType?: (number|Long|null)
+				oldEphemeralityType?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.XmatDisappearingSetting.$Properties
+		}
+		interface ILimitSharingChanged extends waproto.MiTransportAdminMessage.LimitSharingChanged.$Properties {
+		}
+		class LimitSharingChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.LimitSharingChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			sharingType?: (waproto.MiTransportAdminMessage.LimitSharingChanged.SharingType|null)
+			static encode(m: waproto.MiTransportAdminMessage.LimitSharingChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.LimitSharingChanged & waproto.MiTransportAdminMessage.LimitSharingChanged.$Shape
+		}
+		namespace LimitSharingChanged {
+			interface $Properties {
+				sharingType?: (waproto.MiTransportAdminMessage.LimitSharingChanged.SharingType|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.LimitSharingChanged.$Properties
+			enum SharingType {
+				UNSET = 0,
+				DISABLED = 1,
+				ENABLED = 2
+			}
+		}
+		interface IDisappearingSettingChanged extends waproto.MiTransportAdminMessage.DisappearingSettingChanged.$Properties {
+		}
+		class DisappearingSettingChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.DisappearingSettingChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			disappearingSettingDurationSeconds?: (number|null)
+			oldDisappearingSettingDurationSeconds?: (number|null)
+			static encode(m: waproto.MiTransportAdminMessage.DisappearingSettingChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.DisappearingSettingChanged & waproto.MiTransportAdminMessage.DisappearingSettingChanged.$Shape
+		}
+		namespace DisappearingSettingChanged {
+			interface $Properties {
+				disappearingSettingDurationSeconds?: (number|null)
+				oldDisappearingSettingDurationSeconds?: (number|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.DisappearingSettingChanged.$Properties
+		}
+		interface IIconChanged extends waproto.MiTransportAdminMessage.IconChanged.$Properties {
+		}
+		class IconChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.IconChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			threadIcon?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.IconChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.IconChanged & waproto.MiTransportAdminMessage.IconChanged.$Shape
+		}
+		namespace IconChanged {
+			interface $Properties {
+				threadIcon?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.IconChanged.$Properties
+		}
+		interface ILinkCta extends waproto.MiTransportAdminMessage.LinkCta.$Properties {
+		}
+		class LinkCta {
+			constructor(p?: waproto.MiTransportAdminMessage.LinkCta.$Properties)
+			$unknowns?: Uint8Array[]
+			ukOsaAdminText?: (waproto.MiTransportAdminMessage.LinkCta.UkOsaAdminText.$Properties|null)
+			content?: "ukOsaAdminText"
+			static encode(m: waproto.MiTransportAdminMessage.LinkCta.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.LinkCta & waproto.MiTransportAdminMessage.LinkCta.$Shape
+		}
+		namespace LinkCta {
+			interface $Properties {
+				ukOsaAdminText?: (waproto.MiTransportAdminMessage.LinkCta.UkOsaAdminText.$Properties|null)
+				content?: "ukOsaAdminText"
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  ukOsaAdminText?: waproto.MiTransportAdminMessage.LinkCta.UkOsaAdminText.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ content?: undefined; ukOsaAdminText?: null }|{ content?: "ukOsaAdminText"; ukOsaAdminText: waproto.MiTransportAdminMessage.LinkCta.UkOsaAdminText.$Shape })
+)
+			interface IUkOsaAdminText extends waproto.MiTransportAdminMessage.LinkCta.UkOsaAdminText.$Properties {
+			}
+			class UkOsaAdminText {
+				constructor(p?: waproto.MiTransportAdminMessage.LinkCta.UkOsaAdminText.$Properties)
+				$unknowns?: Uint8Array[]
+				initiatorUserId?: (string|null)
+				static encode(m: waproto.MiTransportAdminMessage.LinkCta.UkOsaAdminText.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.LinkCta.UkOsaAdminText & waproto.MiTransportAdminMessage.LinkCta.UkOsaAdminText.$Shape
+			}
+			namespace UkOsaAdminText {
+				interface $Properties {
+					initiatorUserId?: (string|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.MiTransportAdminMessage.LinkCta.UkOsaAdminText.$Properties
+			}
+		}
+		interface IQuickReactionChanged extends waproto.MiTransportAdminMessage.QuickReactionChanged.$Properties {
+		}
+		class QuickReactionChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.QuickReactionChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			emojiName?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.QuickReactionChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.QuickReactionChanged & waproto.MiTransportAdminMessage.QuickReactionChanged.$Shape
+		}
+		namespace QuickReactionChanged {
+			interface $Properties {
+				emojiName?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.QuickReactionChanged.$Properties
+		}
+		interface IGroupImageChanged extends waproto.MiTransportAdminMessage.GroupImageChanged.$Properties {
+		}
+		class GroupImageChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.GroupImageChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			action?: (waproto.MiTransportAdminMessage.GroupImageChanged.Action|null)
+			static encode(m: waproto.MiTransportAdminMessage.GroupImageChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.GroupImageChanged & waproto.MiTransportAdminMessage.GroupImageChanged.$Shape
+		}
+		namespace GroupImageChanged {
+			interface $Properties {
+				action?: (waproto.MiTransportAdminMessage.GroupImageChanged.Action|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.GroupImageChanged.$Properties
+			enum Action {
+				UNSET = 0,
+				CHANGED = 1,
+				REMOVED = 2
+			}
+		}
+		interface IMessagePinned extends waproto.MiTransportAdminMessage.MessagePinned.$Properties {
+		}
+		class MessagePinned {
+			constructor(p?: waproto.MiTransportAdminMessage.MessagePinned.$Properties)
+			$unknowns?: Uint8Array[]
+			action?: (waproto.MiTransportAdminMessage.MessagePinned.Action|null)
+			static encode(m: waproto.MiTransportAdminMessage.MessagePinned.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.MessagePinned & waproto.MiTransportAdminMessage.MessagePinned.$Shape
+		}
+		namespace MessagePinned {
+			interface $Properties {
+				action?: (waproto.MiTransportAdminMessage.MessagePinned.Action|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.MessagePinned.$Properties
+			enum Action {
+				UNSET = 0,
+				PINNED = 1,
+				UNPINNED = 2
+			}
+		}
+		interface IGroupMembershipAddModeChanged extends waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged.$Properties {
+		}
+		class GroupMembershipAddModeChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			mode?: (waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged.Mode|null)
+			static encode(m: waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged & waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged.$Shape
+		}
+		namespace GroupMembershipAddModeChanged {
+			interface $Properties {
+				mode?: (waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged.Mode|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.GroupMembershipAddModeChanged.$Properties
+			enum Mode {
+				UNSET = 0,
+				ALL_MEMBERS = 1,
+				ADMINS_ONLY = 2
+			}
+		}
+		interface IGroupNameChanged extends waproto.MiTransportAdminMessage.GroupNameChanged.$Properties {
+		}
+		class GroupNameChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.GroupNameChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			groupName?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.GroupNameChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.GroupNameChanged & waproto.MiTransportAdminMessage.GroupNameChanged.$Shape
+		}
+		namespace GroupNameChanged {
+			interface $Properties {
+				groupName?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.GroupNameChanged.$Properties
+		}
+		interface IGroupAdminChanged extends waproto.MiTransportAdminMessage.GroupAdminChanged.$Properties {
+		}
+		class GroupAdminChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.GroupAdminChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			targetUserId: string[]
+			action?: (waproto.MiTransportAdminMessage.GroupAdminChanged.Action|null)
+			static encode(m: waproto.MiTransportAdminMessage.GroupAdminChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.GroupAdminChanged & waproto.MiTransportAdminMessage.GroupAdminChanged.$Shape
+		}
+		namespace GroupAdminChanged {
+			interface $Properties {
+				targetUserId?: (string[]|null)
+				action?: (waproto.MiTransportAdminMessage.GroupAdminChanged.Action|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.GroupAdminChanged.$Properties
+			enum Action {
+				UNSET = 0,
+				ADDED = 1,
+				REMOVED = 2
+			}
+		}
+		interface IGroupParticipantChanged extends waproto.MiTransportAdminMessage.GroupParticipantChanged.$Properties {
+		}
+		class GroupParticipantChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.GroupParticipantChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			targetUserId: string[]
+			action?: (waproto.MiTransportAdminMessage.GroupParticipantChanged.Action|null)
+			static encode(m: waproto.MiTransportAdminMessage.GroupParticipantChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.GroupParticipantChanged & waproto.MiTransportAdminMessage.GroupParticipantChanged.$Shape
+		}
+		namespace GroupParticipantChanged {
+			interface $Properties {
+				targetUserId?: (string[]|null)
+				action?: (waproto.MiTransportAdminMessage.GroupParticipantChanged.Action|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.GroupParticipantChanged.$Properties
+			enum Action {
+				UNSET = 0,
+				ADDED = 1,
+				REMOVED = 2
+			}
+		}
+		interface INicknameChanged extends waproto.MiTransportAdminMessage.NicknameChanged.$Properties {
+		}
+		class NicknameChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.NicknameChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			targetUserId?: (string|null)
+			nickname?: (string|null)
+			static encode(m: waproto.MiTransportAdminMessage.NicknameChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.NicknameChanged & waproto.MiTransportAdminMessage.NicknameChanged.$Shape
+		}
+		namespace NicknameChanged {
+			interface $Properties {
+				targetUserId?: (string|null)
+				nickname?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.NicknameChanged.$Properties
+		}
+		interface IChatThemeChanged extends waproto.MiTransportAdminMessage.ChatThemeChanged.$Properties {
+		}
+		class ChatThemeChanged {
+			constructor(p?: waproto.MiTransportAdminMessage.ChatThemeChanged.$Properties)
+			$unknowns?: Uint8Array[]
+			themeName?: (string|null)
+			themeEmoji?: (string|null)
+			themeType?: (number|null)
+			static encode(m: waproto.MiTransportAdminMessage.ChatThemeChanged.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MiTransportAdminMessage.ChatThemeChanged & waproto.MiTransportAdminMessage.ChatThemeChanged.$Shape
+		}
+		namespace ChatThemeChanged {
+			interface $Properties {
+				themeName?: (string|null)
+				themeEmoji?: (string|null)
+				themeType?: (number|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MiTransportAdminMessage.ChatThemeChanged.$Properties
+		}
+	}
+	interface IMissingKeysTableSchemaProto extends waproto.MissingKeysTableSchemaProto.$Properties {
+	}
+	class MissingKeysTableSchemaProto {
+		constructor(p?: waproto.MissingKeysTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		keyHex?: (string|null)
+		keyId?: (Uint8Array|null)
+		timestamp?: (number|Long|null)
+		deviceResponses: waproto.DeviceResponse.$Properties[]
+		static encode(m: waproto.MissingKeysTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MissingKeysTableSchemaProto & waproto.MissingKeysTableSchemaProto.$Shape
+	}
+	namespace MissingKeysTableSchemaProto {
+		interface $Properties {
+			keyHex?: (string|null)
+			keyId?: (Uint8Array|null)
+			timestamp?: (number|Long|null)
+			deviceResponses?: (waproto.DeviceResponse.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MissingKeysTableSchemaProto.$Properties
+	}
 	interface IMoney extends waproto.Money.$Properties {
 	}
 	class Money {
@@ -11959,6 +19183,66 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.Money.$Properties
+	}
+	interface IMsgContentCommandProto extends waproto.MsgContentCommandProto.$Properties {
+	}
+	class MsgContentCommandProto {
+		constructor(p?: waproto.MsgContentCommandProto.$Properties)
+		$unknowns?: Uint8Array[]
+		commandType?: (number|null)
+		offset?: (number|null)
+		length?: (number|null)
+		validationToken?: (string|null)
+		static encode(m: waproto.MsgContentCommandProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgContentCommandProto & waproto.MsgContentCommandProto.$Shape
+	}
+	namespace MsgContentCommandProto {
+		interface $Properties {
+			commandType?: (number|null)
+			offset?: (number|null)
+			length?: (number|null)
+			validationToken?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MsgContentCommandProto.$Properties
+	}
+	interface IMsgContentProto extends waproto.MsgContentProto.$Properties {
+	}
+	class MsgContentProto {
+		constructor(p?: waproto.MsgContentProto.$Properties)
+		$unknowns?: Uint8Array[]
+		content?: (string|null)
+		adminMsgContent: string[]
+		adminType?: (string|null)
+		obsoleteExpiration?: (number|null)
+		obsoleteTs?: (number|Long|null)
+		subtype?: (string|null)
+		protobuf?: (Uint8Array|null)
+		screenshotActionType?: (number|null)
+		authorName?: (string|null)
+		version?: (number|null)
+		mentionedJids: string[]
+		commands: waproto.MsgContentCommandProto.$Properties[]
+		static encode(m: waproto.MsgContentProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgContentProto & waproto.MsgContentProto.$Shape
+	}
+	namespace MsgContentProto {
+		interface $Properties {
+			content?: (string|null)
+			adminMsgContent?: (string[]|null)
+			adminType?: (string|null)
+			obsoleteExpiration?: (number|null)
+			obsoleteTs?: (number|Long|null)
+			subtype?: (string|null)
+			protobuf?: (Uint8Array|null)
+			screenshotActionType?: (number|null)
+			authorName?: (string|null)
+			version?: (number|null)
+			mentionedJids?: (string[]|null)
+			commands?: (waproto.MsgContentCommandProto.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.MsgContentProto.$Properties
 	}
 	interface IMsgOpaqueData extends waproto.MsgOpaqueData.$Properties {
 	}
@@ -12020,6 +19304,14 @@ export namespace waproto {
 		sharableEventInviteIsCanceled?: (boolean|null)
 		sharableEventInviteJpegThumbnail?: (Uint8Array|null)
 		sharableEventInviteCallLink?: (string|null)
+		mediaPngThumbnail?: (string|null)
+		qrUrl?: (string|null)
+		musicData?: (waproto.MsgOpaqueData.MusicData.$Properties|null)
+		pollAddedOptionName?: (string|null)
+		sharableEventInviteStatus?: (string|null)
+		sharableEventInviteLocationName?: (string|null)
+		sharableEventInviteCoverImageHandle?: (string|null)
+		sharableEventInviteLastUpdatedTsUsec?: (number|Long|null)
 		static encode(m: waproto.MsgOpaqueData.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgOpaqueData & waproto.MsgOpaqueData.$Shape
 	}
@@ -12080,6 +19372,14 @@ export namespace waproto {
 			sharableEventInviteIsCanceled?: (boolean|null)
 			sharableEventInviteJpegThumbnail?: (Uint8Array|null)
 			sharableEventInviteCallLink?: (string|null)
+			mediaPngThumbnail?: (string|null)
+			qrUrl?: (string|null)
+			musicData?: (waproto.MsgOpaqueData.MusicData.$Properties|null)
+			pollAddedOptionName?: (string|null)
+			sharableEventInviteStatus?: (string|null)
+			sharableEventInviteLocationName?: (string|null)
+			sharableEventInviteCoverImageHandle?: (string|null)
+			sharableEventInviteLastUpdatedTsUsec?: (number|Long|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.MsgOpaqueData.$Properties
@@ -12091,6 +19391,104 @@ export namespace waproto {
 			UNKNOWN = 0,
 			TEXT = 1,
 			IMAGE = 2
+		}
+		interface IMusicData extends waproto.MsgOpaqueData.MusicData.$Properties {
+		}
+		class MusicData {
+			constructor(p?: waproto.MsgOpaqueData.MusicData.$Properties)
+			$unknowns?: Uint8Array[]
+			musicContentMediaId?: (string|null)
+			songId?: (string|null)
+			author?: (string|null)
+			title?: (string|null)
+			songUri?: (string|null)
+			artworkUri?: (string|null)
+			style?: (number|null)
+			songStartTimeMs?: (number|null)
+			clipDurationMs?: (number|null)
+			isExplicit?: (boolean|null)
+			countryBlocklist?: (Uint8Array|null)
+			artistAttribution?: (string|null)
+			artworkDirectPath?: (string|null)
+			artworkSha256?: (Uint8Array|null)
+			artworkEncSha256?: (Uint8Array|null)
+			artworkMediaKey?: (Uint8Array|null)
+			consumptionCheckedAtS?: (number|Long|null)
+			isAvailableForConsumption?: (boolean|null)
+			lyrics: waproto.MsgOpaqueData.MusicData.LyricsLine.$Properties[]
+			lyricsConfirmedAtS?: (number|Long|null)
+			static encode(m: waproto.MsgOpaqueData.MusicData.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgOpaqueData.MusicData & waproto.MsgOpaqueData.MusicData.$Shape
+		}
+		namespace MusicData {
+			interface $Properties {
+				musicContentMediaId?: (string|null)
+				songId?: (string|null)
+				author?: (string|null)
+				title?: (string|null)
+				songUri?: (string|null)
+				artworkUri?: (string|null)
+				style?: (number|null)
+				songStartTimeMs?: (number|null)
+				clipDurationMs?: (number|null)
+				isExplicit?: (boolean|null)
+				countryBlocklist?: (Uint8Array|null)
+				artistAttribution?: (string|null)
+				artworkDirectPath?: (string|null)
+				artworkSha256?: (Uint8Array|null)
+				artworkEncSha256?: (Uint8Array|null)
+				artworkMediaKey?: (Uint8Array|null)
+				consumptionCheckedAtS?: (number|Long|null)
+				isAvailableForConsumption?: (boolean|null)
+				lyrics?: (waproto.MsgOpaqueData.MusicData.LyricsLine.$Properties[]|null)
+				lyricsConfirmedAtS?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.MsgOpaqueData.MusicData.$Properties
+			interface ILyricsLine extends waproto.MsgOpaqueData.MusicData.LyricsLine.$Properties {
+			}
+			class LyricsLine {
+				constructor(p?: waproto.MsgOpaqueData.MusicData.LyricsLine.$Properties)
+				$unknowns?: Uint8Array[]
+				startTimeMs?: (number|null)
+				endTimeMs?: (number|null)
+				text?: (string|null)
+				wordOffsets: waproto.MsgOpaqueData.MusicData.LyricsLine.WordOffset.$Properties[]
+				static encode(m: waproto.MsgOpaqueData.MusicData.LyricsLine.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgOpaqueData.MusicData.LyricsLine & waproto.MsgOpaqueData.MusicData.LyricsLine.$Shape
+			}
+			namespace LyricsLine {
+				interface $Properties {
+					startTimeMs?: (number|null)
+					endTimeMs?: (number|null)
+					text?: (string|null)
+					wordOffsets?: (waproto.MsgOpaqueData.MusicData.LyricsLine.WordOffset.$Properties[]|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.MsgOpaqueData.MusicData.LyricsLine.$Properties
+				interface IWordOffset extends waproto.MsgOpaqueData.MusicData.LyricsLine.WordOffset.$Properties {
+				}
+				class WordOffset {
+					constructor(p?: waproto.MsgOpaqueData.MusicData.LyricsLine.WordOffset.$Properties)
+					$unknowns?: Uint8Array[]
+					startIndex?: (number|null)
+					endIndex?: (number|null)
+					startOffsetMs?: (number|null)
+					endOffsetMs?: (number|null)
+					static encode(m: waproto.MsgOpaqueData.MusicData.LyricsLine.WordOffset.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgOpaqueData.MusicData.LyricsLine.WordOffset & waproto.MsgOpaqueData.MusicData.LyricsLine.WordOffset.$Shape
+				}
+				namespace WordOffset {
+					interface $Properties {
+						startIndex?: (number|null)
+						endIndex?: (number|null)
+						startOffsetMs?: (number|null)
+						endOffsetMs?: (number|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.MsgOpaqueData.MusicData.LyricsLine.WordOffset.$Properties
+				}
+			}
 		}
 		interface IEventLocation extends waproto.MsgOpaqueData.EventLocation.$Properties {
 		}
@@ -12159,6 +19557,9 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 			name?: (string|null)
 			hash?: (string|null)
+			addOptionMsgKey?: (string|null)
+			localId?: (number|null)
+			addOptionMsgT?: (number|null)
 			static encode(m: waproto.MsgOpaqueData.PollOption.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgOpaqueData.PollOption & waproto.MsgOpaqueData.PollOption.$Shape
 		}
@@ -12166,6 +19567,9 @@ export namespace waproto {
 			interface $Properties {
 				name?: (string|null)
 				hash?: (string|null)
+				addOptionMsgKey?: (string|null)
+				localId?: (number|null)
+				addOptionMsgT?: (number|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.MsgOpaqueData.PollOption.$Properties
@@ -12272,7 +19676,13 @@ export namespace waproto {
 			participant?: (string|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.NotificationMessageInfo.$Properties
+		type $Shape = {
+  key?: waproto.MessageKey.$Shape|null
+  message?: waproto.Message.$Shape|null
+  messageTimestamp?: number|Long|null
+  participant?: string|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface INotificationSettings extends waproto.NotificationSettings.$Properties {
 	}
@@ -12300,6 +19710,104 @@ export namespace waproto {
 		}
 		type $Shape = waproto.NotificationSettings.$Properties
 	}
+	interface IOmittedConversationMetadata extends waproto.OmittedConversationMetadata.$Properties {
+	}
+	class OmittedConversationMetadata {
+		constructor(p?: waproto.OmittedConversationMetadata.$Properties)
+		$unknowns?: Uint8Array[]
+		snapshotId?: (string|null)
+		snapshotTimestampMs?: (number|Long|null)
+		batchIndex?: (number|null)
+		batchCount?: (number|null)
+		complete?: (boolean|null)
+		conversations: waproto.Conversation.$Properties[]
+		static encode(m: waproto.OmittedConversationMetadata.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.OmittedConversationMetadata & waproto.OmittedConversationMetadata.$Shape
+	}
+	namespace OmittedConversationMetadata {
+		interface $Properties {
+			snapshotId?: (string|null)
+			snapshotTimestampMs?: (number|Long|null)
+			batchIndex?: (number|null)
+			batchCount?: (number|null)
+			complete?: (boolean|null)
+			conversations?: (waproto.Conversation.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  snapshotId?: string|null
+  snapshotTimestampMs?: number|Long|null
+  batchIndex?: number|null
+  batchCount?: number|null
+  complete?: boolean|null
+  conversations?: waproto.Conversation.$Shape[]|null
+  $unknowns?: Uint8Array[]
+}
+	}
+	interface IOpenSealedThreadIdInput extends waproto.OpenSealedThreadIdInput.$Properties {
+	}
+	class OpenSealedThreadIdInput {
+		constructor(p?: waproto.OpenSealedThreadIdInput.$Properties)
+		$unknowns?: Uint8Array[]
+		backupId?: (number|Long|null)
+		sealedThreadId?: (Uint8Array|null)
+		epochs: waproto.EpochKey.$Properties[]
+		static encode(m: waproto.OpenSealedThreadIdInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.OpenSealedThreadIdInput & waproto.OpenSealedThreadIdInput.$Shape
+	}
+	namespace OpenSealedThreadIdInput {
+		interface $Properties {
+			backupId?: (number|Long|null)
+			sealedThreadId?: (Uint8Array|null)
+			epochs?: (waproto.EpochKey.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.OpenSealedThreadIdInput.$Properties
+	}
+	interface IOpenSealedThreadIdOutput extends waproto.OpenSealedThreadIdOutput.$Properties {
+	}
+	class OpenSealedThreadIdOutput {
+		constructor(p?: waproto.OpenSealedThreadIdOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (waproto.OpenSealedThreadIdSuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.OpenSealedThreadIdOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.OpenSealedThreadIdOutput & waproto.OpenSealedThreadIdOutput.$Shape
+	}
+	namespace OpenSealedThreadIdOutput {
+		interface $Properties {
+			success?: (waproto.OpenSealedThreadIdSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.OpenSealedThreadIdSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.OpenSealedThreadIdSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IOpenSealedThreadIdSuccess extends waproto.OpenSealedThreadIdSuccess.$Properties {
+	}
+	class OpenSealedThreadIdSuccess {
+		constructor(p?: waproto.OpenSealedThreadIdSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		threadId?: (string|null)
+		sealEpochAnonId?: (number|null)
+		static encode(m: waproto.OpenSealedThreadIdSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.OpenSealedThreadIdSuccess & waproto.OpenSealedThreadIdSuccess.$Shape
+	}
+	namespace OpenSealedThreadIdSuccess {
+		interface $Properties {
+			threadId?: (string|null)
+			sealEpochAnonId?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.OpenSealedThreadIdSuccess.$Properties
+	}
 	interface IOrfThreadIdInput extends waproto.OrfThreadIdInput.$Properties {
 	}
 	class OrfThreadIdInput {
@@ -12323,18 +19831,42 @@ export namespace waproto {
 	class OrfThreadIdOutput {
 		constructor(p?: waproto.OrfThreadIdOutput.$Properties)
 		$unknowns?: Uint8Array[]
-		orfThreadId?: (Uint8Array|null)
+		success?: (waproto.OrfThreadIdSuccess.$Properties|null)
 		error?: (string|null)
+		result?: ("success"|"error")
 		static encode(m: waproto.OrfThreadIdOutput.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.OrfThreadIdOutput & waproto.OrfThreadIdOutput.$Shape
 	}
 	namespace OrfThreadIdOutput {
 		interface $Properties {
-			orfThreadId?: (Uint8Array|null)
+			success?: (waproto.OrfThreadIdSuccess.$Properties|null)
 			error?: (string|null)
+			result?: ("success"|"error")
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.OrfThreadIdOutput.$Properties
+		type $Shape = {
+  success?: waproto.OrfThreadIdSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.OrfThreadIdSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IOrfThreadIdSuccess extends waproto.OrfThreadIdSuccess.$Properties {
+	}
+	class OrfThreadIdSuccess {
+		constructor(p?: waproto.OrfThreadIdSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		orfThreadId?: (Uint8Array|null)
+		static encode(m: waproto.OrfThreadIdSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.OrfThreadIdSuccess & waproto.OrfThreadIdSuccess.$Shape
+	}
+	namespace OrfThreadIdSuccess {
+		interface $Properties {
+			orfThreadId?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.OrfThreadIdSuccess.$Properties
 	}
 	interface IPairingRequest extends waproto.PairingRequest.$Properties {
 	}
@@ -12355,6 +19887,96 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.PairingRequest.$Properties
+	}
+	interface IParseCompanionTestMessageInput extends waproto.ParseCompanionTestMessageInput.$Properties {
+	}
+	class ParseCompanionTestMessageInput {
+		constructor(p?: waproto.ParseCompanionTestMessageInput.$Properties)
+		$unknowns?: Uint8Array[]
+		plaintext?: (Uint8Array|null)
+		static encode(m: waproto.ParseCompanionTestMessageInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ParseCompanionTestMessageInput & waproto.ParseCompanionTestMessageInput.$Shape
+	}
+	namespace ParseCompanionTestMessageInput {
+		interface $Properties {
+			plaintext?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ParseCompanionTestMessageInput.$Properties
+	}
+	interface IParseCompanionTestMessageOutput extends waproto.ParseCompanionTestMessageOutput.$Properties {
+	}
+	class ParseCompanionTestMessageOutput {
+		constructor(p?: waproto.ParseCompanionTestMessageOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (waproto.ParseCompanionTestMessageSuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.ParseCompanionTestMessageOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ParseCompanionTestMessageOutput & waproto.ParseCompanionTestMessageOutput.$Shape
+	}
+	namespace ParseCompanionTestMessageOutput {
+		interface $Properties {
+			success?: (waproto.ParseCompanionTestMessageSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.ParseCompanionTestMessageSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.ParseCompanionTestMessageSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IParseCompanionTestMessageSuccess extends waproto.ParseCompanionTestMessageSuccess.$Properties {
+	}
+	class ParseCompanionTestMessageSuccess {
+		constructor(p?: waproto.ParseCompanionTestMessageSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		createdAtMs?: (number|Long|null)
+		static encode(m: waproto.ParseCompanionTestMessageSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ParseCompanionTestMessageSuccess & waproto.ParseCompanionTestMessageSuccess.$Shape
+	}
+	namespace ParseCompanionTestMessageSuccess {
+		interface $Properties {
+			createdAtMs?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ParseCompanionTestMessageSuccess.$Properties
+	}
+	interface IParticipantsTableSchemaProto extends waproto.ParticipantsTableSchemaProto.$Properties {
+	}
+	class ParticipantsTableSchemaProto {
+		constructor(p?: waproto.ParticipantsTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		id?: (string|null)
+		userJid?: (string|null)
+		deliveredWatermarkTs?: (number|Long|null)
+		lastReadWatermarkTs?: (number|Long|null)
+		type?: (string|null)
+		addressable?: (boolean|null)
+		lastReadActionTs?: (number|Long|null)
+		threadId?: (number|null)
+		threadJid?: (string|null)
+		static encode(m: waproto.ParticipantsTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ParticipantsTableSchemaProto & waproto.ParticipantsTableSchemaProto.$Shape
+	}
+	namespace ParticipantsTableSchemaProto {
+		interface $Properties {
+			id?: (string|null)
+			userJid?: (string|null)
+			deliveredWatermarkTs?: (number|Long|null)
+			lastReadWatermarkTs?: (number|Long|null)
+			type?: (string|null)
+			addressable?: (boolean|null)
+			lastReadActionTs?: (number|Long|null)
+			threadId?: (number|null)
+			threadJid?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ParticipantsTableSchemaProto.$Properties
 	}
 	interface IPastParticipant extends waproto.PastParticipant.$Properties {
 	}
@@ -12602,6 +20224,86 @@ export namespace waproto {
 			INR = 1
 		}
 	}
+	interface IPendingMutationsTableSchemaProto extends waproto.PendingMutationsTableSchemaProto.$Properties {
+	}
+	class PendingMutationsTableSchemaProto {
+		constructor(p?: waproto.PendingMutationsTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		id?: (number|null)
+		collection?: (string|null)
+		index?: (string|null)
+		binarySyncAction?: (Uint8Array|null)
+		version?: (number|null)
+		operation?: (waproto.SYNCD_MUTATION_SYNCD_OPERATION|null)
+		timestamp?: (number|Long|null)
+		action?: (string|null)
+		static encode(m: waproto.PendingMutationsTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PendingMutationsTableSchemaProto & waproto.PendingMutationsTableSchemaProto.$Shape
+	}
+	namespace PendingMutationsTableSchemaProto {
+		interface $Properties {
+			id?: (number|null)
+			collection?: (string|null)
+			index?: (string|null)
+			binarySyncAction?: (Uint8Array|null)
+			version?: (number|null)
+			operation?: (waproto.SYNCD_MUTATION_SYNCD_OPERATION|null)
+			timestamp?: (number|Long|null)
+			action?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.PendingMutationsTableSchemaProto.$Properties
+	}
+	interface IPendingReceiptsTableSchemaProto extends waproto.PendingReceiptsTableSchemaProto.$Properties {
+	}
+	class PendingReceiptsTableSchemaProto {
+		constructor(p?: waproto.PendingReceiptsTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		pendingReceiptId?: (string|null)
+		thread?: (string|null)
+		externalId?: (string|null)
+		author?: (string|null)
+		deliveryReceipts: waproto.Receipts.$Properties[]
+		readReceipts: waproto.Receipts.$Properties[]
+		static encode(m: waproto.PendingReceiptsTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PendingReceiptsTableSchemaProto & waproto.PendingReceiptsTableSchemaProto.$Shape
+	}
+	namespace PendingReceiptsTableSchemaProto {
+		interface $Properties {
+			pendingReceiptId?: (string|null)
+			thread?: (string|null)
+			externalId?: (string|null)
+			author?: (string|null)
+			deliveryReceipts?: (waproto.Receipts.$Properties[]|null)
+			readReceipts?: (waproto.Receipts.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.PendingReceiptsTableSchemaProto.$Properties
+	}
+	interface IPersonalSenderKeyStatusTableSchemaProto extends waproto.PersonalSenderKeyStatusTableSchemaProto.$Properties {
+	}
+	class PersonalSenderKeyStatusTableSchemaProto {
+		constructor(p?: waproto.PersonalSenderKeyStatusTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		groupJid?: (string|null)
+		senderKeyId?: (number|null)
+		rotateSenderKey?: (boolean|null)
+		senderKeyTs?: (number|Long|null)
+		hasSenderKey: string[]
+		static encode(m: waproto.PersonalSenderKeyStatusTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PersonalSenderKeyStatusTableSchemaProto & waproto.PersonalSenderKeyStatusTableSchemaProto.$Shape
+	}
+	namespace PersonalSenderKeyStatusTableSchemaProto {
+		interface $Properties {
+			groupJid?: (string|null)
+			senderKeyId?: (number|null)
+			rotateSenderKey?: (boolean|null)
+			senderKeyTs?: (number|Long|null)
+			hasSenderKey?: (string[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.PersonalSenderKeyStatusTableSchemaProto.$Properties
+	}
 	interface IPhoneNumberToLIDMapping extends waproto.PhoneNumberToLIDMapping.$Properties {
 	}
 	class PhoneNumberToLIDMapping {
@@ -12698,6 +20400,9 @@ export namespace waproto {
 		$unknowns?: Uint8Array[]
 		pollInvalidated?: (boolean|null)
 		pollNameHashHistory: waproto.PollAdditionalMetadata.PollNameHashHistoryEntry.$Properties[]
+		originalOptions: waproto.Message.PollCreationMessage.Option.$Properties[]
+		pollOptionReplayEntries: waproto.PollAdditionalMetadata.PollOptionReplayEntry.$Properties[]
+		pollOptionReplayBase?: (waproto.PollAdditionalMetadata.PollOptionReplayBase.$Properties|null)
 		static encode(m: waproto.PollAdditionalMetadata.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PollAdditionalMetadata & waproto.PollAdditionalMetadata.$Shape
 	}
@@ -12705,9 +20410,84 @@ export namespace waproto {
 		interface $Properties {
 			pollInvalidated?: (boolean|null)
 			pollNameHashHistory?: (waproto.PollAdditionalMetadata.PollNameHashHistoryEntry.$Properties[]|null)
+			originalOptions?: (waproto.Message.PollCreationMessage.Option.$Properties[]|null)
+			pollOptionReplayEntries?: (waproto.PollAdditionalMetadata.PollOptionReplayEntry.$Properties[]|null)
+			pollOptionReplayBase?: (waproto.PollAdditionalMetadata.PollOptionReplayBase.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.PollAdditionalMetadata.$Properties
+		interface IPollOptionReplayBase extends waproto.PollAdditionalMetadata.PollOptionReplayBase.$Properties {
+		}
+		class PollOptionReplayBase {
+			constructor(p?: waproto.PollAdditionalMetadata.PollOptionReplayBase.$Properties)
+			$unknowns?: Uint8Array[]
+			boundaryTimestampMs?: (number|Long|null)
+			editTimestampMs?: (number|Long|null)
+			options: waproto.PollAdditionalMetadata.PollOptionReplayBase.Option.$Properties[]
+			static encode(m: waproto.PollAdditionalMetadata.PollOptionReplayBase.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.PollAdditionalMetadata.PollOptionReplayBase & waproto.PollAdditionalMetadata.PollOptionReplayBase.$Shape
+		}
+		namespace PollOptionReplayBase {
+			interface $Properties {
+				boundaryTimestampMs?: (number|Long|null)
+				editTimestampMs?: (number|Long|null)
+				options?: (waproto.PollAdditionalMetadata.PollOptionReplayBase.Option.$Properties[]|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.PollAdditionalMetadata.PollOptionReplayBase.$Properties
+			interface IOption extends waproto.PollAdditionalMetadata.PollOptionReplayBase.Option.$Properties {
+			}
+			class Option {
+				constructor(p?: waproto.PollAdditionalMetadata.PollOptionReplayBase.Option.$Properties)
+				$unknowns?: Uint8Array[]
+				optionHash?: (Uint8Array|null)
+				enteredTimestampMs?: (number|Long|null)
+				addMessageKey?: (waproto.MessageKey.$Properties|null)
+				static encode(m: waproto.PollAdditionalMetadata.PollOptionReplayBase.Option.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.PollAdditionalMetadata.PollOptionReplayBase.Option & waproto.PollAdditionalMetadata.PollOptionReplayBase.Option.$Shape
+			}
+			namespace Option {
+				interface $Properties {
+					optionHash?: (Uint8Array|null)
+					enteredTimestampMs?: (number|Long|null)
+					addMessageKey?: (waproto.MessageKey.$Properties|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.PollAdditionalMetadata.PollOptionReplayBase.Option.$Properties
+			}
+		}
+		interface IPollOptionReplayEntry extends waproto.PollAdditionalMetadata.PollOptionReplayEntry.$Properties {
+		}
+		class PollOptionReplayEntry {
+			constructor(p?: waproto.PollAdditionalMetadata.PollOptionReplayEntry.$Properties)
+			$unknowns?: Uint8Array[]
+			type?: (waproto.PollAdditionalMetadata.PollOptionReplayEntry.Type|null)
+			messageKey?: (waproto.MessageKey.$Properties|null)
+			serverTimestampMs?: (number|Long|null)
+			editTimestampMs?: (number|Long|null)
+			optionHashes: Uint8Array[]
+			revokedMessageKey?: (waproto.MessageKey.$Properties|null)
+			static encode(m: waproto.PollAdditionalMetadata.PollOptionReplayEntry.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.PollAdditionalMetadata.PollOptionReplayEntry & waproto.PollAdditionalMetadata.PollOptionReplayEntry.$Shape
+		}
+		namespace PollOptionReplayEntry {
+			interface $Properties {
+				type?: (waproto.PollAdditionalMetadata.PollOptionReplayEntry.Type|null)
+				messageKey?: (waproto.MessageKey.$Properties|null)
+				serverTimestampMs?: (number|Long|null)
+				editTimestampMs?: (number|Long|null)
+				optionHashes?: (Uint8Array[]|null)
+				revokedMessageKey?: (waproto.MessageKey.$Properties|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.PollAdditionalMetadata.PollOptionReplayEntry.$Properties
+			enum Type {
+				UNKNOWN = 0,
+				EDIT = 1,
+				ADD = 2,
+				REVOKE = 3
+			}
+		}
 		interface IPollNameHashHistoryEntry extends waproto.PollAdditionalMetadata.PollNameHashHistoryEntry.$Properties {
 		}
 		class PollNameHashHistoryEntry {
@@ -12744,6 +20524,76 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.PollEncValue.$Properties
+	}
+	interface IPollOptionProto extends waproto.PollOptionProto.$Properties {
+	}
+	class PollOptionProto {
+		constructor(p?: waproto.PollOptionProto.$Properties)
+		$unknowns?: Uint8Array[]
+		optionText?: (string|null)
+		voteAuthors: string[]
+		static encode(m: waproto.PollOptionProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PollOptionProto & waproto.PollOptionProto.$Shape
+	}
+	namespace PollOptionProto {
+		interface $Properties {
+			optionText?: (string|null)
+			voteAuthors?: (string[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.PollOptionProto.$Properties
+	}
+	interface IPollOptionsProto extends waproto.PollOptionsProto.$Properties {
+	}
+	class PollOptionsProto {
+		constructor(p?: waproto.PollOptionsProto.$Properties)
+		$unknowns?: Uint8Array[]
+		pollOptionHash?: (string|null)
+		pollOption?: (waproto.PollOptionProto.$Properties|null)
+		static encode(m: waproto.PollOptionsProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PollOptionsProto & waproto.PollOptionsProto.$Shape
+	}
+	namespace PollOptionsProto {
+		interface $Properties {
+			pollOptionHash?: (string|null)
+			pollOption?: (waproto.PollOptionProto.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.PollOptionsProto.$Properties
+	}
+	interface IPollTableSchemaProto extends waproto.PollTableSchemaProto.$Properties {
+	}
+	class PollTableSchemaProto {
+		constructor(p?: waproto.PollTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		chatJid?: (string|null)
+		encKey?: (Uint8Array|null)
+		pollAuthor?: (string|null)
+		pollStanzaId?: (string|null)
+		pollOptions: waproto.PollOptionsProto.$Properties[]
+		pollParticipantCount?: (number|null)
+		pollState?: (waproto.POLL_STATE|null)
+		selectableOptionsCount?: (number|null)
+		title?: (string|null)
+		latestSenderTimestampsMs: waproto.LatestSenderTimestampsMsProto.$Properties[]
+		static encode(m: waproto.PollTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PollTableSchemaProto & waproto.PollTableSchemaProto.$Shape
+	}
+	namespace PollTableSchemaProto {
+		interface $Properties {
+			chatJid?: (string|null)
+			encKey?: (Uint8Array|null)
+			pollAuthor?: (string|null)
+			pollStanzaId?: (string|null)
+			pollOptions?: (waproto.PollOptionsProto.$Properties[]|null)
+			pollParticipantCount?: (number|null)
+			pollState?: (waproto.POLL_STATE|null)
+			selectableOptionsCount?: (number|null)
+			title?: (string|null)
+			latestSenderTimestampsMs?: (waproto.LatestSenderTimestampsMsProto.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.PollTableSchemaProto.$Properties
 	}
 	interface IPollUpdate extends waproto.PollUpdate.$Properties {
 	}
@@ -12837,6 +20687,162 @@ export namespace waproto {
 		}
 		type $Shape = waproto.PremiumMessageInfo.$Properties
 	}
+	interface IPrepareAddDeviceInput extends waproto.PrepareAddDeviceInput.$Properties {
+	}
+	class PrepareAddDeviceInput {
+		constructor(p?: waproto.PrepareAddDeviceInput.$Properties)
+		$unknowns?: Uint8Array[]
+		recoveryCode?: (string|null)
+		userId?: (number|Long|null)
+		encryptedSecretValuesJson?: (string|null)
+		virtualDeviceBaseEpochId?: (number|Long|null)
+		activeEpochId?: (number|Long|null)
+		syncEpochs: waproto.AddDeviceSyncEpochInput.$Properties[]
+		static encode(m: waproto.PrepareAddDeviceInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PrepareAddDeviceInput & waproto.PrepareAddDeviceInput.$Shape
+	}
+	namespace PrepareAddDeviceInput {
+		interface $Properties {
+			recoveryCode?: (string|null)
+			userId?: (number|Long|null)
+			encryptedSecretValuesJson?: (string|null)
+			virtualDeviceBaseEpochId?: (number|Long|null)
+			activeEpochId?: (number|Long|null)
+			syncEpochs?: (waproto.AddDeviceSyncEpochInput.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.PrepareAddDeviceInput.$Properties
+	}
+	interface IPrepareAddDeviceOutput extends waproto.PrepareAddDeviceOutput.$Properties {
+	}
+	class PrepareAddDeviceOutput {
+		constructor(p?: waproto.PrepareAddDeviceOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (waproto.PrepareAddDeviceSuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.PrepareAddDeviceOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PrepareAddDeviceOutput & waproto.PrepareAddDeviceOutput.$Shape
+	}
+	namespace PrepareAddDeviceOutput {
+		interface $Properties {
+			success?: (waproto.PrepareAddDeviceSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.PrepareAddDeviceSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.PrepareAddDeviceSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IPrepareAddDeviceSuccess extends waproto.PrepareAddDeviceSuccess.$Properties {
+	}
+	class PrepareAddDeviceSuccess {
+		constructor(p?: waproto.PrepareAddDeviceSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		deviceKeys?: (waproto.AddDeviceKeysOutput.$Properties|null)
+		currentEpoch?: (waproto.EpochKey.$Properties|null)
+		mailboxRootSalt?: (Uint8Array|null)
+		orfRotationToken?: (Uint8Array|null)
+		deviceEpochHmac?: (Uint8Array|null)
+		epochRootKeyFingerprint?: (Uint8Array|null)
+		supportedEncryptionVersions: number[]
+		encryptionVersionSignature?: (Uint8Array|null)
+		clientVersion?: (number|null)
+		static encode(m: waproto.PrepareAddDeviceSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PrepareAddDeviceSuccess & waproto.PrepareAddDeviceSuccess.$Shape
+	}
+	namespace PrepareAddDeviceSuccess {
+		interface $Properties {
+			deviceKeys?: (waproto.AddDeviceKeysOutput.$Properties|null)
+			currentEpoch?: (waproto.EpochKey.$Properties|null)
+			mailboxRootSalt?: (Uint8Array|null)
+			orfRotationToken?: (Uint8Array|null)
+			deviceEpochHmac?: (Uint8Array|null)
+			epochRootKeyFingerprint?: (Uint8Array|null)
+			supportedEncryptionVersions?: (number[]|null)
+			encryptionVersionSignature?: (Uint8Array|null)
+			clientVersion?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.PrepareAddDeviceSuccess.$Properties
+	}
+	interface IPrepareAddPeerDeviceInput extends waproto.PrepareAddPeerDeviceInput.$Properties {
+	}
+	class PrepareAddPeerDeviceInput {
+		constructor(p?: waproto.PrepareAddPeerDeviceInput.$Properties)
+		$unknowns?: Uint8Array[]
+		advSecret?: (Uint8Array|null)
+		sealedPayload?: (Uint8Array|null)
+		backupId?: (number|Long|null)
+		userId?: (number|Long|null)
+		companionIdentityPub?: (Uint8Array|null)
+		activeEpochId?: (number|Long|null)
+		static encode(m: waproto.PrepareAddPeerDeviceInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PrepareAddPeerDeviceInput & waproto.PrepareAddPeerDeviceInput.$Shape
+	}
+	namespace PrepareAddPeerDeviceInput {
+		interface $Properties {
+			advSecret?: (Uint8Array|null)
+			sealedPayload?: (Uint8Array|null)
+			backupId?: (number|Long|null)
+			userId?: (number|Long|null)
+			companionIdentityPub?: (Uint8Array|null)
+			activeEpochId?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.PrepareAddPeerDeviceInput.$Properties
+	}
+	interface IPrepareAddPeerDeviceOutput extends waproto.PrepareAddPeerDeviceOutput.$Properties {
+	}
+	class PrepareAddPeerDeviceOutput {
+		constructor(p?: waproto.PrepareAddPeerDeviceOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (waproto.PrepareAddPeerDeviceSuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.PrepareAddPeerDeviceOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PrepareAddPeerDeviceOutput & waproto.PrepareAddPeerDeviceOutput.$Shape
+	}
+	namespace PrepareAddPeerDeviceOutput {
+		interface $Properties {
+			success?: (waproto.PrepareAddPeerDeviceSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.PrepareAddPeerDeviceSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.PrepareAddPeerDeviceSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IPrepareAddPeerDeviceSuccess extends waproto.PrepareAddPeerDeviceSuccess.$Properties {
+	}
+	class PrepareAddPeerDeviceSuccess {
+		constructor(p?: waproto.PrepareAddPeerDeviceSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		enrolment?: (waproto.PrepareAddDeviceSuccess.$Properties|null)
+		serverDataId?: (number|Long|null)
+		companionDeviceBinding?: (Uint8Array|null)
+		static encode(m: waproto.PrepareAddPeerDeviceSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.PrepareAddPeerDeviceSuccess & waproto.PrepareAddPeerDeviceSuccess.$Shape
+	}
+	namespace PrepareAddPeerDeviceSuccess {
+		interface $Properties {
+			enrolment?: (waproto.PrepareAddDeviceSuccess.$Properties|null)
+			serverDataId?: (number|Long|null)
+			companionDeviceBinding?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.PrepareAddPeerDeviceSuccess.$Properties
+	}
 	interface IPrimaryEphemeralIdentity extends waproto.PrimaryEphemeralIdentity.$Properties {
 	}
 	class PrimaryEphemeralIdentity {
@@ -12908,6 +20914,26 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.ProloguePayload.$Properties
+	}
+	interface IProtocolMsgId extends waproto.ProtocolMsgId.$Properties {
+	}
+	class ProtocolMsgId {
+		constructor(p?: waproto.ProtocolMsgId.$Properties)
+		$unknowns?: Uint8Array[]
+		externalId?: (string|null)
+		author?: (string|null)
+		chat?: (string|null)
+		static encode(m: waproto.ProtocolMsgId.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ProtocolMsgId & waproto.ProtocolMsgId.$Shape
+	}
+	namespace ProtocolMsgId {
+		interface $Properties {
+			externalId?: (string|null)
+			author?: (string|null)
+			chat?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ProtocolMsgId.$Properties
 	}
 	interface IPushname extends waproto.Pushname.$Properties {
 	}
@@ -13033,6 +21059,38 @@ export namespace waproto {
 		}
 		type $Shape = waproto.QuarantinedMessage.$Properties
 	}
+	interface IQuotedDbMediaProto extends waproto.QuotedDbMediaProto.$Properties {
+	}
+	class QuotedDbMediaProto {
+		constructor(p?: waproto.QuotedDbMediaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		mediaType?: (string|null)
+		plaintextHash?: (string|null)
+		size?: (number|null)
+		ts?: (number|Long|null)
+		mediaEntry?: (Uint8Array|null)
+		validatedVideoInfo?: (waproto.VideoMsgContentProto.$Properties|null)
+		validatedImageInfo?: (waproto.ImageMsgContentProto.$Properties|null)
+		validatedAudioInfo?: (waproto.AudioMsgContentProto.$Properties|null)
+		validatedDocumentFileInfo?: (waproto.DocumentFileMsgContentProto.$Properties|null)
+		static encode(m: waproto.QuotedDbMediaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.QuotedDbMediaProto & waproto.QuotedDbMediaProto.$Shape
+	}
+	namespace QuotedDbMediaProto {
+		interface $Properties {
+			mediaType?: (string|null)
+			plaintextHash?: (string|null)
+			size?: (number|null)
+			ts?: (number|Long|null)
+			mediaEntry?: (Uint8Array|null)
+			validatedVideoInfo?: (waproto.VideoMsgContentProto.$Properties|null)
+			validatedImageInfo?: (waproto.ImageMsgContentProto.$Properties|null)
+			validatedAudioInfo?: (waproto.AudioMsgContentProto.$Properties|null)
+			validatedDocumentFileInfo?: (waproto.DocumentFileMsgContentProto.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.QuotedDbMediaProto.$Properties
+	}
 	interface IReaction extends waproto.Reaction.$Properties {
 	}
 	class Reaction {
@@ -13056,6 +21114,120 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.Reaction.$Properties
+	}
+	interface IReactionsTableSchemaProto extends waproto.ReactionsTableSchemaProto.$Properties {
+	}
+	class ReactionsTableSchemaProto {
+		constructor(p?: waproto.ReactionsTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		ack?: (number|null)
+		author?: (string|null)
+		externalId?: (string|null)
+		reactionId?: (string|null)
+		reactToExternalId?: (string|null)
+		reactToAuthor?: (string|null)
+		reactToMsgId?: (string|null)
+		threadJid?: (string|null)
+		reaction?: (string|null)
+		groupingKey?: (string|null)
+		ts?: (number|Long|null)
+		rowId?: (number|null)
+		senderTimestampMs?: (number|Long|null)
+		static encode(m: waproto.ReactionsTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ReactionsTableSchemaProto & waproto.ReactionsTableSchemaProto.$Shape
+	}
+	namespace ReactionsTableSchemaProto {
+		interface $Properties {
+			ack?: (number|null)
+			author?: (string|null)
+			externalId?: (string|null)
+			reactionId?: (string|null)
+			reactToExternalId?: (string|null)
+			reactToAuthor?: (string|null)
+			reactToMsgId?: (string|null)
+			threadJid?: (string|null)
+			reaction?: (string|null)
+			groupingKey?: (string|null)
+			ts?: (number|Long|null)
+			rowId?: (number|null)
+			senderTimestampMs?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ReactionsTableSchemaProto.$Properties
+	}
+	interface IReceipts extends waproto.Receipts.$Properties {
+	}
+	class Receipts {
+		constructor(p?: waproto.Receipts.$Properties)
+		$unknowns?: Uint8Array[]
+		device?: (string|null)
+		ts?: (number|Long|null)
+		static encode(m: waproto.Receipts.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.Receipts & waproto.Receipts.$Shape
+	}
+	namespace Receipts {
+		interface $Properties {
+			device?: (string|null)
+			ts?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.Receipts.$Properties
+	}
+	interface IReceiptsTableSchemaProto extends waproto.ReceiptsTableSchemaProto.$Properties {
+	}
+	class ReceiptsTableSchemaProto {
+		constructor(p?: waproto.ReceiptsTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		msgId?: (string|null)
+		statusTsPerUser: waproto.StatusTsPerUserProto.$Properties[]
+		permittedIdentitiesPerDevice: waproto.IdentitiesPerDeviceProto.$Properties[]
+		recipientDevices: string[]
+		retryCountsPerDevice: waproto.RetryCountPerDeviceProto.$Properties[]
+		waMsgId?: (string|null)
+		static encode(m: waproto.ReceiptsTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ReceiptsTableSchemaProto & waproto.ReceiptsTableSchemaProto.$Shape
+	}
+	namespace ReceiptsTableSchemaProto {
+		interface $Properties {
+			msgId?: (string|null)
+			statusTsPerUser?: (waproto.StatusTsPerUserProto.$Properties[]|null)
+			permittedIdentitiesPerDevice?: (waproto.IdentitiesPerDeviceProto.$Properties[]|null)
+			recipientDevices?: (string[]|null)
+			retryCountsPerDevice?: (waproto.RetryCountPerDeviceProto.$Properties[]|null)
+			waMsgId?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ReceiptsTableSchemaProto.$Properties
+	}
+	interface IReceiverFetchInfoTableSchemaProto extends waproto.ReceiverFetchInfoTableSchemaProto.$Properties {
+	}
+	class ReceiverFetchInfoTableSchemaProto {
+		constructor(p?: waproto.ReceiverFetchInfoTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		mimetype?: (string|null)
+		previewHeight?: (number|null)
+		previewWidth?: (number|null)
+		receiverFetchId?: (string|null)
+		type?: (string|null)
+		previewUrl?: (string|null)
+		previewUrlExpirationTimestampMs?: (number|Long|null)
+		accessibilitySummaryText?: (string|null)
+		static encode(m: waproto.ReceiverFetchInfoTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ReceiverFetchInfoTableSchemaProto & waproto.ReceiverFetchInfoTableSchemaProto.$Shape
+	}
+	namespace ReceiverFetchInfoTableSchemaProto {
+		interface $Properties {
+			mimetype?: (string|null)
+			previewHeight?: (number|null)
+			previewWidth?: (number|null)
+			receiverFetchId?: (string|null)
+			type?: (string|null)
+			previewUrl?: (string|null)
+			previewUrlExpirationTimestampMs?: (number|Long|null)
+			accessibilitySummaryText?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ReceiverFetchInfoTableSchemaProto.$Properties
 	}
 	interface IRecentEmojiWeight extends waproto.RecentEmojiWeight.$Properties {
 	}
@@ -13093,27 +21265,55 @@ export namespace waproto {
 		}
 		type $Shape = waproto.RecordStructure.$Properties
 	}
-	interface IReportable extends waproto.Reportable.$Properties {
+	interface IReferenceValue extends waproto.ReferenceValue.$Properties {
 	}
-	class Reportable {
-		constructor(p?: waproto.Reportable.$Properties)
+	class ReferenceValue {
+		constructor(p?: waproto.ReferenceValue.$Properties)
 		$unknowns?: Uint8Array[]
-		minVersion?: (number|null)
-		maxVersion?: (number|null)
-		notReportableMinVersion?: (number|null)
-		never?: (boolean|null)
-		static encode(m: waproto.Reportable.$Properties, w?: PbWriter): PbWriter
-		static decode(r: (PbReader|Uint8Array), l?: number): waproto.Reportable & waproto.Reportable.$Shape
+		cloudflareProof?: (waproto.CloudflareSignatureResponse.$Properties|null)
+		metaBtProof?: (waproto.MetaBtProof.$Properties|null)
+		refVal?: ("cloudflareProof"|"metaBtProof")
+		static encode(m: waproto.ReferenceValue.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ReferenceValue & waproto.ReferenceValue.$Shape
 	}
-	namespace Reportable {
+	namespace ReferenceValue {
 		interface $Properties {
-			minVersion?: (number|null)
-			maxVersion?: (number|null)
-			notReportableMinVersion?: (number|null)
-			never?: (boolean|null)
+			cloudflareProof?: (waproto.CloudflareSignatureResponse.$Properties|null)
+			metaBtProof?: (waproto.MetaBtProof.$Properties|null)
+			refVal?: ("cloudflareProof"|"metaBtProof")
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.Reportable.$Properties
+		type $Shape = {
+  cloudflareProof?: waproto.CloudflareSignatureResponse.$Shape|null
+  metaBtProof?: waproto.MetaBtProof.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ refVal?: undefined; cloudflareProof?: null; metaBtProof?: null }|{ refVal?: "cloudflareProof"; cloudflareProof: waproto.CloudflareSignatureResponse.$Shape; metaBtProof?: null }|{ refVal?: "metaBtProof"; cloudflareProof?: null; metaBtProof: waproto.MetaBtProof.$Shape })
+)
+	}
+	interface IReportingMetaProto extends waproto.ReportingMetaProto.$Properties {
+	}
+	class ReportingMetaProto {
+		constructor(p?: waproto.ReportingMetaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		frankingTag?: (Uint8Array|null)
+		frankingVersion?: (number|null)
+		reportingContent?: (Uint8Array|null)
+		reportingTag?: (Uint8Array|null)
+		frankingKey?: (Uint8Array|null)
+		static encode(m: waproto.ReportingMetaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ReportingMetaProto & waproto.ReportingMetaProto.$Shape
+	}
+	namespace ReportingMetaProto {
+		interface $Properties {
+			frankingTag?: (Uint8Array|null)
+			frankingVersion?: (number|null)
+			reportingContent?: (Uint8Array|null)
+			reportingTag?: (Uint8Array|null)
+			frankingKey?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ReportingMetaProto.$Properties
 	}
 	interface IReportingTokenInfo extends waproto.ReportingTokenInfo.$Properties {
 	}
@@ -13132,6 +21332,142 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.ReportingTokenInfo.$Properties
+	}
+	interface IRetryCountPerDeviceProto extends waproto.RetryCountPerDeviceProto.$Properties {
+	}
+	class RetryCountPerDeviceProto {
+		constructor(p?: waproto.RetryCountPerDeviceProto.$Properties)
+		$unknowns?: Uint8Array[]
+		deviceJid?: (string|null)
+		count?: (number|null)
+		static encode(m: waproto.RetryCountPerDeviceProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.RetryCountPerDeviceProto & waproto.RetryCountPerDeviceProto.$Shape
+	}
+	namespace RetryCountPerDeviceProto {
+		interface $Properties {
+			deviceJid?: (string|null)
+			count?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.RetryCountPerDeviceProto.$Properties
+	}
+	interface IRotateEpochInput extends waproto.RotateEpochInput.$Properties {
+	}
+	class RotateEpochInput {
+		constructor(p?: waproto.RotateEpochInput.$Properties)
+		$unknowns?: Uint8Array[]
+		currentEpochRootKey?: (Uint8Array|null)
+		currentEpochAnonId?: (number|null)
+		currentEpochFbid?: (number|Long|null)
+		epochStorageAuthPrivateKey?: (Uint8Array|null)
+		members: waproto.RotateEpochMemberInput.$Properties[]
+		static encode(m: waproto.RotateEpochInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.RotateEpochInput & waproto.RotateEpochInput.$Shape
+	}
+	namespace RotateEpochInput {
+		interface $Properties {
+			currentEpochRootKey?: (Uint8Array|null)
+			currentEpochAnonId?: (number|null)
+			currentEpochFbid?: (number|Long|null)
+			epochStorageAuthPrivateKey?: (Uint8Array|null)
+			members?: (waproto.RotateEpochMemberInput.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.RotateEpochInput.$Properties
+	}
+	interface IRotateEpochMemberEdge extends waproto.RotateEpochMemberEdge.$Properties {
+	}
+	class RotateEpochMemberEdge {
+		constructor(p?: waproto.RotateEpochMemberEdge.$Properties)
+		$unknowns?: Uint8Array[]
+		deviceId?: (number|Long|null)
+		encryptedEpochKey?: (Uint8Array|null)
+		deviceEpochHmac?: (Uint8Array|null)
+		static encode(m: waproto.RotateEpochMemberEdge.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.RotateEpochMemberEdge & waproto.RotateEpochMemberEdge.$Shape
+	}
+	namespace RotateEpochMemberEdge {
+		interface $Properties {
+			deviceId?: (number|Long|null)
+			encryptedEpochKey?: (Uint8Array|null)
+			deviceEpochHmac?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.RotateEpochMemberEdge.$Properties
+	}
+	interface IRotateEpochMemberInput extends waproto.RotateEpochMemberInput.$Properties {
+	}
+	class RotateEpochMemberInput {
+		constructor(p?: waproto.RotateEpochMemberInput.$Properties)
+		$unknowns?: Uint8Array[]
+		deviceId?: (number|Long|null)
+		epochStoragePublicKey?: (Uint8Array|null)
+		devicePublicKey?: (Uint8Array|null)
+		prevDeviceEpochHmac?: (Uint8Array|null)
+		epochStoragePublicKeySig?: (Uint8Array|null)
+		static encode(m: waproto.RotateEpochMemberInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.RotateEpochMemberInput & waproto.RotateEpochMemberInput.$Shape
+	}
+	namespace RotateEpochMemberInput {
+		interface $Properties {
+			deviceId?: (number|Long|null)
+			epochStoragePublicKey?: (Uint8Array|null)
+			devicePublicKey?: (Uint8Array|null)
+			prevDeviceEpochHmac?: (Uint8Array|null)
+			epochStoragePublicKeySig?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.RotateEpochMemberInput.$Properties
+	}
+	interface IRotateEpochOutput extends waproto.RotateEpochOutput.$Properties {
+	}
+	class RotateEpochOutput {
+		constructor(p?: waproto.RotateEpochOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (waproto.RotateEpochSuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.RotateEpochOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.RotateEpochOutput & waproto.RotateEpochOutput.$Shape
+	}
+	namespace RotateEpochOutput {
+		interface $Properties {
+			success?: (waproto.RotateEpochSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.RotateEpochSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.RotateEpochSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface IRotateEpochSuccess extends waproto.RotateEpochSuccess.$Properties {
+	}
+	class RotateEpochSuccess {
+		constructor(p?: waproto.RotateEpochSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		newEpochRootKey?: (Uint8Array|null)
+		newEpochAnonId?: (number|null)
+		backwardEdge?: (waproto.BackwardEdge.$Properties|null)
+		memberEdges: waproto.RotateEpochMemberEdge.$Properties[]
+		epochRootKeyFingerprint?: (Uint8Array|null)
+		static encode(m: waproto.RotateEpochSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.RotateEpochSuccess & waproto.RotateEpochSuccess.$Shape
+	}
+	namespace RotateEpochSuccess {
+		interface $Properties {
+			newEpochRootKey?: (Uint8Array|null)
+			newEpochAnonId?: (number|null)
+			backwardEdge?: (waproto.BackwardEdge.$Properties|null)
+			memberEdges?: (waproto.RotateEpochMemberEdge.$Properties[]|null)
+			epochRootKeyFingerprint?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.RotateEpochSuccess.$Properties
 	}
 	interface IRoutingInfo extends waproto.RoutingInfo.$Properties {
 	}
@@ -13178,6 +21514,70 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.ScheduledMessageMetadata.$Properties
+	}
+	interface ISealThreadIdInput extends waproto.SealThreadIdInput.$Properties {
+	}
+	class SealThreadIdInput {
+		constructor(p?: waproto.SealThreadIdInput.$Properties)
+		$unknowns?: Uint8Array[]
+		epochRootKey?: (Uint8Array|null)
+		epochAnonId?: (number|null)
+		backupId?: (number|Long|null)
+		threadId?: (string|null)
+		static encode(m: waproto.SealThreadIdInput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SealThreadIdInput & waproto.SealThreadIdInput.$Shape
+	}
+	namespace SealThreadIdInput {
+		interface $Properties {
+			epochRootKey?: (Uint8Array|null)
+			epochAnonId?: (number|null)
+			backupId?: (number|Long|null)
+			threadId?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.SealThreadIdInput.$Properties
+	}
+	interface ISealThreadIdOutput extends waproto.SealThreadIdOutput.$Properties {
+	}
+	class SealThreadIdOutput {
+		constructor(p?: waproto.SealThreadIdOutput.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (waproto.SealThreadIdSuccess.$Properties|null)
+		error?: (string|null)
+		result?: ("success"|"error")
+		static encode(m: waproto.SealThreadIdOutput.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SealThreadIdOutput & waproto.SealThreadIdOutput.$Shape
+	}
+	namespace SealThreadIdOutput {
+		interface $Properties {
+			success?: (waproto.SealThreadIdSuccess.$Properties|null)
+			error?: (string|null)
+			result?: ("success"|"error")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  success?: waproto.SealThreadIdSuccess.$Shape|null
+  error?: string|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ result?: undefined; success?: null; error?: null }|{ result?: "success"; success: waproto.SealThreadIdSuccess.$Shape; error?: null }|{ result?: "error"; success?: null; error: string })
+)
+	}
+	interface ISealThreadIdSuccess extends waproto.SealThreadIdSuccess.$Properties {
+	}
+	class SealThreadIdSuccess {
+		constructor(p?: waproto.SealThreadIdSuccess.$Properties)
+		$unknowns?: Uint8Array[]
+		sealedThreadId?: (Uint8Array|null)
+		static encode(m: waproto.SealThreadIdSuccess.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SealThreadIdSuccess & waproto.SealThreadIdSuccess.$Shape
+	}
+	namespace SealThreadIdSuccess {
+		interface $Properties {
+			sealedThreadId?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.SealThreadIdSuccess.$Properties
 	}
 	interface ISenderKeyDistributionMessage extends waproto.SenderKeyDistributionMessage.$Properties {
 	}
@@ -13319,12 +21719,14 @@ export namespace waproto {
 		constructor(p?: waproto.ServerErrorReceipt.$Properties)
 		$unknowns?: Uint8Array[]
 		stanzaId?: (string|null)
+		keepMediaKey?: (boolean|null)
 		static encode(m: waproto.ServerErrorReceipt.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ServerErrorReceipt & waproto.ServerErrorReceipt.$Shape
 	}
 	namespace ServerErrorReceipt {
 		interface $Properties {
 			stanzaId?: (string|null)
+			keepMediaKey?: (boolean|null)
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.ServerErrorReceipt.$Properties
@@ -13525,6 +21927,52 @@ export namespace waproto {
 		}
 		type $Shape = waproto.SignalMessage.$Properties
 	}
+	interface ISignatureMessage extends waproto.SignatureMessage.$Properties {
+	}
+	class SignatureMessage {
+		constructor(p?: waproto.SignatureMessage.$Properties)
+		$unknowns?: Uint8Array[]
+		version?: (number|null)
+		namespace?: (string|null)
+		timestamp?: (number|Long|null)
+		epoch?: (waproto.Epoch.$Properties|null)
+		digest?: (Uint8Array|null)
+		static encode(m: waproto.SignatureMessage.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SignatureMessage & waproto.SignatureMessage.$Shape
+	}
+	namespace SignatureMessage {
+		interface $Properties {
+			version?: (number|null)
+			namespace?: (string|null)
+			timestamp?: (number|Long|null)
+			epoch?: (waproto.Epoch.$Properties|null)
+			digest?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.SignatureMessage.$Properties
+	}
+	interface ISignatureResponse extends waproto.SignatureResponse.$Properties {
+	}
+	class SignatureResponse {
+		constructor(p?: waproto.SignatureResponse.$Properties)
+		$unknowns?: Uint8Array[]
+		message?: (waproto.SignatureMessage.$Properties|null)
+		signature?: (Uint8Array|null)
+		keyId?: (number|null)
+		serializedMessage?: (Uint8Array|null)
+		static encode(m: waproto.SignatureResponse.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SignatureResponse & waproto.SignatureResponse.$Shape
+	}
+	namespace SignatureResponse {
+		interface $Properties {
+			message?: (waproto.SignatureMessage.$Properties|null)
+			signature?: (Uint8Array|null)
+			keyId?: (number|null)
+			serializedMessage?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.SignatureResponse.$Properties
+	}
 	interface ISignedPreKeyRecordStructure extends waproto.SignedPreKeyRecordStructure.$Properties {
 	}
 	class SignedPreKeyRecordStructure {
@@ -13562,6 +22010,8 @@ export namespace waproto {
 		groupStatus?: (waproto.StatusAttribution.GroupStatus.$Properties|null)
 		rlAttribution?: (waproto.StatusAttribution.RLAttribution.$Properties|null)
 		aiCreatedAttribution?: (waproto.StatusAttribution.AiCreatedAttribution.$Properties|null)
+		statusTemplate?: (waproto.StatusAttribution.StatusTemplate.$Properties|null)
+		attributionData?: ("statusReshare"|"externalShare"|"music"|"groupStatus"|"rlAttribution"|"aiCreatedAttribution"|"statusTemplate")
 		static encode(m: waproto.StatusAttribution.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusAttribution & waproto.StatusAttribution.$Shape
 	}
@@ -13575,9 +22025,24 @@ export namespace waproto {
 			groupStatus?: (waproto.StatusAttribution.GroupStatus.$Properties|null)
 			rlAttribution?: (waproto.StatusAttribution.RLAttribution.$Properties|null)
 			aiCreatedAttribution?: (waproto.StatusAttribution.AiCreatedAttribution.$Properties|null)
+			statusTemplate?: (waproto.StatusAttribution.StatusTemplate.$Properties|null)
+			attributionData?: ("statusReshare"|"externalShare"|"music"|"groupStatus"|"rlAttribution"|"aiCreatedAttribution"|"statusTemplate")
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.StatusAttribution.$Properties
+		type $Shape = {
+  type?: waproto.StatusAttribution.Type|null
+  actionUrl?: string|null
+  statusReshare?: waproto.StatusAttribution.StatusReshare.$Shape|null
+  externalShare?: waproto.StatusAttribution.ExternalShare.$Shape|null
+  music?: waproto.StatusAttribution.Music.$Shape|null
+  groupStatus?: waproto.StatusAttribution.GroupStatus.$Shape|null
+  rlAttribution?: waproto.StatusAttribution.RLAttribution.$Shape|null
+  aiCreatedAttribution?: waproto.StatusAttribution.AiCreatedAttribution.$Shape|null
+  statusTemplate?: waproto.StatusAttribution.StatusTemplate.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ attributionData?: undefined; statusReshare?: null; externalShare?: null; music?: null; groupStatus?: null; rlAttribution?: null; aiCreatedAttribution?: null; statusTemplate?: null }|{ attributionData?: "statusReshare"; statusReshare: waproto.StatusAttribution.StatusReshare.$Shape; externalShare?: null; music?: null; groupStatus?: null; rlAttribution?: null; aiCreatedAttribution?: null; statusTemplate?: null }|{ attributionData?: "externalShare"; statusReshare?: null; externalShare: waproto.StatusAttribution.ExternalShare.$Shape; music?: null; groupStatus?: null; rlAttribution?: null; aiCreatedAttribution?: null; statusTemplate?: null }|{ attributionData?: "music"; statusReshare?: null; externalShare?: null; music: waproto.StatusAttribution.Music.$Shape; groupStatus?: null; rlAttribution?: null; aiCreatedAttribution?: null; statusTemplate?: null }|{ attributionData?: "groupStatus"; statusReshare?: null; externalShare?: null; music?: null; groupStatus: waproto.StatusAttribution.GroupStatus.$Shape; rlAttribution?: null; aiCreatedAttribution?: null; statusTemplate?: null }|{ attributionData?: "rlAttribution"; statusReshare?: null; externalShare?: null; music?: null; groupStatus?: null; rlAttribution: waproto.StatusAttribution.RLAttribution.$Shape; aiCreatedAttribution?: null; statusTemplate?: null }|{ attributionData?: "aiCreatedAttribution"; statusReshare?: null; externalShare?: null; music?: null; groupStatus?: null; rlAttribution?: null; aiCreatedAttribution: waproto.StatusAttribution.AiCreatedAttribution.$Shape; statusTemplate?: null }|{ attributionData?: "statusTemplate"; statusReshare?: null; externalShare?: null; music?: null; groupStatus?: null; rlAttribution?: null; aiCreatedAttribution?: null; statusTemplate: waproto.StatusAttribution.StatusTemplate.$Shape })
+)
 		enum Type {
 			UNKNOWN = 0,
 			RESHARE = 1,
@@ -13590,7 +22055,29 @@ export namespace waproto {
 			LAYOUTS = 8,
 			NEWSLETTER_STATUS = 9,
 			STATUS_CLOSE_SHARING = 10,
-			PAID_PARTNERSHIP = 11
+			PAID_PARTNERSHIP = 11,
+			USERNAME_STATUS = 12,
+			STATUS_TEMPLATES = 13
+		}
+		interface IStatusTemplate extends waproto.StatusAttribution.StatusTemplate.$Properties {
+		}
+		class StatusTemplate {
+			constructor(p?: waproto.StatusAttribution.StatusTemplate.$Properties)
+			$unknowns?: Uint8Array[]
+			templateId?: (string|null)
+			templateName?: (string|null)
+			thumbnailUrl?: (string|null)
+			static encode(m: waproto.StatusAttribution.StatusTemplate.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusAttribution.StatusTemplate & waproto.StatusAttribution.StatusTemplate.$Shape
+		}
+		namespace StatusTemplate {
+			interface $Properties {
+				templateId?: (string|null)
+				templateName?: (string|null)
+				thumbnailUrl?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.StatusAttribution.StatusTemplate.$Properties
 		}
 		interface IAiCreatedAttribution extends waproto.StatusAttribution.AiCreatedAttribution.$Properties {
 		}
@@ -13776,7 +22263,10 @@ export namespace waproto {
 			quotedStatus?: (waproto.Message.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.StatusMentionMessage.$Properties
+		type $Shape = {
+  quotedStatus?: waproto.Message.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface IStatusPSA extends waproto.StatusPSA.$Properties {
 	}
@@ -13795,6 +22285,52 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.StatusPSA.$Properties
+	}
+	interface IStatusPixKey extends waproto.StatusPixKey.$Properties {
+	}
+	class StatusPixKey {
+		constructor(p?: waproto.StatusPixKey.$Properties)
+		$unknowns?: Uint8Array[]
+		key?: (string|null)
+		keyType?: (waproto.StatusPixKey.KeyType|null)
+		displayName?: (string|null)
+		static encode(m: waproto.StatusPixKey.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusPixKey & waproto.StatusPixKey.$Shape
+	}
+	namespace StatusPixKey {
+		interface $Properties {
+			key?: (string|null)
+			keyType?: (waproto.StatusPixKey.KeyType|null)
+			displayName?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.StatusPixKey.$Properties
+		enum KeyType {
+			UNKNOWN = 0,
+			CPF = 1,
+			CNPJ = 2,
+			PHONE = 3,
+			EMAIL = 4,
+			EVP = 5
+		}
+	}
+	interface IStatusTsPerUserProto extends waproto.StatusTsPerUserProto.$Properties {
+	}
+	class StatusTsPerUserProto {
+		constructor(p?: waproto.StatusTsPerUserProto.$Properties)
+		$unknowns?: Uint8Array[]
+		userJid?: (string|null)
+		dbUserStatusTs?: (waproto.DbUserStatusTsProto.$Properties|null)
+		static encode(m: waproto.StatusTsPerUserProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusTsPerUserProto & waproto.StatusTsPerUserProto.$Shape
+	}
+	namespace StatusTsPerUserProto {
+		interface $Properties {
+			userJid?: (string|null)
+			dbUserStatusTs?: (waproto.DbUserStatusTsProto.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.StatusTsPerUserProto.$Properties
 	}
 	interface IStickerMetadata extends waproto.StickerMetadata.$Properties {
 	}
@@ -13838,6 +22374,76 @@ export namespace waproto {
 		}
 		type $Shape = waproto.StickerMetadata.$Properties
 	}
+	interface IStickerTransport extends waproto.StickerTransport.$Properties {
+	}
+	class StickerTransport {
+		constructor(p?: waproto.StickerTransport.$Properties)
+		$unknowns?: Uint8Array[]
+		integral?: (waproto.StickerTransport.Integral.$Properties|null)
+		ancillary?: (waproto.StickerTransport.Ancillary.$Properties|null)
+		static encode(m: waproto.StickerTransport.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.StickerTransport & waproto.StickerTransport.$Shape
+	}
+	namespace StickerTransport {
+		interface $Properties {
+			integral?: (waproto.StickerTransport.Integral.$Properties|null)
+			ancillary?: (waproto.StickerTransport.Ancillary.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.StickerTransport.$Properties
+		interface IAncillary extends waproto.StickerTransport.Ancillary.$Properties {
+		}
+		class Ancillary {
+			constructor(p?: waproto.StickerTransport.Ancillary.$Properties)
+			$unknowns?: Uint8Array[]
+			pageCount?: (number|null)
+			height?: (number|null)
+			width?: (number|null)
+			firstFrameLength?: (number|null)
+			firstFrameSidecar?: (Uint8Array|null)
+			mustacheText?: (string|null)
+			isThirdParty?: (boolean|null)
+			receiverFetchId?: (string|null)
+			accessibilityLabel?: (string|null)
+			static encode(m: waproto.StickerTransport.Ancillary.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.StickerTransport.Ancillary & waproto.StickerTransport.Ancillary.$Shape
+		}
+		namespace Ancillary {
+			interface $Properties {
+				pageCount?: (number|null)
+				height?: (number|null)
+				width?: (number|null)
+				firstFrameLength?: (number|null)
+				firstFrameSidecar?: (Uint8Array|null)
+				mustacheText?: (string|null)
+				isThirdParty?: (boolean|null)
+				receiverFetchId?: (string|null)
+				accessibilityLabel?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.StickerTransport.Ancillary.$Properties
+		}
+		interface IIntegral extends waproto.StickerTransport.Integral.$Properties {
+		}
+		class Integral {
+			constructor(p?: waproto.StickerTransport.Integral.$Properties)
+			$unknowns?: Uint8Array[]
+			transport?: (waproto.WAMediaTransport.$Properties|null)
+			isAnimated?: (boolean|null)
+			receiverFetchId?: (string|null)
+			static encode(m: waproto.StickerTransport.Integral.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.StickerTransport.Integral & waproto.StickerTransport.Integral.$Shape
+		}
+		namespace Integral {
+			interface $Properties {
+				transport?: (waproto.WAMediaTransport.$Properties|null)
+				isAnimated?: (boolean|null)
+				receiverFetchId?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.StickerTransport.Integral.$Properties
+		}
+	}
 	interface ISubProtocol extends waproto.SubProtocol.$Properties {
 	}
 	class SubProtocol {
@@ -13855,6 +22461,24 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.SubProtocol.$Properties
+	}
+	interface ISubprotocol extends waproto.Subprotocol.$Properties {
+	}
+	class Subprotocol {
+		constructor(p?: waproto.Subprotocol.$Properties)
+		$unknowns?: Uint8Array[]
+		payload?: (Uint8Array|null)
+		version?: (number|null)
+		static encode(m: waproto.Subprotocol.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.Subprotocol & waproto.Subprotocol.$Shape
+	}
+	namespace Subprotocol {
+		interface $Properties {
+			payload?: (Uint8Array|null)
+			version?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.Subprotocol.$Properties
 	}
 	interface ISyncActionData extends waproto.SyncActionData.$Properties {
 	}
@@ -13876,7 +22500,13 @@ export namespace waproto {
 			version?: (number|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.SyncActionData.$Properties
+		type $Shape = {
+  index?: Uint8Array|null
+  value?: waproto.SyncActionValue.$Shape|null
+  padding?: Uint8Array|null
+  version?: number|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface ISyncActionValue extends waproto.SyncActionValue.$Properties {
 	}
@@ -13964,6 +22594,17 @@ export namespace waproto {
 		coexV2VersionAction?: (waproto.SyncActionValue.CoexV2VersionAction.$Properties|null)
 		wasaRootSecretAction?: (waproto.SyncActionValue.WASARootSecretAction.$Properties|null)
 		bubbleLockMessageAction?: (waproto.SyncActionValue.BubbleLockMessageAction.$Properties|null)
+		labelSublistAction?: (waproto.SyncActionValue.LabelSublistAction.$Properties|null)
+		deviceCapabilitiesV2?: (waproto.DeviceCapabilities.$Properties|null)
+		ctwaMessageReceivedAction?: (waproto.SyncActionValue.CtwaMessageReceivedAction.$Properties|null)
+		sharedDeviceAllowlistAction?: (waproto.SyncActionValue.SharedDeviceAllowlistAction.$Properties|null)
+		contactManagerMetadataAction?: (waproto.SyncActionValue.ContactManagerMetadataAction.$Properties|null)
+		businessFolderActivationAction?: (waproto.SyncActionValue.BusinessFolderActivationAction.$Properties|null)
+		groupHistoryToggleAction?: (waproto.SyncActionValue.GroupHistoryToggleAction.$Properties|null)
+		bbProPendingCustomerBaseAction?: (waproto.SyncActionValue.BBProPendingCustomerBaseAction.$Properties|null)
+		communityNestingStateAction?: (waproto.SyncActionValue.CommunityNestingStateAction.$Properties|null)
+		sharedDeviceSecretAction?: (waproto.SyncActionValue.SharedDeviceSecretAction.$Properties|null)
+		hatchCvmSecretAction?: (waproto.SyncActionValue.HatchCVMSecretAction.$Properties|null)
 		static encode(m: waproto.SyncActionValue.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue & waproto.SyncActionValue.$Shape
 	}
@@ -14050,15 +22691,240 @@ export namespace waproto {
 			coexV2VersionAction?: (waproto.SyncActionValue.CoexV2VersionAction.$Properties|null)
 			wasaRootSecretAction?: (waproto.SyncActionValue.WASARootSecretAction.$Properties|null)
 			bubbleLockMessageAction?: (waproto.SyncActionValue.BubbleLockMessageAction.$Properties|null)
+			labelSublistAction?: (waproto.SyncActionValue.LabelSublistAction.$Properties|null)
+			deviceCapabilitiesV2?: (waproto.DeviceCapabilities.$Properties|null)
+			ctwaMessageReceivedAction?: (waproto.SyncActionValue.CtwaMessageReceivedAction.$Properties|null)
+			sharedDeviceAllowlistAction?: (waproto.SyncActionValue.SharedDeviceAllowlistAction.$Properties|null)
+			contactManagerMetadataAction?: (waproto.SyncActionValue.ContactManagerMetadataAction.$Properties|null)
+			businessFolderActivationAction?: (waproto.SyncActionValue.BusinessFolderActivationAction.$Properties|null)
+			groupHistoryToggleAction?: (waproto.SyncActionValue.GroupHistoryToggleAction.$Properties|null)
+			bbProPendingCustomerBaseAction?: (waproto.SyncActionValue.BBProPendingCustomerBaseAction.$Properties|null)
+			communityNestingStateAction?: (waproto.SyncActionValue.CommunityNestingStateAction.$Properties|null)
+			sharedDeviceSecretAction?: (waproto.SyncActionValue.SharedDeviceSecretAction.$Properties|null)
+			hatchCvmSecretAction?: (waproto.SyncActionValue.HatchCVMSecretAction.$Properties|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.SyncActionValue.$Properties
+		type $Shape = {
+  timestamp?: number|Long|null
+  starAction?: waproto.SyncActionValue.StarAction.$Shape|null
+  contactAction?: waproto.SyncActionValue.ContactAction.$Shape|null
+  muteAction?: waproto.SyncActionValue.MuteAction.$Shape|null
+  pinAction?: waproto.SyncActionValue.PinAction.$Shape|null
+  pushNameSetting?: waproto.SyncActionValue.PushNameSetting.$Shape|null
+  quickReplyAction?: waproto.SyncActionValue.QuickReplyAction.$Shape|null
+  recentEmojiWeightsAction?: waproto.SyncActionValue.RecentEmojiWeightsAction.$Shape|null
+  labelEditAction?: waproto.SyncActionValue.LabelEditAction.$Shape|null
+  labelAssociationAction?: waproto.SyncActionValue.LabelAssociationAction.$Shape|null
+  localeSetting?: waproto.SyncActionValue.LocaleSetting.$Shape|null
+  archiveChatAction?: waproto.SyncActionValue.ArchiveChatAction.$Shape|null
+  deleteMessageForMeAction?: waproto.SyncActionValue.DeleteMessageForMeAction.$Shape|null
+  keyExpiration?: waproto.SyncActionValue.KeyExpiration.$Shape|null
+  markChatAsReadAction?: waproto.SyncActionValue.MarkChatAsReadAction.$Shape|null
+  clearChatAction?: waproto.SyncActionValue.ClearChatAction.$Shape|null
+  deleteChatAction?: waproto.SyncActionValue.DeleteChatAction.$Shape|null
+  unarchiveChatsSetting?: waproto.SyncActionValue.UnarchiveChatsSetting.$Shape|null
+  primaryFeature?: waproto.SyncActionValue.PrimaryFeature.$Shape|null
+  androidUnsupportedActions?: waproto.SyncActionValue.AndroidUnsupportedActions.$Shape|null
+  agentAction?: waproto.SyncActionValue.AgentAction.$Shape|null
+  subscriptionAction?: waproto.SyncActionValue.SubscriptionAction.$Shape|null
+  userStatusMuteAction?: waproto.SyncActionValue.UserStatusMuteAction.$Shape|null
+  timeFormatAction?: waproto.SyncActionValue.TimeFormatAction.$Shape|null
+  nuxAction?: waproto.SyncActionValue.NuxAction.$Shape|null
+  primaryVersionAction?: waproto.SyncActionValue.PrimaryVersionAction.$Shape|null
+  stickerAction?: waproto.SyncActionValue.StickerAction.$Shape|null
+  removeRecentStickerAction?: waproto.SyncActionValue.RemoveRecentStickerAction.$Shape|null
+  chatAssignment?: waproto.SyncActionValue.ChatAssignmentAction.$Shape|null
+  chatAssignmentOpenedStatus?: waproto.SyncActionValue.ChatAssignmentOpenedStatusAction.$Shape|null
+  pnForLidChatAction?: waproto.SyncActionValue.PnForLidChatAction.$Shape|null
+  marketingMessageAction?: waproto.SyncActionValue.MarketingMessageAction.$Shape|null
+  marketingMessageBroadcastAction?: waproto.SyncActionValue.MarketingMessageBroadcastAction.$Shape|null
+  externalWebBetaAction?: waproto.SyncActionValue.ExternalWebBetaAction.$Shape|null
+  privacySettingRelayAllCalls?: waproto.SyncActionValue.PrivacySettingRelayAllCalls.$Shape|null
+  callLogAction?: waproto.SyncActionValue.CallLogAction.$Shape|null
+  ugcBot?: waproto.SyncActionValue.UGCBot.$Shape|null
+  statusPrivacy?: waproto.SyncActionValue.StatusPrivacyAction.$Shape|null
+  botWelcomeRequestAction?: waproto.SyncActionValue.BotWelcomeRequestAction.$Shape|null
+  deleteIndividualCallLog?: waproto.SyncActionValue.DeleteIndividualCallLogAction.$Shape|null
+  labelReorderingAction?: waproto.SyncActionValue.LabelReorderingAction.$Shape|null
+  paymentInfoAction?: waproto.SyncActionValue.PaymentInfoAction.$Shape|null
+  customPaymentMethodsAction?: waproto.SyncActionValue.CustomPaymentMethodsAction.$Shape|null
+  lockChatAction?: waproto.SyncActionValue.LockChatAction.$Shape|null
+  chatLockSettings?: waproto.ChatLockSettings.$Shape|null
+  wamoUserIdentifierAction?: waproto.SyncActionValue.WamoUserIdentifierAction.$Shape|null
+  privacySettingDisableLinkPreviewsAction?: waproto.SyncActionValue.PrivacySettingDisableLinkPreviewsAction.$Shape|null
+  deviceCapabilities?: waproto.DeviceCapabilities.$Shape|null
+  noteEditAction?: waproto.SyncActionValue.NoteEditAction.$Shape|null
+  favoritesAction?: waproto.SyncActionValue.FavoritesAction.$Shape|null
+  merchantPaymentPartnerAction?: waproto.SyncActionValue.MerchantPaymentPartnerAction.$Shape|null
+  waffleAccountLinkStateAction?: waproto.SyncActionValue.WaffleAccountLinkStateAction.$Shape|null
+  usernameChatStartMode?: waproto.SyncActionValue.UsernameChatStartModeAction.$Shape|null
+  notificationActivitySettingAction?: waproto.SyncActionValue.NotificationActivitySettingAction.$Shape|null
+  lidContactAction?: waproto.SyncActionValue.LidContactAction.$Shape|null
+  ctwaPerCustomerDataSharingAction?: waproto.SyncActionValue.CtwaPerCustomerDataSharingAction.$Shape|null
+  paymentTosAction?: waproto.SyncActionValue.PaymentTosAction.$Shape|null
+  privacySettingChannelsPersonalisedRecommendationAction?: waproto.SyncActionValue.PrivacySettingChannelsPersonalisedRecommendationAction.$Shape|null
+  detectedOutcomesStatusAction?: waproto.SyncActionValue.DetectedOutcomesStatusAction.$Shape|null
+  maibaAiFeaturesControlAction?: waproto.SyncActionValue.MaibaAIFeaturesControlAction.$Shape|null
+  businessBroadcastListAction?: waproto.SyncActionValue.BusinessBroadcastListAction.$Shape|null
+  musicUserIdAction?: waproto.SyncActionValue.MusicUserIdAction.$Shape|null
+  statusPostOptInNotificationPreferencesAction?: waproto.SyncActionValue.StatusPostOptInNotificationPreferencesAction.$Shape|null
+  avatarUpdatedAction?: waproto.SyncActionValue.AvatarUpdatedAction.$Shape|null
+  privateProcessingSettingAction?: waproto.SyncActionValue.PrivateProcessingSettingAction.$Shape|null
+  newsletterSavedInterestsAction?: waproto.SyncActionValue.NewsletterSavedInterestsAction.$Shape|null
+  aiThreadRenameAction?: waproto.SyncActionValue.AiThreadRenameAction.$Shape|null
+  interactiveMessageAction?: waproto.SyncActionValue.InteractiveMessageAction.$Shape|null
+  settingsSyncAction?: waproto.SyncActionValue.SettingsSyncAction.$Shape|null
+  outContactAction?: waproto.SyncActionValue.OutContactAction.$Shape|null
+  nctSaltSyncAction?: waproto.SyncActionValue.NctSaltSyncAction.$Shape|null
+  businessBroadcastCampaignAction?: waproto.SyncActionValue.BusinessBroadcastCampaignAction.$Shape|null
+  businessBroadcastInsightsAction?: waproto.SyncActionValue.BusinessBroadcastInsightsAction.$Shape|null
+  customerDataAction?: waproto.SyncActionValue.CustomerDataAction.$Shape|null
+  subscriptionsSyncV2Action?: waproto.SyncActionValue.SubscriptionsSyncV2Action.$Shape|null
+  threadPinAction?: waproto.SyncActionValue.ThreadPinAction.$Shape|null
+  autoOrganizeBusinessChatSetting?: waproto.SyncActionValue.AutoOrganizeBusinessChatSetting.$Shape|null
+  bizAiSettingsNudgeAction?: waproto.SyncActionValue.BizAISettingsNudgeAction.$Shape|null
+  coexV2VersionAction?: waproto.SyncActionValue.CoexV2VersionAction.$Shape|null
+  wasaRootSecretAction?: waproto.SyncActionValue.WASARootSecretAction.$Shape|null
+  bubbleLockMessageAction?: waproto.SyncActionValue.BubbleLockMessageAction.$Shape|null
+  labelSublistAction?: waproto.SyncActionValue.LabelSublistAction.$Shape|null
+  deviceCapabilitiesV2?: waproto.DeviceCapabilities.$Shape|null
+  ctwaMessageReceivedAction?: waproto.SyncActionValue.CtwaMessageReceivedAction.$Shape|null
+  sharedDeviceAllowlistAction?: waproto.SyncActionValue.SharedDeviceAllowlistAction.$Shape|null
+  contactManagerMetadataAction?: waproto.SyncActionValue.ContactManagerMetadataAction.$Shape|null
+  businessFolderActivationAction?: waproto.SyncActionValue.BusinessFolderActivationAction.$Shape|null
+  groupHistoryToggleAction?: waproto.SyncActionValue.GroupHistoryToggleAction.$Shape|null
+  bbProPendingCustomerBaseAction?: waproto.SyncActionValue.BBProPendingCustomerBaseAction.$Shape|null
+  communityNestingStateAction?: waproto.SyncActionValue.CommunityNestingStateAction.$Shape|null
+  sharedDeviceSecretAction?: waproto.SyncActionValue.SharedDeviceSecretAction.$Shape|null
+  hatchCvmSecretAction?: waproto.SyncActionValue.HatchCVMSecretAction.$Shape|null
+  $unknowns?: Uint8Array[]
+}
+		enum BusinessBroadcastCampaignBBProStatus {
+			BB_PRO_ACTIVE = 1,
+			BB_PRO_COMPLETED = 2,
+			BB_PRO_IN_DRAFT = 3,
+			BB_PRO_IN_REVIEW = 4,
+			BB_PRO_NOT_SENDING = 5,
+			BB_PRO_OFF = 6,
+			BB_PRO_REJECTED = 7,
+			BB_PRO_SCHEDULED = 8,
+			BB_PRO_SENDING_LIMITED = 9,
+			BB_PRO_PROCESSING = 10
+		}
 		enum BusinessBroadcastCampaignStatus {
 			DRAFT = 1,
 			SCHEDULED = 2,
 			PROCESSING = 3,
 			FAILED = 4,
 			SENT = 5
+		}
+		interface ICommunityNestingStateAction extends waproto.SyncActionValue.CommunityNestingStateAction.$Properties {
+		}
+		class CommunityNestingStateAction {
+			constructor(p?: waproto.SyncActionValue.CommunityNestingStateAction.$Properties)
+			$unknowns?: Uint8Array[]
+			nestingState?: (waproto.SyncActionValue.CommunityNestingStateAction.NestingState|null)
+			static encode(m: waproto.SyncActionValue.CommunityNestingStateAction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.CommunityNestingStateAction & waproto.SyncActionValue.CommunityNestingStateAction.$Shape
+		}
+		namespace CommunityNestingStateAction {
+			interface $Properties {
+				nestingState?: (waproto.SyncActionValue.CommunityNestingStateAction.NestingState|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.SyncActionValue.CommunityNestingStateAction.$Properties
+			enum NestingState {
+				PLATFORM_DEFAULT = 0,
+				NESTED = 1,
+				UNNESTED = 2
+			}
+		}
+		interface IBBProPendingCustomerBaseAction extends waproto.SyncActionValue.BBProPendingCustomerBaseAction.$Properties {
+		}
+		class BBProPendingCustomerBaseAction {
+			constructor(p?: waproto.SyncActionValue.BBProPendingCustomerBaseAction.$Properties)
+			$unknowns?: Uint8Array[]
+			pending?: (boolean|null)
+			static encode(m: waproto.SyncActionValue.BBProPendingCustomerBaseAction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.BBProPendingCustomerBaseAction & waproto.SyncActionValue.BBProPendingCustomerBaseAction.$Shape
+		}
+		namespace BBProPendingCustomerBaseAction {
+			interface $Properties {
+				pending?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.SyncActionValue.BBProPendingCustomerBaseAction.$Properties
+		}
+		interface IGroupHistoryToggleAction extends waproto.SyncActionValue.GroupHistoryToggleAction.$Properties {
+		}
+		class GroupHistoryToggleAction {
+			constructor(p?: waproto.SyncActionValue.GroupHistoryToggleAction.$Properties)
+			$unknowns?: Uint8Array[]
+			groupHistoryToggleMode?: (waproto.SyncActionValue.GroupHistoryToggleAction.GroupHistoryToggleMode|null)
+			static encode(m: waproto.SyncActionValue.GroupHistoryToggleAction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.GroupHistoryToggleAction & waproto.SyncActionValue.GroupHistoryToggleAction.$Shape
+		}
+		namespace GroupHistoryToggleAction {
+			interface $Properties {
+				groupHistoryToggleMode?: (waproto.SyncActionValue.GroupHistoryToggleAction.GroupHistoryToggleMode|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.SyncActionValue.GroupHistoryToggleAction.$Properties
+			enum GroupHistoryToggleMode {
+				GROUP_HISTORY_TOGGLE_MODE_UNKNOWN = 0,
+				GROUP_HISTORY_TOGGLE_MODE_ON = 1,
+				GROUP_HISTORY_TOGGLE_MODE_OFF = 2
+			}
+		}
+		interface IBusinessFolderActivationAction extends waproto.SyncActionValue.BusinessFolderActivationAction.$Properties {
+		}
+		class BusinessFolderActivationAction {
+			constructor(p?: waproto.SyncActionValue.BusinessFolderActivationAction.$Properties)
+			$unknowns?: Uint8Array[]
+			activated?: (boolean|null)
+			static encode(m: waproto.SyncActionValue.BusinessFolderActivationAction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.BusinessFolderActivationAction & waproto.SyncActionValue.BusinessFolderActivationAction.$Shape
+		}
+		namespace BusinessFolderActivationAction {
+			interface $Properties {
+				activated?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.SyncActionValue.BusinessFolderActivationAction.$Properties
+		}
+		interface ICtwaMessageReceivedAction extends waproto.SyncActionValue.CtwaMessageReceivedAction.$Properties {
+		}
+		class CtwaMessageReceivedAction {
+			constructor(p?: waproto.SyncActionValue.CtwaMessageReceivedAction.$Properties)
+			$unknowns?: Uint8Array[]
+			isCtwaMessageReceived?: (boolean|null)
+			static encode(m: waproto.SyncActionValue.CtwaMessageReceivedAction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.CtwaMessageReceivedAction & waproto.SyncActionValue.CtwaMessageReceivedAction.$Shape
+		}
+		namespace CtwaMessageReceivedAction {
+			interface $Properties {
+				isCtwaMessageReceived?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.SyncActionValue.CtwaMessageReceivedAction.$Properties
+		}
+		interface IHatchCVMSecretAction extends waproto.SyncActionValue.HatchCVMSecretAction.$Properties {
+		}
+		class HatchCVMSecretAction {
+			constructor(p?: waproto.SyncActionValue.HatchCVMSecretAction.$Properties)
+			$unknowns?: Uint8Array[]
+			secret?: (Uint8Array|null)
+			generation?: (number|Long|null)
+			static encode(m: waproto.SyncActionValue.HatchCVMSecretAction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.HatchCVMSecretAction & waproto.SyncActionValue.HatchCVMSecretAction.$Shape
+		}
+		namespace HatchCVMSecretAction {
+			interface $Properties {
+				secret?: (Uint8Array|null)
+				generation?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.SyncActionValue.HatchCVMSecretAction.$Properties
 		}
 		interface IWASARootSecretAction extends waproto.SyncActionValue.WASARootSecretAction.$Properties {
 		}
@@ -14083,6 +22949,7 @@ export namespace waproto {
 				id?: (string|null)
 				rootSecret?: (Uint8Array|null)
 				epoch?: (number|Long|null)
+				status?: (waproto.SyncActionValue.WASARootSecretAction.RootSecretEntry.Status|null)
 				static encode(m: waproto.SyncActionValue.WASARootSecretAction.RootSecretEntry.$Properties, w?: PbWriter): PbWriter
 				static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.WASARootSecretAction.RootSecretEntry & waproto.SyncActionValue.WASARootSecretAction.RootSecretEntry.$Shape
 			}
@@ -14091,9 +22958,14 @@ export namespace waproto {
 					id?: (string|null)
 					rootSecret?: (Uint8Array|null)
 					epoch?: (number|Long|null)
+					status?: (waproto.SyncActionValue.WASARootSecretAction.RootSecretEntry.Status|null)
 					$unknowns?: Uint8Array[]
 				}
 				type $Shape = waproto.SyncActionValue.WASARootSecretAction.RootSecretEntry.$Properties
+				enum Status {
+					INACTIVE = 0,
+					ACTIVE = 1
+				}
 			}
 		}
 		interface ICoexV2VersionAction extends waproto.SyncActionValue.CoexV2VersionAction.$Properties {
@@ -14181,6 +23053,22 @@ export namespace waproto {
 				}
 				type $Shape = waproto.SyncActionValue.SubscriptionsSyncV2Action.SubscriptionInfo.$Properties
 			}
+		}
+		interface IContactManagerMetadataAction extends waproto.SyncActionValue.ContactManagerMetadataAction.$Properties {
+		}
+		class ContactManagerMetadataAction {
+			constructor(p?: waproto.SyncActionValue.ContactManagerMetadataAction.$Properties)
+			$unknowns?: Uint8Array[]
+			isHidden?: (boolean|null)
+			static encode(m: waproto.SyncActionValue.ContactManagerMetadataAction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.ContactManagerMetadataAction & waproto.SyncActionValue.ContactManagerMetadataAction.$Shape
+		}
+		namespace ContactManagerMetadataAction {
+			interface $Properties {
+				isHidden?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.SyncActionValue.ContactManagerMetadataAction.$Properties
 		}
 		interface ICustomerDataAction extends waproto.SyncActionValue.CustomerDataAction.$Properties {
 		}
@@ -14280,6 +23168,8 @@ export namespace waproto {
 			shouldPlaySoundForCallNotification?: (boolean|null)
 			chatThemeId?: (string|null)
 			colorSchemeId?: (string|null)
+			stockWallpaperImageId?: (string|null)
+			mediaAutoDownloadQuality?: (waproto.SyncActionValue.SettingsSyncAction.MediaAutoDownloadQualitySetting|null)
 			static encode(m: waproto.SyncActionValue.SettingsSyncAction.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SettingsSyncAction & waproto.SyncActionValue.SettingsSyncAction.$Shape
 		}
@@ -14318,9 +23208,17 @@ export namespace waproto {
 				shouldPlaySoundForCallNotification?: (boolean|null)
 				chatThemeId?: (string|null)
 				colorSchemeId?: (string|null)
+				stockWallpaperImageId?: (string|null)
+				mediaAutoDownloadQuality?: (waproto.SyncActionValue.SettingsSyncAction.MediaAutoDownloadQualitySetting|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.SyncActionValue.SettingsSyncAction.$Properties
+			enum MediaAutoDownloadQualitySetting {
+				MEDIA_AUTO_DOWNLOAD_QUALITY_UNKNOWN = 0,
+				MEDIA_AUTO_DOWNLOAD_QUALITY_STANDARD = 1,
+				MEDIA_AUTO_DOWNLOAD_QUALITY_HD = 2,
+				MEDIA_AUTO_DOWNLOAD_QUALITY_AUTO = 3
+			}
 			enum MediaQualitySetting {
 				MEDIA_QUALITY_UNKNOWN = 0,
 				STANDARD = 1,
@@ -14366,7 +23264,9 @@ export namespace waproto {
 				STATUS_NOTIFICATION_TONE_ID = 30,
 				SHOULD_PLAY_SOUND_FOR_CALL_NOTIFICATION = 31,
 				CHAT_THEME_ID = 32,
-				COLOR_SCHEME_ID = 33
+				COLOR_SCHEME_ID = 33,
+				STOCK_WALLPAPER_IMAGE_ID = 34,
+				MEDIA_AUTO_DOWNLOAD_QUALITY = 35
 			}
 			enum SettingPlatform {
 				PLATFORM_UNKNOWN = 0,
@@ -14546,7 +23446,8 @@ export namespace waproto {
 				RESPONSE_SETTINGS = 2,
 				EXAMPLE_RESPONSES = 3,
 				KNOWLEDGE = 4,
-				LEAD_GEN = 5
+				LEAD_GEN = 5,
+				HANDOFF_REMOVAL_TIMING = 6
 			}
 		}
 		interface IMaibaAIFeaturesControlAction extends waproto.SyncActionValue.MaibaAIFeaturesControlAction.$Properties {
@@ -14609,6 +23510,8 @@ export namespace waproto {
 			scheduledTimestamp?: (number|Long|null)
 			createTimestamp?: (number|Long|null)
 			status?: (waproto.SyncActionValue.BusinessBroadcastCampaignStatus|null)
+			bbProStatus?: (waproto.SyncActionValue.BusinessBroadcastCampaignBBProStatus|null)
+			customAudienceFbid?: (string|null)
 			static encode(m: waproto.SyncActionValue.BusinessBroadcastCampaignAction.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.BusinessBroadcastCampaignAction & waproto.SyncActionValue.BusinessBroadcastCampaignAction.$Shape
 		}
@@ -14623,6 +23526,8 @@ export namespace waproto {
 				scheduledTimestamp?: (number|Long|null)
 				createTimestamp?: (number|Long|null)
 				status?: (waproto.SyncActionValue.BusinessBroadcastCampaignStatus|null)
+				bbProStatus?: (waproto.SyncActionValue.BusinessBroadcastCampaignBBProStatus|null)
+				customAudienceFbid?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.SyncActionValue.BusinessBroadcastCampaignAction.$Properties
@@ -14732,6 +23637,7 @@ export namespace waproto {
 			fullName?: (string|null)
 			firstName?: (string|null)
 			username?: (string|null)
+			birthday?: (string|null)
 			static encode(m: waproto.SyncActionValue.LidContactAction.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.LidContactAction & waproto.SyncActionValue.LidContactAction.$Shape
 		}
@@ -14740,6 +23646,7 @@ export namespace waproto {
 				fullName?: (string|null)
 				firstName?: (string|null)
 				username?: (string|null)
+				birthday?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.SyncActionValue.LidContactAction.$Properties
@@ -15772,8 +24679,29 @@ export namespace waproto {
 				ARCHIVED = 12,
 				LOCKED = 13,
 				INVITES = 14,
-				THIRD_PARTY = 15
+				THIRD_PARTY = 15,
+				LEAD = 16,
+				MENTIONS_AND_REPLIES = 17,
+				REQUESTS = 18,
+				BUSINESS = 19,
+				ONE_ON_ONE = 20
 			}
+		}
+		interface ILabelSublistAction extends waproto.SyncActionValue.LabelSublistAction.$Properties {
+		}
+		class LabelSublistAction {
+			constructor(p?: waproto.SyncActionValue.LabelSublistAction.$Properties)
+			$unknowns?: Uint8Array[]
+			subListId?: (number|null)
+			static encode(m: waproto.SyncActionValue.LabelSublistAction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.LabelSublistAction & waproto.SyncActionValue.LabelSublistAction.$Shape
+		}
+		namespace LabelSublistAction {
+			interface $Properties {
+				subListId?: (number|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.SyncActionValue.LabelSublistAction.$Properties
 		}
 		interface ILabelAssociationAction extends waproto.SyncActionValue.LabelAssociationAction.$Properties {
 		}
@@ -15889,6 +24817,40 @@ export namespace waproto {
 			}
 			type $Shape = waproto.SyncActionValue.MuteAction.$Properties
 		}
+		interface ISharedDeviceSecretAction extends waproto.SyncActionValue.SharedDeviceSecretAction.$Properties {
+		}
+		class SharedDeviceSecretAction {
+			constructor(p?: waproto.SyncActionValue.SharedDeviceSecretAction.$Properties)
+			$unknowns?: Uint8Array[]
+			secret?: (Uint8Array|null)
+			ttlMs?: (number|Long|null)
+			static encode(m: waproto.SyncActionValue.SharedDeviceSecretAction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SharedDeviceSecretAction & waproto.SyncActionValue.SharedDeviceSecretAction.$Shape
+		}
+		namespace SharedDeviceSecretAction {
+			interface $Properties {
+				secret?: (Uint8Array|null)
+				ttlMs?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.SyncActionValue.SharedDeviceSecretAction.$Properties
+		}
+		interface ISharedDeviceAllowlistAction extends waproto.SyncActionValue.SharedDeviceAllowlistAction.$Properties {
+		}
+		class SharedDeviceAllowlistAction {
+			constructor(p?: waproto.SyncActionValue.SharedDeviceAllowlistAction.$Properties)
+			$unknowns?: Uint8Array[]
+			allowed?: (boolean|null)
+			static encode(m: waproto.SyncActionValue.SharedDeviceAllowlistAction.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SharedDeviceAllowlistAction & waproto.SyncActionValue.SharedDeviceAllowlistAction.$Shape
+		}
+		namespace SharedDeviceAllowlistAction {
+			interface $Properties {
+				allowed?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.SyncActionValue.SharedDeviceAllowlistAction.$Properties
+		}
 		interface IContactAction extends waproto.SyncActionValue.ContactAction.$Properties {
 		}
 		class ContactAction {
@@ -15900,6 +24862,7 @@ export namespace waproto {
 			saveOnPrimaryAddressbook?: (boolean|null)
 			pnJid?: (string|null)
 			username?: (string|null)
+			birthday?: (string|null)
 			static encode(m: waproto.SyncActionValue.ContactAction.$Properties, w?: PbWriter): PbWriter
 			static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.ContactAction & waproto.SyncActionValue.ContactAction.$Shape
 		}
@@ -15911,6 +24874,7 @@ export namespace waproto {
 				saveOnPrimaryAddressbook?: (boolean|null)
 				pnJid?: (string|null)
 				username?: (string|null)
+				birthday?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
 			type $Shape = waproto.SyncActionValue.ContactAction.$Properties
@@ -15931,6 +24895,148 @@ export namespace waproto {
 			}
 			type $Shape = waproto.SyncActionValue.StarAction.$Properties
 		}
+	}
+	interface ISyncActionsTableSchemaProto extends waproto.SyncActionsTableSchemaProto.$Properties {
+	}
+	class SyncActionsTableSchemaProto {
+		constructor(p?: waproto.SyncActionsTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		index?: (string|null)
+		binarySyncData?: (Uint8Array|null)
+		actionState?: (string|null)
+		version?: (number|null)
+		keyId?: (Uint8Array|null)
+		modelId?: (string|null)
+		modelType?: (string|null)
+		indexMac?: (Uint8Array|null)
+		valueMac?: (Uint8Array|null)
+		collection?: (string|null)
+		timestamp?: (number|Long|null)
+		action?: (string|null)
+		static encode(m: waproto.SyncActionsTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionsTableSchemaProto & waproto.SyncActionsTableSchemaProto.$Shape
+	}
+	namespace SyncActionsTableSchemaProto {
+		interface $Properties {
+			index?: (string|null)
+			binarySyncData?: (Uint8Array|null)
+			actionState?: (string|null)
+			version?: (number|null)
+			keyId?: (Uint8Array|null)
+			modelId?: (string|null)
+			modelType?: (string|null)
+			indexMac?: (Uint8Array|null)
+			valueMac?: (Uint8Array|null)
+			collection?: (string|null)
+			timestamp?: (number|Long|null)
+			action?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.SyncActionsTableSchemaProto.$Properties
+	}
+	interface ISyncKeyDataProto extends waproto.SyncKeyDataProto.$Properties {
+	}
+	class SyncKeyDataProto {
+		constructor(p?: waproto.SyncKeyDataProto.$Properties)
+		$unknowns?: Uint8Array[]
+		keyId?: (Uint8Array|null)
+		keyData?: (Uint8Array|null)
+		keyEpoch?: (number|null)
+		timestamp?: (number|Long|null)
+		fingerprint?: (waproto.FingerprintProto.$Properties|null)
+		static encode(m: waproto.SyncKeyDataProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncKeyDataProto & waproto.SyncKeyDataProto.$Shape
+	}
+	namespace SyncKeyDataProto {
+		interface $Properties {
+			keyId?: (Uint8Array|null)
+			keyData?: (Uint8Array|null)
+			keyEpoch?: (number|null)
+			timestamp?: (number|Long|null)
+			fingerprint?: (waproto.FingerprintProto.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.SyncKeyDataProto.$Properties
+	}
+	interface ISyncKeyFingerprint extends waproto.SyncKeyFingerprint.$Properties {
+	}
+	class SyncKeyFingerprint {
+		constructor(p?: waproto.SyncKeyFingerprint.$Properties)
+		$unknowns?: Uint8Array[]
+		currentIndex?: (number|null)
+		deviceIndexes: number[]
+		rawId?: (number|Long|null)
+		static encode(m: waproto.SyncKeyFingerprint.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncKeyFingerprint & waproto.SyncKeyFingerprint.$Shape
+	}
+	namespace SyncKeyFingerprint {
+		interface $Properties {
+			currentIndex?: (number|null)
+			deviceIndexes?: (number[]|null)
+			rawId?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.SyncKeyFingerprint.$Properties
+	}
+	interface ISyncKeyRequestProto extends waproto.SyncKeyRequestProto.$Properties {
+	}
+	class SyncKeyRequestProto {
+		constructor(p?: waproto.SyncKeyRequestProto.$Properties)
+		$unknowns?: Uint8Array[]
+		keyIds: Uint8Array[]
+		static encode(m: waproto.SyncKeyRequestProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncKeyRequestProto & waproto.SyncKeyRequestProto.$Shape
+	}
+	namespace SyncKeyRequestProto {
+		interface $Properties {
+			keyIds?: (Uint8Array[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.SyncKeyRequestProto.$Properties
+	}
+	interface ISyncKeyShareProto extends waproto.SyncKeyShareProto.$Properties {
+	}
+	class SyncKeyShareProto {
+		constructor(p?: waproto.SyncKeyShareProto.$Properties)
+		$unknowns?: Uint8Array[]
+		keys: waproto.SyncKeyDataProto.$Properties[]
+		orphanKeys: Uint8Array[]
+		static encode(m: waproto.SyncKeyShareProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncKeyShareProto & waproto.SyncKeyShareProto.$Shape
+	}
+	namespace SyncKeyShareProto {
+		interface $Properties {
+			keys?: (waproto.SyncKeyDataProto.$Properties[]|null)
+			orphanKeys?: (Uint8Array[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.SyncKeyShareProto.$Properties
+	}
+	interface ISyncKeysTableSchemaProto extends waproto.SyncKeysTableSchemaProto.$Properties {
+	}
+	class SyncKeysTableSchemaProto {
+		constructor(p?: waproto.SyncKeysTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		id?: (Uint8Array|null)
+		keyId?: (Uint8Array|null)
+		keyData?: (Uint8Array|null)
+		keyEpoch?: (number|Long|null)
+		timestamp?: (number|Long|null)
+		fingerprint?: (waproto.SyncKeyFingerprint.$Properties|null)
+		static encode(m: waproto.SyncKeysTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncKeysTableSchemaProto & waproto.SyncKeysTableSchemaProto.$Shape
+	}
+	namespace SyncKeysTableSchemaProto {
+		interface $Properties {
+			id?: (Uint8Array|null)
+			keyId?: (Uint8Array|null)
+			keyData?: (Uint8Array|null)
+			keyEpoch?: (number|Long|null)
+			timestamp?: (number|Long|null)
+			fingerprint?: (waproto.SyncKeyFingerprint.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.SyncKeysTableSchemaProto.$Properties
 	}
 	interface ISyncdIndex extends waproto.SyncdIndex.$Properties {
 	}
@@ -16036,7 +25142,12 @@ export namespace waproto {
 			mac?: (Uint8Array|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.SyncdPlainTextRecord.$Properties
+		type $Shape = {
+  value?: waproto.SyncActionData.$Shape|null
+  keyId?: Uint8Array|null
+  mac?: Uint8Array|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface ISyncdRecord extends waproto.SyncdRecord.$Properties {
 	}
@@ -16100,7 +25211,13 @@ export namespace waproto {
 			collectionLthash?: (Uint8Array|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.SyncdSnapshotRecovery.$Properties
+		type $Shape = {
+  version?: waproto.SyncdVersion.$Shape|null
+  collectionName?: string|null
+  mutationRecords?: waproto.SyncdPlainTextRecord.$Shape[]|null
+  collectionLthash?: Uint8Array|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface ISyncdValue extends waproto.SyncdValue.$Properties {
 	}
@@ -16152,27 +25269,55 @@ export namespace waproto {
 		}
 		type $Shape = waproto.TapLinkAction.$Properties
 	}
+	interface ITasksTableSchemaProto extends waproto.TasksTableSchemaProto.$Properties {
+	}
+	class TasksTableSchemaProto {
+		constructor(p?: waproto.TasksTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		taskName?: (string|null)
+		scheduledTime?: (number|Long|null)
+		static encode(m: waproto.TasksTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.TasksTableSchemaProto & waproto.TasksTableSchemaProto.$Shape
+	}
+	namespace TasksTableSchemaProto {
+		interface $Properties {
+			taskName?: (string|null)
+			scheduledTime?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.TasksTableSchemaProto.$Properties
+	}
 	interface ITemplateButton extends waproto.TemplateButton.$Properties {
 	}
 	class TemplateButton {
 		constructor(p?: waproto.TemplateButton.$Properties)
 		$unknowns?: Uint8Array[]
+		index?: (number|null)
 		quickReplyButton?: (waproto.TemplateButton.QuickReplyButton.$Properties|null)
 		urlButton?: (waproto.TemplateButton.URLButton.$Properties|null)
 		callButton?: (waproto.TemplateButton.CallButton.$Properties|null)
-		index?: (number|null)
+		button?: ("quickReplyButton"|"urlButton"|"callButton")
 		static encode(m: waproto.TemplateButton.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.TemplateButton & waproto.TemplateButton.$Shape
 	}
 	namespace TemplateButton {
 		interface $Properties {
+			index?: (number|null)
 			quickReplyButton?: (waproto.TemplateButton.QuickReplyButton.$Properties|null)
 			urlButton?: (waproto.TemplateButton.URLButton.$Properties|null)
 			callButton?: (waproto.TemplateButton.CallButton.$Properties|null)
-			index?: (number|null)
+			button?: ("quickReplyButton"|"urlButton"|"callButton")
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.TemplateButton.$Properties
+		type $Shape = {
+  index?: number|null
+  quickReplyButton?: waproto.TemplateButton.QuickReplyButton.$Shape|null
+  urlButton?: waproto.TemplateButton.URLButton.$Shape|null
+  callButton?: waproto.TemplateButton.CallButton.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ button?: undefined; quickReplyButton?: null; urlButton?: null; callButton?: null }|{ button?: "quickReplyButton"; quickReplyButton: waproto.TemplateButton.QuickReplyButton.$Shape; urlButton?: null; callButton?: null }|{ button?: "urlButton"; quickReplyButton?: null; urlButton: waproto.TemplateButton.URLButton.$Shape; callButton?: null }|{ button?: "callButton"; quickReplyButton?: null; urlButton?: null; callButton: waproto.TemplateButton.CallButton.$Shape })
+)
 		interface ICallButton extends waproto.TemplateButton.CallButton.$Properties {
 		}
 		class CallButton {
@@ -16189,7 +25334,11 @@ export namespace waproto {
 				phoneNumber?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.TemplateButton.CallButton.$Properties
+			type $Shape = {
+  displayText?: waproto.Message.HighlyStructuredMessage.$Shape|null
+  phoneNumber?: waproto.Message.HighlyStructuredMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IURLButton extends waproto.TemplateButton.URLButton.$Properties {
 		}
@@ -16207,7 +25356,11 @@ export namespace waproto {
 				url?: (waproto.Message.HighlyStructuredMessage.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.TemplateButton.URLButton.$Properties
+			type $Shape = {
+  displayText?: waproto.Message.HighlyStructuredMessage.$Shape|null
+  url?: waproto.Message.HighlyStructuredMessage.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 		}
 		interface IQuickReplyButton extends waproto.TemplateButton.QuickReplyButton.$Properties {
 		}
@@ -16225,7 +25378,11 @@ export namespace waproto {
 				id?: (string|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.TemplateButton.QuickReplyButton.$Properties
+			type $Shape = {
+  displayText?: waproto.Message.HighlyStructuredMessage.$Shape|null
+  id?: string|null
+  $unknowns?: Uint8Array[]
+}
 		}
 	}
 	interface IThreadID extends waproto.ThreadID.$Properties {
@@ -16251,6 +25408,212 @@ export namespace waproto {
 			AI_THREAD = 2
 		}
 	}
+	interface IThreadsTableSchemaProto extends waproto.ThreadsTableSchemaProto.$Properties {
+	}
+	class ThreadsTableSchemaProto {
+		constructor(p?: waproto.ThreadsTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		jid?: (string|null)
+		threadOrder?: (string|null)
+		folder?: (number|null)
+		newestMsg?: (string|null)
+		oldestMsg?: (string|null)
+		lastReadMsg?: (string|null)
+		lastReadMsgReceiptSent?: (string|null)
+		lastReadMsgTs?: (number|Long|null)
+		newestMsgTs?: (number|Long|null)
+		muteExpireTimeMs?: (number|Long|null)
+		muteCallsExpireTimeMs?: (number|Long|null)
+		archived?: (boolean|null)
+		cannotReplyReason?: (string|null)
+		chatId?: (number|null)
+		optimisticThreadKey?: (string|null)
+		isMigratedLocally?: (boolean|null)
+		snippetMsg?: (string|null)
+		deduplicationKey?: (string|null)
+		authoritativeThreadKey?: (string|null)
+		snippetMsgTs?: (number|Long|null)
+		didInsertDualThreadCutoverAdminMsg?: (boolean|null)
+		unbumpFromTs?: (number|Long|null)
+		unbumpToTs?: (number|Long|null)
+		static encode(m: waproto.ThreadsTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ThreadsTableSchemaProto & waproto.ThreadsTableSchemaProto.$Shape
+	}
+	namespace ThreadsTableSchemaProto {
+		interface $Properties {
+			jid?: (string|null)
+			threadOrder?: (string|null)
+			folder?: (number|null)
+			newestMsg?: (string|null)
+			oldestMsg?: (string|null)
+			lastReadMsg?: (string|null)
+			lastReadMsgReceiptSent?: (string|null)
+			lastReadMsgTs?: (number|Long|null)
+			newestMsgTs?: (number|Long|null)
+			muteExpireTimeMs?: (number|Long|null)
+			muteCallsExpireTimeMs?: (number|Long|null)
+			archived?: (boolean|null)
+			cannotReplyReason?: (string|null)
+			chatId?: (number|null)
+			optimisticThreadKey?: (string|null)
+			isMigratedLocally?: (boolean|null)
+			snippetMsg?: (string|null)
+			deduplicationKey?: (string|null)
+			authoritativeThreadKey?: (string|null)
+			snippetMsgTs?: (number|Long|null)
+			didInsertDualThreadCutoverAdminMsg?: (boolean|null)
+			unbumpFromTs?: (number|Long|null)
+			unbumpToTs?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ThreadsTableSchemaProto.$Properties
+	}
+	interface ITransparentArtifact extends waproto.TransparentArtifact.$Properties {
+	}
+	class TransparentArtifact {
+		constructor(p?: waproto.TransparentArtifact.$Properties)
+		$unknowns?: Uint8Array[]
+		artifactType?: (string|null)
+		digest?: (Uint8Array|null)
+		refVal: waproto.ReferenceValue.$Properties[]
+		static encode(m: waproto.TransparentArtifact.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.TransparentArtifact & waproto.TransparentArtifact.$Shape
+	}
+	namespace TransparentArtifact {
+		interface $Properties {
+			artifactType?: (string|null)
+			digest?: (Uint8Array|null)
+			refVal?: (waproto.ReferenceValue.$Properties[]|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  artifactType?: string|null
+  digest?: Uint8Array|null
+  refVal?: waproto.ReferenceValue.$Shape[]|null
+  $unknowns?: Uint8Array[]
+}
+	}
+	interface ITransportEvent extends waproto.TransportEvent.$Properties {
+	}
+	class TransportEvent {
+		constructor(p?: waproto.TransportEvent.$Properties)
+		$unknowns?: Uint8Array[]
+		placeholder?: (waproto.TransportEvent.Placeholder.$Properties|null)
+		event?: (waproto.TransportEvent.Event.$Properties|null)
+		content?: ("placeholder"|"event")
+		static encode(m: waproto.TransportEvent.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.TransportEvent & waproto.TransportEvent.$Shape
+	}
+	namespace TransportEvent {
+		interface $Properties {
+			placeholder?: (waproto.TransportEvent.Placeholder.$Properties|null)
+			event?: (waproto.TransportEvent.Event.$Properties|null)
+			content?: ("placeholder"|"event")
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = {
+  placeholder?: waproto.TransportEvent.Placeholder.$Shape|null
+  event?: waproto.TransportEvent.Event.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ content?: undefined; placeholder?: null; event?: null }|{ content?: "placeholder"; placeholder: waproto.TransportEvent.Placeholder.$Shape; event?: null }|{ content?: "event"; placeholder?: null; event: waproto.TransportEvent.Event.$Shape })
+)
+		interface IEvent extends waproto.TransportEvent.Event.$Properties {
+		}
+		class Event {
+			constructor(p?: waproto.TransportEvent.Event.$Properties)
+			$unknowns?: Uint8Array[]
+			deviceChange?: (waproto.TransportEvent.Event.DeviceChange.$Properties|null)
+			icdcAlert?: (waproto.TransportEvent.Event.IcdcAlert.$Properties|null)
+			event?: ("deviceChange"|"icdcAlert")
+			static encode(m: waproto.TransportEvent.Event.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.TransportEvent.Event & waproto.TransportEvent.Event.$Shape
+		}
+		namespace Event {
+			interface $Properties {
+				deviceChange?: (waproto.TransportEvent.Event.DeviceChange.$Properties|null)
+				icdcAlert?: (waproto.TransportEvent.Event.IcdcAlert.$Properties|null)
+				event?: ("deviceChange"|"icdcAlert")
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = {
+  deviceChange?: waproto.TransportEvent.Event.DeviceChange.$Shape|null
+  icdcAlert?: waproto.TransportEvent.Event.IcdcAlert.$Shape|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ event?: undefined; deviceChange?: null; icdcAlert?: null }|{ event?: "deviceChange"; deviceChange: waproto.TransportEvent.Event.DeviceChange.$Shape; icdcAlert?: null }|{ event?: "icdcAlert"; deviceChange?: null; icdcAlert: waproto.TransportEvent.Event.IcdcAlert.$Shape })
+)
+			interface IIcdcAlert extends waproto.TransportEvent.Event.IcdcAlert.$Properties {
+			}
+			class IcdcAlert {
+				constructor(p?: waproto.TransportEvent.Event.IcdcAlert.$Properties)
+				$unknowns?: Uint8Array[]
+				type?: (waproto.TransportEvent.Event.IcdcAlert.Type|null)
+				static encode(m: waproto.TransportEvent.Event.IcdcAlert.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.TransportEvent.Event.IcdcAlert & waproto.TransportEvent.Event.IcdcAlert.$Shape
+			}
+			namespace IcdcAlert {
+				interface $Properties {
+					type?: (waproto.TransportEvent.Event.IcdcAlert.Type|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.TransportEvent.Event.IcdcAlert.$Properties
+				enum Type {
+					NONE = 0,
+					DETECTED = 1,
+					CLEARED = 2
+				}
+			}
+			interface IDeviceChange extends waproto.TransportEvent.Event.DeviceChange.$Properties {
+			}
+			class DeviceChange {
+				constructor(p?: waproto.TransportEvent.Event.DeviceChange.$Properties)
+				$unknowns?: Uint8Array[]
+				type?: (waproto.TransportEvent.Event.DeviceChange.Type|null)
+				deviceName?: (string|null)
+				devicePlatform?: (string|null)
+				deviceModel?: (string|null)
+				static encode(m: waproto.TransportEvent.Event.DeviceChange.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.TransportEvent.Event.DeviceChange & waproto.TransportEvent.Event.DeviceChange.$Shape
+			}
+			namespace DeviceChange {
+				interface $Properties {
+					type?: (waproto.TransportEvent.Event.DeviceChange.Type|null)
+					deviceName?: (string|null)
+					devicePlatform?: (string|null)
+					deviceModel?: (string|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.TransportEvent.Event.DeviceChange.$Properties
+				enum Type {
+					NONE = 0,
+					ADDED = 1,
+					REMOVED = 2,
+					REPLACED = 3
+				}
+			}
+		}
+		interface IPlaceholder extends waproto.TransportEvent.Placeholder.$Properties {
+		}
+		class Placeholder {
+			constructor(p?: waproto.TransportEvent.Placeholder.$Properties)
+			$unknowns?: Uint8Array[]
+			type?: (waproto.TransportEvent.Placeholder.Type|null)
+			static encode(m: waproto.TransportEvent.Placeholder.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.TransportEvent.Placeholder & waproto.TransportEvent.Placeholder.$Shape
+		}
+		namespace Placeholder {
+			interface $Properties {
+				type?: (waproto.TransportEvent.Placeholder.Type|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.TransportEvent.Placeholder.$Properties
+			enum Type {
+				DECRYPTION_FAILURE = 1,
+				UNAVAILABLE_MESSAGE = 2
+			}
+		}
+	}
 	interface IUnCountedAssociatedMessageList extends waproto.UnCountedAssociatedMessageList.$Properties {
 	}
 	class UnCountedAssociatedMessageList {
@@ -16269,7 +25632,12 @@ export namespace waproto {
 			associationType?: (waproto.MessageAssociation.AssociationType|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.UnCountedAssociatedMessageList.$Properties
+		type $Shape = {
+  messages?: waproto.WebMessageInfo.$Shape[]|null
+  parentMessage?: waproto.MessageKey.$Shape|null
+  associationType?: waproto.MessageAssociation.AssociationType|null
+  $unknowns?: Uint8Array[]
+}
 	}
 	interface IUnCountedAssociatedMessageListWithMessageBytes extends waproto.UnCountedAssociatedMessageListWithMessageBytes.$Properties {
 	}
@@ -16288,6 +25656,60 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.UnCountedAssociatedMessageListWithMessageBytes.$Properties
+	}
+	interface IUnrenderedMessagesTableSchemaProto extends waproto.UnrenderedMessagesTableSchemaProto.$Properties {
+	}
+	class UnrenderedMessagesTableSchemaProto {
+		constructor(p?: waproto.UnrenderedMessagesTableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		type?: (string|null)
+		ts?: (number|Long|null)
+		externalId?: (string|null)
+		msgId?: (string|null)
+		author?: (string|null)
+		ack?: (number|null)
+		resendCount?: (number|null)
+		ephemeralSetting?: (waproto.EphemeralSettingProto.$Properties|null)
+		messageDeleteForMeTs?: (number|Long|null)
+		rowId?: (number|null)
+		thread?: (number|null)
+		mediaId?: (number|null)
+		msgContent?: (string|null)
+		threadJid?: (string|null)
+		reportingMeta?: (waproto.ReportingMetaProto.$Properties|null)
+		invitedParticipantUserJid?: (string|null)
+		groupName?: (string|null)
+		quote?: (waproto.DbQuotedMsgProto.$Properties|null)
+		xmaMessageType?: (number|null)
+		sortOrderMs?: (number|Long|null)
+		static encode(m: waproto.UnrenderedMessagesTableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.UnrenderedMessagesTableSchemaProto & waproto.UnrenderedMessagesTableSchemaProto.$Shape
+	}
+	namespace UnrenderedMessagesTableSchemaProto {
+		interface $Properties {
+			type?: (string|null)
+			ts?: (number|Long|null)
+			externalId?: (string|null)
+			msgId?: (string|null)
+			author?: (string|null)
+			ack?: (number|null)
+			resendCount?: (number|null)
+			ephemeralSetting?: (waproto.EphemeralSettingProto.$Properties|null)
+			messageDeleteForMeTs?: (number|Long|null)
+			rowId?: (number|null)
+			thread?: (number|null)
+			mediaId?: (number|null)
+			msgContent?: (string|null)
+			threadJid?: (string|null)
+			reportingMeta?: (waproto.ReportingMetaProto.$Properties|null)
+			invitedParticipantUserJid?: (string|null)
+			groupName?: (string|null)
+			quote?: (waproto.DbQuotedMsgProto.$Properties|null)
+			xmaMessageType?: (number|null)
+			sortOrderMs?: (number|Long|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.UnrenderedMessagesTableSchemaProto.$Properties
 	}
 	interface IUrlTrackingMap extends waproto.UrlTrackingMap.$Properties {
 	}
@@ -16347,7 +25769,13 @@ export namespace waproto {
 			transformedData?: (Uint8Array|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.UserPassword.$Properties
+		type $Shape = {
+  encoding?: waproto.UserPassword.Encoding|null
+  transformer?: waproto.UserPassword.Transformer|null
+  transformerArg?: waproto.UserPassword.TransformerArg.$Shape[]|null
+  transformedData?: Uint8Array|null
+  $unknowns?: Uint8Array[]
+}
 		enum Transformer {
 			NONE = 0,
 			PBKDF2_HMAC_SHA512 = 1,
@@ -16373,7 +25801,11 @@ export namespace waproto {
 				value?: (waproto.UserPassword.TransformerArg.Value.$Properties|null)
 				$unknowns?: Uint8Array[]
 			}
-			type $Shape = waproto.UserPassword.TransformerArg.$Properties
+			type $Shape = {
+  key?: string|null
+  value?: waproto.UserPassword.TransformerArg.Value.$Shape|null
+  $unknowns?: Uint8Array[]
+}
 			interface IValue extends waproto.UserPassword.TransformerArg.Value.$Properties {
 			}
 			class Value {
@@ -16381,6 +25813,7 @@ export namespace waproto {
 				$unknowns?: Uint8Array[]
 				asBlob?: (Uint8Array|null)
 				asUnsignedInteger?: (number|null)
+				value?: ("asBlob"|"asUnsignedInteger")
 				static encode(m: waproto.UserPassword.TransformerArg.Value.$Properties, w?: PbWriter): PbWriter
 				static decode(r: (PbReader|Uint8Array), l?: number): waproto.UserPassword.TransformerArg.Value & waproto.UserPassword.TransformerArg.Value.$Shape
 			}
@@ -16388,9 +25821,16 @@ export namespace waproto {
 				interface $Properties {
 					asBlob?: (Uint8Array|null)
 					asUnsignedInteger?: (number|null)
+					value?: ("asBlob"|"asUnsignedInteger")
 					$unknowns?: Uint8Array[]
 				}
-				type $Shape = waproto.UserPassword.TransformerArg.Value.$Properties
+				type $Shape = {
+  asBlob?: Uint8Array|null
+  asUnsignedInteger?: number|null
+  $unknowns?: Uint8Array[]
+} & (
+  ({ value?: undefined; asBlob?: null; asUnsignedInteger?: null }|{ value?: "asBlob"; asBlob: Uint8Array; asUnsignedInteger?: null }|{ value?: "asUnsignedInteger"; asBlob?: null; asUnsignedInteger: number })
+)
 			}
 		}
 	}
@@ -16419,6 +25859,44 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.UserReceipt.$Properties
+	}
+	interface IValidatedResult extends waproto.ValidatedResult.$Properties {
+	}
+	class ValidatedResult {
+		constructor(p?: waproto.ValidatedResult.$Properties)
+		$unknowns?: Uint8Array[]
+		validatedMimeType?: (string|null)
+		videoStreamType?: (string|null)
+		videoCalculatedFps?: (number|null)
+		videoNominalFps?: (number|null)
+		videoWidth?: (number|null)
+		videoHeight?: (number|null)
+		videoDuration?: (number|null)
+		videoAvgBitsPerSecond?: (number|null)
+		audioStreamType?: (string|null)
+		audioSamplingRate?: (number|null)
+		audioNumberOfChannels?: (number|null)
+		audioAvgBitsPerSecond?: (number|null)
+		static encode(m: waproto.ValidatedResult.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.ValidatedResult & waproto.ValidatedResult.$Shape
+	}
+	namespace ValidatedResult {
+		interface $Properties {
+			validatedMimeType?: (string|null)
+			videoStreamType?: (string|null)
+			videoCalculatedFps?: (number|null)
+			videoNominalFps?: (number|null)
+			videoWidth?: (number|null)
+			videoHeight?: (number|null)
+			videoDuration?: (number|null)
+			videoAvgBitsPerSecond?: (number|null)
+			audioStreamType?: (string|null)
+			audioSamplingRate?: (number|null)
+			audioNumberOfChannels?: (number|null)
+			audioAvgBitsPerSecond?: (number|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.ValidatedResult.$Properties
 	}
 	interface IVerifiedNameCertificate extends waproto.VerifiedNameCertificate.$Properties {
 	}
@@ -16464,6 +25942,244 @@ export namespace waproto {
 			type $Shape = waproto.VerifiedNameCertificate.Details.$Properties
 		}
 	}
+	interface IVerifyKeyTransparencyForUserMandrakeCommand extends waproto.VerifyKeyTransparencyForUserMandrakeCommand.$Properties {
+	}
+	class VerifyKeyTransparencyForUserMandrakeCommand {
+		constructor(p?: waproto.VerifyKeyTransparencyForUserMandrakeCommand.$Properties)
+		$unknowns?: Uint8Array[]
+		lookupResponse?: (Uint8Array|null)
+		userFbid?: (number|Long|null)
+		auditorSignatureTtlSecs?: (number|Long|null)
+		requestedAuditorList: string[]
+		isProductionBuild?: (boolean|null)
+		localMailboxHead?: (Uint8Array|null)
+		static encode(m: waproto.VerifyKeyTransparencyForUserMandrakeCommand.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.VerifyKeyTransparencyForUserMandrakeCommand & waproto.VerifyKeyTransparencyForUserMandrakeCommand.$Shape
+	}
+	namespace VerifyKeyTransparencyForUserMandrakeCommand {
+		interface $Properties {
+			lookupResponse?: (Uint8Array|null)
+			userFbid?: (number|Long|null)
+			auditorSignatureTtlSecs?: (number|Long|null)
+			requestedAuditorList?: (string[]|null)
+			isProductionBuild?: (boolean|null)
+			localMailboxHead?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.VerifyKeyTransparencyForUserMandrakeCommand.$Properties
+	}
+	interface IVerifyKeyTransparencyForUserMandrakeResult extends waproto.VerifyKeyTransparencyForUserMandrakeResult.$Properties {
+	}
+	class VerifyKeyTransparencyForUserMandrakeResult {
+		constructor(p?: waproto.VerifyKeyTransparencyForUserMandrakeResult.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (boolean|null)
+		error?: (string|null)
+		static encode(m: waproto.VerifyKeyTransparencyForUserMandrakeResult.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.VerifyKeyTransparencyForUserMandrakeResult & waproto.VerifyKeyTransparencyForUserMandrakeResult.$Shape
+	}
+	namespace VerifyKeyTransparencyForUserMandrakeResult {
+		interface $Properties {
+			success?: (boolean|null)
+			error?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.VerifyKeyTransparencyForUserMandrakeResult.$Properties
+	}
+	interface IVerifyKeyTransparencyForUserMinosCommand extends waproto.VerifyKeyTransparencyForUserMinosCommand.$Properties {
+	}
+	class VerifyKeyTransparencyForUserMinosCommand {
+		constructor(p?: waproto.VerifyKeyTransparencyForUserMinosCommand.$Properties)
+		$unknowns?: Uint8Array[]
+		lookupResponse?: (Uint8Array|null)
+		userFbid?: (number|Long|null)
+		auditorSignatureTtlSecs?: (number|Long|null)
+		requestedAuditorList: string[]
+		isProductionBuild?: (boolean|null)
+		localEpochHead?: (Uint8Array|null)
+		static encode(m: waproto.VerifyKeyTransparencyForUserMinosCommand.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.VerifyKeyTransparencyForUserMinosCommand & waproto.VerifyKeyTransparencyForUserMinosCommand.$Shape
+	}
+	namespace VerifyKeyTransparencyForUserMinosCommand {
+		interface $Properties {
+			lookupResponse?: (Uint8Array|null)
+			userFbid?: (number|Long|null)
+			auditorSignatureTtlSecs?: (number|Long|null)
+			requestedAuditorList?: (string[]|null)
+			isProductionBuild?: (boolean|null)
+			localEpochHead?: (Uint8Array|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.VerifyKeyTransparencyForUserMinosCommand.$Properties
+	}
+	interface IVerifyKeyTransparencyForUserMinosResult extends waproto.VerifyKeyTransparencyForUserMinosResult.$Properties {
+	}
+	class VerifyKeyTransparencyForUserMinosResult {
+		constructor(p?: waproto.VerifyKeyTransparencyForUserMinosResult.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (boolean|null)
+		error?: (string|null)
+		static encode(m: waproto.VerifyKeyTransparencyForUserMinosResult.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.VerifyKeyTransparencyForUserMinosResult & waproto.VerifyKeyTransparencyForUserMinosResult.$Shape
+	}
+	namespace VerifyKeyTransparencyForUserMinosResult {
+		interface $Properties {
+			success?: (boolean|null)
+			error?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.VerifyKeyTransparencyForUserMinosResult.$Properties
+	}
+	interface IVerifyKeyTransparencyForUserSignalCommand extends waproto.VerifyKeyTransparencyForUserSignalCommand.$Properties {
+	}
+	class VerifyKeyTransparencyForUserSignalCommand {
+		constructor(p?: waproto.VerifyKeyTransparencyForUserSignalCommand.$Properties)
+		$unknowns?: Uint8Array[]
+		rootHash?: (Uint8Array|null)
+		currentEpoch?: (number|Long|null)
+		userFbid?: (number|Long|null)
+		historyProof?: (Uint8Array|null)
+		metaSignature?: (Uint8Array|null)
+		cloudflareSignature?: (Uint8Array|null)
+		cloudflareMessage?: (Uint8Array|null)
+		cloudflarePubKey?: (Uint8Array|null)
+		auditorSignatureTtlSecs?: (number|Long|null)
+		localDeviceKeys: { [k: string]: Uint8Array }
+		static encode(m: waproto.VerifyKeyTransparencyForUserSignalCommand.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.VerifyKeyTransparencyForUserSignalCommand & waproto.VerifyKeyTransparencyForUserSignalCommand.$Shape
+	}
+	namespace VerifyKeyTransparencyForUserSignalCommand {
+		interface $Properties {
+			rootHash?: (Uint8Array|null)
+			currentEpoch?: (number|Long|null)
+			userFbid?: (number|Long|null)
+			historyProof?: (Uint8Array|null)
+			metaSignature?: (Uint8Array|null)
+			cloudflareSignature?: (Uint8Array|null)
+			cloudflareMessage?: (Uint8Array|null)
+			cloudflarePubKey?: (Uint8Array|null)
+			auditorSignatureTtlSecs?: (number|Long|null)
+			localDeviceKeys?: ({ [k: string]: Uint8Array }|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.VerifyKeyTransparencyForUserSignalCommand.$Properties
+	}
+	interface IVerifyKeyTransparencyForUserSignalResult extends waproto.VerifyKeyTransparencyForUserSignalResult.$Properties {
+	}
+	class VerifyKeyTransparencyForUserSignalResult {
+		constructor(p?: waproto.VerifyKeyTransparencyForUserSignalResult.$Properties)
+		$unknowns?: Uint8Array[]
+		success?: (boolean|null)
+		error?: (string|null)
+		static encode(m: waproto.VerifyKeyTransparencyForUserSignalResult.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.VerifyKeyTransparencyForUserSignalResult & waproto.VerifyKeyTransparencyForUserSignalResult.$Shape
+	}
+	namespace VerifyKeyTransparencyForUserSignalResult {
+		interface $Properties {
+			success?: (boolean|null)
+			error?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.VerifyKeyTransparencyForUserSignalResult.$Properties
+	}
+	interface IVideoMsgContentProto extends waproto.VideoMsgContentProto.$Properties {
+	}
+	class VideoMsgContentProto {
+		constructor(p?: waproto.VideoMsgContentProto.$Properties)
+		$unknowns?: Uint8Array[]
+		duration?: (number|null)
+		width?: (number|null)
+		height?: (number|null)
+		mimetype?: (string|null)
+		jpegThumbnail?: (Uint8Array|null)
+		jpegThumbnailHeight?: (number|null)
+		jpegThumbnailWidth?: (number|null)
+		thumbnailPlaintextHash?: (string|null)
+		gifPlayback?: (boolean|null)
+		static encode(m: waproto.VideoMsgContentProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.VideoMsgContentProto & waproto.VideoMsgContentProto.$Shape
+	}
+	namespace VideoMsgContentProto {
+		interface $Properties {
+			duration?: (number|null)
+			width?: (number|null)
+			height?: (number|null)
+			mimetype?: (string|null)
+			jpegThumbnail?: (Uint8Array|null)
+			jpegThumbnailHeight?: (number|null)
+			jpegThumbnailWidth?: (number|null)
+			thumbnailPlaintextHash?: (string|null)
+			gifPlayback?: (boolean|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.VideoMsgContentProto.$Properties
+	}
+	interface IVideoTransport extends waproto.VideoTransport.$Properties {
+	}
+	class VideoTransport {
+		constructor(p?: waproto.VideoTransport.$Properties)
+		$unknowns?: Uint8Array[]
+		integral?: (waproto.VideoTransport.Integral.$Properties|null)
+		ancillary?: (waproto.VideoTransport.Ancillary.$Properties|null)
+		static encode(m: waproto.VideoTransport.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.VideoTransport & waproto.VideoTransport.$Shape
+	}
+	namespace VideoTransport {
+		interface $Properties {
+			integral?: (waproto.VideoTransport.Integral.$Properties|null)
+			ancillary?: (waproto.VideoTransport.Ancillary.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.VideoTransport.$Properties
+		interface IAncillary extends waproto.VideoTransport.Ancillary.$Properties {
+		}
+		class Ancillary {
+			constructor(p?: waproto.VideoTransport.Ancillary.$Properties)
+			$unknowns?: Uint8Array[]
+			seconds?: (number|null)
+			caption?: (waproto.MessageText.$Properties|null)
+			gifPlayback?: (boolean|null)
+			height?: (number|null)
+			width?: (number|null)
+			sidecar?: (Uint8Array|null)
+			gifAttribution?: (waproto.VIDEO_TRANSPORT_ANCILLARY_ATTRIBUTION|null)
+			accessibilityLabel?: (string|null)
+			isHd?: (boolean|null)
+			static encode(m: waproto.VideoTransport.Ancillary.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.VideoTransport.Ancillary & waproto.VideoTransport.Ancillary.$Shape
+		}
+		namespace Ancillary {
+			interface $Properties {
+				seconds?: (number|null)
+				caption?: (waproto.MessageText.$Properties|null)
+				gifPlayback?: (boolean|null)
+				height?: (number|null)
+				width?: (number|null)
+				sidecar?: (Uint8Array|null)
+				gifAttribution?: (waproto.VIDEO_TRANSPORT_ANCILLARY_ATTRIBUTION|null)
+				accessibilityLabel?: (string|null)
+				isHd?: (boolean|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.VideoTransport.Ancillary.$Properties
+		}
+		interface IIntegral extends waproto.VideoTransport.Integral.$Properties {
+		}
+		class Integral {
+			constructor(p?: waproto.VideoTransport.Integral.$Properties)
+			$unknowns?: Uint8Array[]
+			transport?: (waproto.WAMediaTransport.$Properties|null)
+			static encode(m: waproto.VideoTransport.Integral.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.VideoTransport.Integral & waproto.VideoTransport.Integral.$Shape
+		}
+		namespace Integral {
+			interface $Properties {
+				transport?: (waproto.WAMediaTransport.$Properties|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.VideoTransport.Integral.$Properties
+		}
+	}
 	interface IVirtualDeviceOutput extends waproto.VirtualDeviceOutput.$Properties {
 	}
 	class VirtualDeviceOutput {
@@ -16491,6 +26207,122 @@ export namespace waproto {
 			$unknowns?: Uint8Array[]
 		}
 		type $Shape = waproto.VirtualDeviceOutput.$Properties
+	}
+	interface IWAMediaTransport extends waproto.WAMediaTransport.$Properties {
+	}
+	class WAMediaTransport {
+		constructor(p?: waproto.WAMediaTransport.$Properties)
+		$unknowns?: Uint8Array[]
+		integral?: (waproto.WAMediaTransport.Integral.$Properties|null)
+		ancillary?: (waproto.WAMediaTransport.Ancillary.$Properties|null)
+		static encode(m: waproto.WAMediaTransport.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.WAMediaTransport & waproto.WAMediaTransport.$Shape
+	}
+	namespace WAMediaTransport {
+		interface $Properties {
+			integral?: (waproto.WAMediaTransport.Integral.$Properties|null)
+			ancillary?: (waproto.WAMediaTransport.Ancillary.$Properties|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.WAMediaTransport.$Properties
+		interface IAncillary extends waproto.WAMediaTransport.Ancillary.$Properties {
+		}
+		class Ancillary {
+			constructor(p?: waproto.WAMediaTransport.Ancillary.$Properties)
+			$unknowns?: Uint8Array[]
+			fileLength?: (number|Long|null)
+			mimetype?: (string|null)
+			thumbnail?: (waproto.WAMediaTransport.Ancillary.Thumbnail.$Properties|null)
+			objectId?: (string|null)
+			static encode(m: waproto.WAMediaTransport.Ancillary.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.WAMediaTransport.Ancillary & waproto.WAMediaTransport.Ancillary.$Shape
+		}
+		namespace Ancillary {
+			interface $Properties {
+				fileLength?: (number|Long|null)
+				mimetype?: (string|null)
+				thumbnail?: (waproto.WAMediaTransport.Ancillary.Thumbnail.$Properties|null)
+				objectId?: (string|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.WAMediaTransport.Ancillary.$Properties
+			interface IThumbnail extends waproto.WAMediaTransport.Ancillary.Thumbnail.$Properties {
+			}
+			class Thumbnail {
+				constructor(p?: waproto.WAMediaTransport.Ancillary.Thumbnail.$Properties)
+				$unknowns?: Uint8Array[]
+				jpegThumbnail?: (Uint8Array|null)
+				downloadableThumbnail?: (waproto.WAMediaTransport.Ancillary.Thumbnail.DownloadableThumbnail.$Properties|null)
+				thumbnailWidth?: (number|null)
+				thumbnailHeight?: (number|null)
+				static encode(m: waproto.WAMediaTransport.Ancillary.Thumbnail.$Properties, w?: PbWriter): PbWriter
+				static decode(r: (PbReader|Uint8Array), l?: number): waproto.WAMediaTransport.Ancillary.Thumbnail & waproto.WAMediaTransport.Ancillary.Thumbnail.$Shape
+			}
+			namespace Thumbnail {
+				interface $Properties {
+					jpegThumbnail?: (Uint8Array|null)
+					downloadableThumbnail?: (waproto.WAMediaTransport.Ancillary.Thumbnail.DownloadableThumbnail.$Properties|null)
+					thumbnailWidth?: (number|null)
+					thumbnailHeight?: (number|null)
+					$unknowns?: Uint8Array[]
+				}
+				type $Shape = waproto.WAMediaTransport.Ancillary.Thumbnail.$Properties
+				interface IDownloadableThumbnail extends waproto.WAMediaTransport.Ancillary.Thumbnail.DownloadableThumbnail.$Properties {
+				}
+				class DownloadableThumbnail {
+					constructor(p?: waproto.WAMediaTransport.Ancillary.Thumbnail.DownloadableThumbnail.$Properties)
+					$unknowns?: Uint8Array[]
+					fileSha256?: (Uint8Array|null)
+					fileEncSha256?: (Uint8Array|null)
+					directPath?: (string|null)
+					mediaKey?: (Uint8Array|null)
+					mediaKeyTimestamp?: (number|Long|null)
+					objectId?: (string|null)
+					thumbnailScansSidecar?: (Uint8Array|null)
+					thumbnailScanLengths: number[]
+					static encode(m: waproto.WAMediaTransport.Ancillary.Thumbnail.DownloadableThumbnail.$Properties, w?: PbWriter): PbWriter
+					static decode(r: (PbReader|Uint8Array), l?: number): waproto.WAMediaTransport.Ancillary.Thumbnail.DownloadableThumbnail & waproto.WAMediaTransport.Ancillary.Thumbnail.DownloadableThumbnail.$Shape
+				}
+				namespace DownloadableThumbnail {
+					interface $Properties {
+						fileSha256?: (Uint8Array|null)
+						fileEncSha256?: (Uint8Array|null)
+						directPath?: (string|null)
+						mediaKey?: (Uint8Array|null)
+						mediaKeyTimestamp?: (number|Long|null)
+						objectId?: (string|null)
+						thumbnailScansSidecar?: (Uint8Array|null)
+						thumbnailScanLengths?: (number[]|null)
+						$unknowns?: Uint8Array[]
+					}
+					type $Shape = waproto.WAMediaTransport.Ancillary.Thumbnail.DownloadableThumbnail.$Properties
+				}
+			}
+		}
+		interface IIntegral extends waproto.WAMediaTransport.Integral.$Properties {
+		}
+		class Integral {
+			constructor(p?: waproto.WAMediaTransport.Integral.$Properties)
+			$unknowns?: Uint8Array[]
+			fileSha256?: (Uint8Array|null)
+			mediaKey?: (Uint8Array|null)
+			fileEncSha256?: (Uint8Array|null)
+			directPath?: (string|null)
+			mediaKeyTimestamp?: (number|Long|null)
+			static encode(m: waproto.WAMediaTransport.Integral.$Properties, w?: PbWriter): PbWriter
+			static decode(r: (PbReader|Uint8Array), l?: number): waproto.WAMediaTransport.Integral & waproto.WAMediaTransport.Integral.$Shape
+		}
+		namespace Integral {
+			interface $Properties {
+				fileSha256?: (Uint8Array|null)
+				mediaKey?: (Uint8Array|null)
+				fileEncSha256?: (Uint8Array|null)
+				directPath?: (string|null)
+				mediaKeyTimestamp?: (number|Long|null)
+				$unknowns?: Uint8Array[]
+			}
+			type $Shape = waproto.WAMediaTransport.Integral.$Properties
+		}
 	}
 	interface IWallpaperSettings extends waproto.WallpaperSettings.$Properties {
 	}
@@ -16699,6 +26531,8 @@ export namespace waproto {
 		scheduledMessageMetadata?: (waproto.ScheduledMessageMetadata.$Properties|null)
 		decisionId?: (string|null)
 		decisionSources: string[]
+		eventInviteAdditionalMetadata?: (waproto.EventInviteAdditionalMetadata.$Properties|null)
+		groupHistoryLastCountedMessageTimestamp?: (number|Long|null)
 		static encode(m: waproto.WebMessageInfo.$Properties, w?: PbWriter): PbWriter
 		static decode(r: (PbReader|Uint8Array), l?: number): waproto.WebMessageInfo & waproto.WebMessageInfo.$Shape
 	}
@@ -16776,9 +26610,87 @@ export namespace waproto {
 			scheduledMessageMetadata?: (waproto.ScheduledMessageMetadata.$Properties|null)
 			decisionId?: (string|null)
 			decisionSources?: (string[]|null)
+			eventInviteAdditionalMetadata?: (waproto.EventInviteAdditionalMetadata.$Properties|null)
+			groupHistoryLastCountedMessageTimestamp?: (number|Long|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.WebMessageInfo.$Properties
+		type $Shape = {
+  key?: waproto.MessageKey.$Shape|null
+  message?: waproto.Message.$Shape|null
+  messageTimestamp?: number|Long|null
+  status?: waproto.WebMessageInfo.Status|null
+  participant?: string|null
+  messageC2STimestamp?: number|Long|null
+  ignore?: boolean|null
+  starred?: boolean|null
+  broadcast?: boolean|null
+  pushName?: string|null
+  mediaCiphertextSha256?: Uint8Array|null
+  multicast?: boolean|null
+  urlText?: boolean|null
+  urlNumber?: boolean|null
+  messageStubType?: waproto.WebMessageInfo.StubType|null
+  clearMedia?: boolean|null
+  messageStubParameters?: string[]|null
+  duration?: number|null
+  labels?: string[]|null
+  paymentInfo?: waproto.PaymentInfo.$Shape|null
+  finalLiveLocation?: waproto.Message.LiveLocationMessage.$Shape|null
+  quotedPaymentInfo?: waproto.PaymentInfo.$Shape|null
+  ephemeralStartTimestamp?: number|Long|null
+  ephemeralDuration?: number|null
+  ephemeralOffToOn?: boolean|null
+  ephemeralOutOfSync?: boolean|null
+  bizPrivacyStatus?: waproto.WebMessageInfo.BizPrivacyStatus|null
+  verifiedBizName?: string|null
+  mediaData?: waproto.MediaData.$Shape|null
+  photoChange?: waproto.PhotoChange.$Shape|null
+  userReceipt?: waproto.UserReceipt.$Shape[]|null
+  reactions?: waproto.Reaction.$Shape[]|null
+  quotedStickerData?: waproto.MediaData.$Shape|null
+  futureproofData?: Uint8Array|null
+  statusPsa?: waproto.StatusPSA.$Shape|null
+  pollUpdates?: waproto.PollUpdate.$Shape[]|null
+  pollAdditionalMetadata?: waproto.PollAdditionalMetadata.$Shape|null
+  agentId?: string|null
+  statusAlreadyViewed?: boolean|null
+  messageSecret?: Uint8Array|null
+  keepInChat?: waproto.KeepInChat.$Shape|null
+  originalSelfAuthorUserJidString?: string|null
+  revokeMessageTimestamp?: number|Long|null
+  pinInChat?: waproto.PinInChat.$Shape|null
+  premiumMessageInfo?: waproto.PremiumMessageInfo.$Shape|null
+  is1PBizBotMessage?: boolean|null
+  isGroupHistoryMessage?: boolean|null
+  botMessageInvokerJid?: string|null
+  commentMetadata?: waproto.CommentMetadata.$Shape|null
+  eventResponses?: waproto.EventResponse.$Shape[]|null
+  reportingTokenInfo?: waproto.ReportingTokenInfo.$Shape|null
+  newsletterServerId?: number|Long|null
+  eventAdditionalMetadata?: waproto.EventAdditionalMetadata.$Shape|null
+  isMentionedInStatus?: boolean|null
+  statusMentions?: string[]|null
+  targetMessageId?: waproto.MessageKey.$Shape|null
+  messageAddOns?: waproto.MessageAddOn.$Shape[]|null
+  statusMentionMessageInfo?: waproto.StatusMentionMessage.$Shape|null
+  isSupportAiMessage?: boolean|null
+  statusMentionSources?: string[]|null
+  supportAiCitations?: waproto.Citation.$Shape[]|null
+  botTargetId?: string|null
+  groupHistoryIndividualMessageInfo?: waproto.GroupHistoryIndividualMessageInfo.$Shape|null
+  groupHistoryBundleInfo?: waproto.GroupHistoryBundleInfo.$Shape|null
+  interactiveMessageAdditionalMetadata?: waproto.InteractiveMessageAdditionalMetadata.$Shape|null
+  quarantinedMessage?: waproto.QuarantinedMessage.$Shape|null
+  nonJidMentions?: number|null
+  hsmTag?: string|null
+  ephemeralExpirationTimestamp?: number|Long|null
+  scheduledMessageMetadata?: waproto.ScheduledMessageMetadata.$Shape|null
+  decisionId?: string|null
+  decisionSources?: string[]|null
+  eventInviteAdditionalMetadata?: waproto.EventInviteAdditionalMetadata.$Shape|null
+  groupHistoryLastCountedMessageTimestamp?: number|Long|null
+  $unknowns?: Uint8Array[]
+}
 		enum BizPrivacyStatus {
 			E2EE = 0,
 			BSP = 1,
@@ -17015,7 +26927,45 @@ export namespace waproto {
 			IDENTITY_TRUST_MARKED = 226,
 			IDENTITY_TRUST_UNMARKED = 227,
 			IDENTITY_TRUST_REVOKED = 228,
-			CTWA_CONSUMER_DISCLOSURE = 230
+			CTWA_CONSUMER_DISCLOSURE = 230,
+			CHANGE_ACP2_SETTING = 240,
+			BIZ_CALLBACK_DISABLED = 244,
+			BIZ_CALLBACK_ENABLED = 247,
+			EPHEMERAL_CHANGED_FOR_COEX = 248,
+			UGC_BOT_PROFILE_UPDATED = 249,
+			ORDER_EPHEMERAL_EXEMPTION = 250,
+			GROUP_DEFAULT_SUB_GROUP_DEMOTE = 251,
+			BIZ_BUSINESS_BROADCAST_ENTRY_POINT = 252,
+			BOT_INLINE_TOS_CHAT = 253,
+			CAMEO_CHAT_CREATED = 254,
+			SENDER_SIDE_CONTACT_INFO = 255,
+			CAMEO_TRANSITIONED = 256,
+			CAMEO_REGISTERED_WITH_NEW_CHAT = 257,
+			PRIVACY_SYSTEM_MESSAGE = 258,
+			BIZ_AI_LEARNING_ENABLED_DISCLOSURE = 259,
+			BIZ_AI_LEARNING_DISABLED_DISCLOSURE = 260,
+			BIZ_AI_REPLIES_MUTED_HISTORICAL_CHAT = 261,
+			INVITE_FROM_IG = 262,
+			GROUP_ADMIN_FIRST_JOIN_VIA_LINK = 263,
+			GROUP_ADMIN_FLOOD_JOIN_VIA_LINK = 264,
+			BIZ_AI_REPLIES_MUTED_IRRELEVANT_HISTORICAL_CHAT = 265,
+			PENDING_INVITE_CREATED = 266,
+			CAMEO_CHAT_EXPIRED = 267,
+			GROUP_PUSHNAME_SHARED = 270,
+			BIZ_POST_SEND_OPT_OUT = 271,
+			BB_PRO_BROADCAST_CHAT_CARD = 272,
+			BOT_PROACTIVE_MESSAGE_ENABLED = 273,
+			BOT_PROACTIVE_MESSAGE_DISABLED = 274,
+			BOT_PROACTIVE_MESSAGE_FIRST_TIME = 275,
+			DYNAMIC_AUDIENCE_LIST_CREATE = 276,
+			DYNAMIC_AUDIENCE_LIST_UPDATE_LINK = 277,
+			CHAT_WITH_BUSINESS_IN_DIRECTORY = 283,
+			META_AI_THREAD_CREATED = 284,
+			META_AI_CONNECTOR_LINKED = 285,
+			SPLIT_PAYMENT_MARKED_AS_PAID = 289,
+			POLL_OPTIONS_REMOVED = 290,
+			POLL_ADDED_OPTION_REMOVED = 291,
+			GROUP_CUSTOM_REACTIONS = 293
 		}
 		enum Status {
 			ERROR = 0,
@@ -17064,6 +27014,84 @@ export namespace waproto {
 			notifyMessages?: (waproto.WebMessageInfo.$Properties[]|null)
 			$unknowns?: Uint8Array[]
 		}
-		type $Shape = waproto.WebNotificationsInfo.$Properties
+		type $Shape = {
+  timestamp?: number|Long|null
+  unreadChats?: number|null
+  notifyMessageCount?: number|null
+  notifyMessages?: waproto.WebMessageInfo.$Shape[]|null
+  $unknowns?: Uint8Array[]
+}
+	}
+	interface IXMATableSchemaProto extends waproto.XMATableSchemaProto.$Properties {
+	}
+	class XMATableSchemaProto {
+		constructor(p?: waproto.XMATableSchemaProto.$Properties)
+		$unknowns?: Uint8Array[]
+		associatedMessageId?: (string|null)
+		author?: (string|null)
+		ctas: waproto.CTAProto.$Properties[]
+		defaultCTA?: (waproto.CTAProto.$Properties|null)
+		defaultPreviewMediaId?: (number|null)
+		externalId?: (string|null)
+		faviconMediaId?: (number|null)
+		headerMediaId?: (number|null)
+		headerTitle?: (string|null)
+		isTombstoned?: (boolean|null)
+		maxSubtitleNumOfLines?: (number|null)
+		maxTitleNumOfLines?: (number|null)
+		msgId?: (string|null)
+		overlayDescription?: (string|null)
+		overlayIconGlyph?: (number|null)
+		overlayTitle?: (string|null)
+		previewMediaIds: number[]
+		subtitleText?: (string|null)
+		targetExpiringAtSec?: (number|Long|null)
+		targetId?: (string|null)
+		targetType?: (number|null)
+		targetUsername?: (string|null)
+		threadJid?: (string|null)
+		titleText?: (string|null)
+		xmaId?: (number|null)
+		xmaLayoutType?: (number|null)
+		defaultPreviewMediaPlaintextHash?: (string|null)
+		faviconPlaintextHash?: (string|null)
+		headerMediaPlaintextHash?: (string|null)
+		static encode(m: waproto.XMATableSchemaProto.$Properties, w?: PbWriter): PbWriter
+		static decode(r: (PbReader|Uint8Array), l?: number): waproto.XMATableSchemaProto & waproto.XMATableSchemaProto.$Shape
+	}
+	namespace XMATableSchemaProto {
+		interface $Properties {
+			associatedMessageId?: (string|null)
+			author?: (string|null)
+			ctas?: (waproto.CTAProto.$Properties[]|null)
+			defaultCTA?: (waproto.CTAProto.$Properties|null)
+			defaultPreviewMediaId?: (number|null)
+			externalId?: (string|null)
+			faviconMediaId?: (number|null)
+			headerMediaId?: (number|null)
+			headerTitle?: (string|null)
+			isTombstoned?: (boolean|null)
+			maxSubtitleNumOfLines?: (number|null)
+			maxTitleNumOfLines?: (number|null)
+			msgId?: (string|null)
+			overlayDescription?: (string|null)
+			overlayIconGlyph?: (number|null)
+			overlayTitle?: (string|null)
+			previewMediaIds?: (number[]|null)
+			subtitleText?: (string|null)
+			targetExpiringAtSec?: (number|Long|null)
+			targetId?: (string|null)
+			targetType?: (number|null)
+			targetUsername?: (string|null)
+			threadJid?: (string|null)
+			titleText?: (string|null)
+			xmaId?: (number|null)
+			xmaLayoutType?: (number|null)
+			defaultPreviewMediaPlaintextHash?: (string|null)
+			faviconPlaintextHash?: (string|null)
+			headerMediaPlaintextHash?: (string|null)
+			$unknowns?: Uint8Array[]
+		}
+		type $Shape = waproto.XMATableSchemaProto.$Properties
 	}
 }
