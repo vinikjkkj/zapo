@@ -344,6 +344,10 @@ test(
         const addGate = new Promise<void>((resolve) => {
             releaseAdd = resolve
         })
+        let releaseClassic: () => void = () => undefined
+        const classicGate = new Promise<void>((resolve) => {
+            releaseClassic = resolve
+        })
         let digestBroken = false
         const harness = await buildHarness({
             batchSize: 5,
@@ -352,6 +356,7 @@ test(
                 digestBroken ? { valid: false, shouldReupload: true, preKeyCount: 0 } : undefined,
             respond: async (sent) => {
                 if (sent.context === 'prekeys.add.pq') await addGate
+                if (sent.context === 'prekeys.upload') await classicGate
                 return RESULT
             }
         })
@@ -365,6 +370,12 @@ test(
         const digest = harness.coordinator.handleDigestNotification()
         await delay(50)
         releaseAdd()
+        await waitFor(
+            () => harness.sent.some((entry) => entry.context === 'prekeys.upload'),
+            'the classic upload was not sent'
+        )
+        await delay(150)
+        releaseClassic()
         await digest
         await delay(150)
 

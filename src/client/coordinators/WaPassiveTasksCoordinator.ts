@@ -248,8 +248,8 @@ export class WaPassiveTasksCoordinator {
 
     /**
      * Full classic uploads and post-quantum SET/ADD calls run one at a time: a
-     * classic upload drops the server's post-quantum keys, so a call that
-     * interleaves would leave the migrated marker out of step with the server.
+     * classic upload resets the migrated marker, so a call that interleaves
+     * would write a marker that no longer matches the keys the server holds.
      */
     private runPreKeyUploadExclusive<T>(task: () => Promise<T>): Promise<T> {
         const run = this.preKeyUploadTail.then(task)
@@ -298,7 +298,7 @@ export class WaPassiveTasksCoordinator {
 
         const lastPreKeyId = preKeys[preKeys.length - 1].keyId
         const uploadNode = buildPreKeyUploadIq(registrationInfo, signedPreKey, preKeys)
-        // The server drops its post-quantum keys on a full upload, so the next run must redo them.
+        // A full classic upload resets the migrated marker, so the next post-quantum run redoes the keys.
         if (this.pqStore) {
             await this.pqStore.setPqMigrated(false)
         }
