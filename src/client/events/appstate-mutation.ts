@@ -3,6 +3,7 @@ import {
     decodeEnumValue,
     decodeIndexArgsFromSchema,
     getAppstateSchemaByActionName,
+    WA_APPSTATE_LEGACY_INDEX_ARGS,
     type WaAppstateSchema
 } from '@appstate-spec'
 import type { WaAppStateMutationEvent } from '@client/types'
@@ -19,10 +20,12 @@ export function parseAppStateMutationEvent(
     if (!resolved) {
         return null
     }
-    const indexArgs = decodeIndexArgsFromSchema(resolved.schema, parts)
-    if (!indexArgs) {
+    const decoded = decodeIndexArgsFromSchema(resolved.schema, parts)
+    if (!decoded) {
         return null
     }
+    const legacy = WA_APPSTATE_LEGACY_INDEX_ARGS[resolved.key]
+    const indexArgs = legacy ? withLegacyIndexArgs(decoded, legacy) : decoded
     const valueRaw: Proto.ISyncActionValue | null = mutation.value ?? null
 
     const base = {
@@ -50,6 +53,17 @@ export function parseAppStateMutationEvent(
         ...(data ?? {}),
         ...base
     } as WaAppStateMutationEvent
+}
+
+function withLegacyIndexArgs(
+    args: Readonly<Record<string, string | boolean | null>>,
+    legacy: Readonly<Record<string, string>>
+): Readonly<Record<string, string | boolean | null>> {
+    const out: Record<string, string | boolean | null> = { ...args }
+    for (const legacyName of Object.keys(legacy)) {
+        out[legacyName] = args[legacy[legacyName]]
+    }
+    return out
 }
 
 function unwrapData(

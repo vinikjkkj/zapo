@@ -92,6 +92,43 @@ export function getAppstateSchemaByActionName(
     return { key, schema: RAW_WA_APPSTATE_SCHEMAS[key] }
 }
 
+/**
+ * Index args the spec renamed, per schema: legacy name → current name. The
+ * legacy name is still accepted by `chat.set`/`chat.remove` and set on events.
+ */
+export const WA_APPSTATE_LEGACY_INDEX_ARGS: Readonly<
+    Partial<Record<WaAppstateActionKey, Readonly<Record<string, string>>>>
+> = Object.freeze({
+    LabelEdit: Object.freeze({ id: 'labelId' }),
+    BusinessBroadcastCampaign: Object.freeze({ campaign: 'campaignId' })
+})
+
+interface WaAppstateLegacyIndexArgMap {
+    readonly LabelEdit: {
+        /** @deprecated Use `labelId`. */
+        readonly id: string
+    }
+    readonly BusinessBroadcastCampaign: {
+        /** @deprecated Use `campaignId`. */
+        readonly campaign: string
+    }
+}
+
+/** Legacy index args of `K`, or `unknown` when the schema has none. */
+export type WaAppstateLegacyIndexArgs<K extends WaAppstateActionKey> =
+    K extends keyof WaAppstateLegacyIndexArgMap ? WaAppstateLegacyIndexArgMap[K] : unknown
+
+/** Current name of a legacy index arg of `key`, or `undefined`. */
+export function resolveLegacyIndexArgName(
+    key: WaAppstateActionKey,
+    argName: string
+): string | undefined {
+    const legacy = WA_APPSTATE_LEGACY_INDEX_ARGS[key]
+    return legacy && Object.prototype.hasOwnProperty.call(legacy, argName)
+        ? legacy[argName]
+        : undefined
+}
+
 export function resolveEnumObject(protoEnumPath: string): Record<string, number | string> | null {
     const segments = protoEnumPath.split('.')
     let cursor: unknown = proto.SyncActionValue

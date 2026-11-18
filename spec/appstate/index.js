@@ -1,5 +1,5 @@
 // AUTO-GENERATED — do not edit. Regenerated daily by wa-spec.
-// WhatsApp Version: 2.3000.1043028647
+// WhatsApp Version: 2.3000.1055156383
 'use strict'
 
 const WA_APPSTATE_COLLECTIONS = Object.freeze(['regular', 'regular_low', 'regular_high', 'critical_block', 'critical_unblock_low'])
@@ -110,6 +110,19 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
             Object.freeze({ type: 'literal', value: 'avatar_updated_action' })
         ])
     }),
+    BBProPendingCustomerBaseAction: Object.freeze({
+        name: 'bb_pro_pending_customer_base_action',
+        collection: 'regular_low',
+        version: 7,
+        scope: 'account',
+        valueField: 'bbProPendingCustomerBaseAction',
+        valueProtoType: 'SyncActionValue.BBProPendingCustomerBaseAction',
+        valueEnumFields: null,
+        indexParts: Object.freeze([
+            Object.freeze({ type: 'literal', value: 'bb_pro_pending_customer_base_action' }),
+            Object.freeze({ type: 'string', name: 'action' })
+        ])
+    }),
     BizAiSettingsNudge: Object.freeze({
         name: 'biz_ai_settings_nudge',
         collection: 'regular_high',
@@ -142,10 +155,10 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         scope: 'account',
         valueField: 'businessBroadcastCampaignAction',
         valueProtoType: 'SyncActionValue.BusinessBroadcastCampaignAction',
-        valueEnumFields: Object.freeze({ 'status': 'BusinessBroadcastCampaignStatus' }),
+        valueEnumFields: Object.freeze({ 'bbProStatus': 'BusinessBroadcastCampaignBBProStatus', 'status': 'BusinessBroadcastCampaignStatus' }),
         indexParts: Object.freeze([
             Object.freeze({ type: 'literal', value: 'business_broadcast_campaign' }),
-            Object.freeze({ type: 'string', name: 'campaign' })
+            Object.freeze({ type: 'string', name: 'campaignId' })
         ])
     }),
     BusinessBroadcastInsights: Object.freeze({
@@ -181,9 +194,12 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         scope: 'account',
         valueField: 'callLogAction',
         valueProtoType: 'SyncActionValue.CallLogAction',
-        valueEnumFields: Object.freeze({ 'callLogRecord.callResult': 'CallLogRecord.CallResult', 'callLogRecord.silenceReason': 'CallLogRecord.SilenceReason', 'callLogRecord.participants.callResult': 'CallLogRecord.CallResult', 'callLogRecord.callType': 'CallLogRecord.CallType' }),
+        valueEnumFields: Object.freeze({ 'callLogRecord.callResult': 'CallLogRecord.CallResult', 'callLogRecord.callType': 'CallLogRecord.CallType', 'callLogRecord.participants.callResult': 'CallLogRecord.CallResult', 'callLogRecord.silenceReason': 'CallLogRecord.SilenceReason' }),
         indexParts: Object.freeze([
-            Object.freeze({ type: 'literal', value: 'call_log' })
+            Object.freeze({ type: 'literal', value: 'call_log' }),
+            Object.freeze({ type: 'string', name: 'key1' }),
+            Object.freeze({ type: 'string', name: 'callId' }),
+            Object.freeze({ type: 'string', name: 'fromMe' })
         ])
     }),
     ChatAssignment: Object.freeze({
@@ -251,6 +267,19 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         indexParts: Object.freeze([
             Object.freeze({ type: 'literal', value: 'contact' }),
             Object.freeze({ type: 'string', name: 'id' })
+        ])
+    }),
+    ContactManagerMetadata: Object.freeze({
+        name: 'contact_manager_metadata',
+        collection: 'regular_low',
+        version: 1,
+        scope: 'account',
+        valueField: 'contactManagerMetadataAction',
+        valueProtoType: 'SyncActionValue.ContactManagerMetadataAction',
+        valueEnumFields: null,
+        indexParts: Object.freeze([
+            Object.freeze({ type: 'literal', value: 'contact_manager_metadata' }),
+            Object.freeze({ type: 'string', name: 'key1' })
         ])
     }),
     CustomPaymentMethods: Object.freeze({
@@ -329,7 +358,21 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         valueProtoType: 'DeviceCapabilities',
         valueEnumFields: null,
         indexParts: Object.freeze([
-            Object.freeze({ type: 'literal', value: 'device_capabilities' })
+            Object.freeze({ type: 'literal', value: 'device_capabilities' }),
+            Object.freeze({ type: 'string', name: 'jid' })
+        ])
+    }),
+    DeviceCapabilitiesV2: Object.freeze({
+        name: 'device_capabilities_v2',
+        collection: 'regular_low',
+        version: 7,
+        scope: 'account',
+        valueField: 'deviceCapabilitiesV2',
+        valueProtoType: 'DeviceCapabilities',
+        valueEnumFields: null,
+        indexParts: Object.freeze([
+            Object.freeze({ type: 'literal', value: 'device_capabilities_v2' }),
+            Object.freeze({ type: 'string', name: 'jid' })
         ])
     }),
     DisableLinkPreviews: Object.freeze({
@@ -381,6 +424,19 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
             Object.freeze({ type: 'literal', value: 'favorites' })
         ])
     }),
+    GroupHistoryToggle: Object.freeze({
+        name: 'group_history_toggle',
+        collection: 'regular_low',
+        version: 1,
+        scope: 'chat',
+        valueField: 'groupHistoryToggleAction',
+        valueProtoType: 'SyncActionValue.GroupHistoryToggleAction',
+        valueEnumFields: Object.freeze({ 'groupHistoryToggleMode': 'GroupHistoryToggleAction.GroupHistoryToggleMode' }),
+        indexParts: Object.freeze([
+            Object.freeze({ type: 'literal', value: 'group_history_toggle' }),
+            Object.freeze({ type: 'jid', name: 'chatJid' })
+        ])
+    }),
     InteractiveMessageAction: Object.freeze({
         name: 'interactive_message_action',
         collection: 'regular_low',
@@ -408,7 +464,7 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         valueEnumFields: Object.freeze({ 'type': 'LabelEditAction.ListType' }),
         indexParts: Object.freeze([
             Object.freeze({ type: 'literal', value: 'label_edit' }),
-            Object.freeze({ type: 'string', name: 'id' })
+            Object.freeze({ type: 'string', name: 'labelId' })
         ])
     }),
     LabelJid: Object.freeze({
@@ -435,6 +491,20 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         valueEnumFields: null,
         indexParts: Object.freeze([
             Object.freeze({ type: 'literal', value: 'label_reordering' })
+        ])
+    }),
+    LabelSublist: Object.freeze({
+        name: 'label_sublist',
+        collection: 'regular',
+        version: 1,
+        scope: 'chatOrContact',
+        valueField: 'labelSublistAction',
+        valueProtoType: 'SyncActionValue.LabelSublistAction',
+        valueEnumFields: null,
+        indexParts: Object.freeze([
+            Object.freeze({ type: 'literal', value: 'label_sublist' }),
+            Object.freeze({ type: 'string', name: 'predefinedId' }),
+            Object.freeze({ type: 'jid', name: 'chatJid' })
         ])
     }),
     LidContact: Object.freeze({
@@ -701,7 +771,8 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         valueProtoType: 'SyncActionValue.KeyExpiration',
         valueEnumFields: null,
         indexParts: Object.freeze([
-            Object.freeze({ type: 'literal', value: 'sentinel' })
+            Object.freeze({ type: 'literal', value: 'sentinel' }),
+            Object.freeze({ type: 'string', name: 'collection' })
         ])
     }),
     SettingPushName: Object.freeze({
@@ -723,7 +794,7 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         scope: 'account',
         valueField: 'settingsSyncAction',
         valueProtoType: 'SyncActionValue.SettingsSyncAction',
-        valueEnumFields: Object.freeze({ 'bannerNotificationDisplayMode': 'SettingsSyncAction.DisplayMode', 'unreadCounterBadgeDisplayMode': 'SettingsSyncAction.DisplayMode', 'mediaUploadQuality': 'SettingsSyncAction.MediaQualitySetting' }),
+        valueEnumFields: Object.freeze({ 'bannerNotificationDisplayMode': 'SettingsSyncAction.DisplayMode', 'mediaAutoDownloadQuality': 'SettingsSyncAction.MediaAutoDownloadQualitySetting', 'mediaUploadQuality': 'SettingsSyncAction.MediaQualitySetting', 'unreadCounterBadgeDisplayMode': 'SettingsSyncAction.DisplayMode' }),
         indexParts: Object.freeze([
             Object.freeze({ type: 'literal', value: 'settings_sync' }),
             Object.freeze({ type: 'enum', name: 'settingPlatform', protoEnum: 'SettingsSyncAction.SettingPlatform' }),
@@ -852,7 +923,7 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         scope: 'chat',
         valueField: 'wasaRootSecretAction',
         valueProtoType: 'SyncActionValue.WASARootSecretAction',
-        valueEnumFields: null,
+        valueEnumFields: Object.freeze({ 'secrets.status': 'WASARootSecretAction.RootSecretEntry.Status' }),
         indexParts: Object.freeze([
             Object.freeze({ type: 'literal', value: 'wasa_root_secret' }),
             Object.freeze({ type: 'jid', name: 'chatJid' })

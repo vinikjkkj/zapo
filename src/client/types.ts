@@ -1,5 +1,10 @@
 import type { AppStateCollectionName } from '@appstate/types'
-import type { DataForKey, WaAppstateActionKey, WaAppstateIndexArgs } from '@appstate-spec'
+import type {
+    DataForKey,
+    WaAppstateActionKey,
+    WaAppstateIndexArgs,
+    WaAppstateLegacyIndexArgs
+} from '@appstate-spec'
 import type { WaShortcakeAssertionSigner } from '@auth/pairing/WaShortcakeFlow'
 import type {
     WaAuthClientOptions,
@@ -1434,9 +1439,11 @@ export type WaAppStateMutationEvent = {
     readonly [K in WaAppstateActionKey]:
         | ({ readonly schema: K; readonly operation: 'set' } & MutationEventBase &
               WaAppstateIndexArgs<K> &
+              WaAppstateLegacyIndexArgs<K> &
               Partial<DataForKey<K>>)
         | ({ readonly schema: K; readonly operation: 'remove' } & MutationEventBase &
-              WaAppstateIndexArgs<K>)
+              WaAppstateIndexArgs<K> &
+              WaAppstateLegacyIndexArgs<K>)
 }[WaAppstateActionKey]
 
 /**

@@ -1215,6 +1215,29 @@ test('app-state mutation coordinator flushes queued mutations while sync is in-f
     assert.equal(JSON.parse(syncCalls[1][0].index)[0], 'pin_v1')
 })
 
+test('app-state mutation coordinator accepts the legacy index arg name of a renamed one', async () => {
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => 1_000, nowSeconds: () => 1 },
+        logger: createNoopLogger(),
+        messageStore: new WaMessageMemoryStore(),
+        ...fakeSyncImpl(async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        })
+    })
+
+    await coordinator.set({ schema: 'LabelEdit', labelId: '7', name: 'a' })
+    await coordinator.set({ schema: 'LabelEdit', id: '7', name: 'a' })
+    await coordinator.remove({ schema: 'BusinessBroadcastCampaign', campaign: 'c1' })
+
+    assert.equal(syncCalls.length, 3)
+    assert.equal(syncCalls[0][0].index, JSON.stringify(['label_edit', '7']))
+    assert.deepEqual(syncCalls[1][0], syncCalls[0][0])
+    assert.equal(syncCalls[2][0].index, JSON.stringify(['business_broadcast_campaign', 'c1']))
+})
+
 test('app-state mutation coordinator emits pin + archive mutations when pinning chat', async () => {
     const messageStore = new WaMessageMemoryStore()
     await messageStore.upsert({

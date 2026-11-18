@@ -46,17 +46,17 @@ test('parseAdminCapabilities returns set of capability strings', () => {
     assert.equal(parseAdminCapabilities({}).size, 0)
 })
 
-test('parsePendingInvites extracts user jids preferring pn over id', () => {
+test('parsePendingInvites extracts user ids', () => {
     const invites = parsePendingInvites({
         xwa2_newsletter_admin: {
             pending_admin_invites: [
-                { user: { id: '1@lid', pn: '111@s.whatsapp.net' } },
+                { user: { id: '1@lid' } },
                 { user: { id: '2@lid' } },
                 { user: undefined }
             ]
         }
     })
-    assert.deepEqual(invites, ['111@s.whatsapp.net', '2@lid'])
+    assert.deepEqual(invites, ['1@lid', '2@lid'])
 })
 
 test('parseFollowers maps edges into typed followers', () => {

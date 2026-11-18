@@ -48,6 +48,28 @@ test('appstate mutation parser decodes Mute schema', () => {
     }
 })
 
+test('appstate mutation parser sets the legacy index arg name next to the renamed one', () => {
+    const parsed = parseAppStateMutationEvent({
+        collection: 'regular',
+        operation: 'set',
+        source: 'patch',
+        index: JSON.stringify(['label_edit', '7']),
+        value: { labelEditAction: { name: 'Pendente', color: 2 } },
+        version: 3,
+        indexMac: new Uint8Array(),
+        valueMac: new Uint8Array(),
+        keyId: new Uint8Array(),
+        timestamp: 10
+    })
+
+    assert.ok(parsed && parsed.schema === 'LabelEdit' && parsed.operation === 'set')
+    if (parsed?.schema === 'LabelEdit' && parsed.operation === 'set') {
+        assert.equal(parsed.labelId, '7')
+        assert.equal(parsed.id, '7')
+        assert.equal(parsed.name, 'Pendente')
+    }
+})
+
 test('appstate mutation parser decodes Star schema (message scope, boolString + jidOrZero)', () => {
     const parsed = parseAppStateMutationEvent({
         collection: 'regular_high',
