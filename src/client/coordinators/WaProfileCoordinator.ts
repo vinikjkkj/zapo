@@ -202,8 +202,9 @@ export interface WaProfileCoordinator {
     /** Deletes the current account's username. Returns `true` on success. */
     readonly deleteUsername: () => Promise<boolean>
     /**
-     * Fetches the "About" text for a single JID. Same result as `getStatus`;
-     * WA Web dropped the MEX query this used.
+     * Fetches the "About" text for a single JID through `getStatus` (WA Web
+     * dropped the MEX query this used). An empty status is `null` here and
+     * `''` from `getStatus`.
      * @deprecated Use `getStatus`.
      */
     readonly getAboutStatus: (jid: string) => Promise<string | null>

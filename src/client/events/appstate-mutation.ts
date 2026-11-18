@@ -130,17 +130,25 @@ function applyDecodeAtPath(
     if (Array.isArray(next)) {
         obj[head] = next.map((item) => {
             if (!item || typeof item !== 'object') return item
-            const copy = { ...(item as Record<string, unknown>) }
+            const copy = cloneMessage(item as Record<string, unknown>)
             applyDecodeAtPath(copy, rest, transform)
             return copy
         })
         return
     }
     if (next && typeof next === 'object') {
-        const copy = { ...(next as Record<string, unknown>) }
+        const copy = cloneMessage(next as Record<string, unknown>)
         obj[head] = copy
         applyDecodeAtPath(copy, rest, transform)
     }
+}
+
+/** Shallow copy that keeps the generated message prototype (field defaults) and every own property. */
+function cloneMessage(value: Record<string, unknown>): Record<string, unknown> {
+    return Object.create(
+        Object.getPrototypeOf(value) as object | null,
+        Object.getOwnPropertyDescriptors(value)
+    ) as Record<string, unknown>
 }
 
 function parseIndexParts(index: string): readonly string[] | null {
