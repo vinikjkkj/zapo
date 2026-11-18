@@ -1,7 +1,7 @@
 import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { Logger } from '@infra/log/types'
 import type { WaMexOperationResponses } from '@mex'
-import { parsePhoneJid } from '@protocol/jid'
+import { parsePhoneJid, toUserJid } from '@protocol/jid'
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import {
     isUsernameKey,
@@ -777,7 +777,8 @@ export function createProfileCoordinator(
             return isMexSetUsernameSuccess(data)
         },
 
-        getAboutStatus: async (jid) => (await getStatus(jid)).status,
+        getAboutStatus: async (jid) =>
+            (await getStatus(toUserJid(jid, { canonicalizeSignalServer: true }))).status,
 
         checkUsernameAvailability: async (username) => {
             const data = await runMexQuery(mexSocket, 'UsernameAvailability', {
