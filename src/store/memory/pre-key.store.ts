@@ -1,5 +1,9 @@
-import type { PreKeyRecord } from '@signal/types'
-import type { WaPreKeyStore as WaPreKeyStoreContract } from '@store/contracts/pre-key.store'
+import { SIGNAL_KYBER_PREKEY_ID_BORDER } from '@signal/constants'
+import type { KyberPreKeyRecord, PreKeyRecord } from '@signal/types'
+import type {
+    WaPqPreKeyStore,
+    WaPreKeyStore as WaPreKeyStoreContract
+} from '@store/contracts/pre-key.store'
 import { resolvePositive } from '@util/coercion'
 import { setBoundedMapEntry } from '@util/collections'
 
@@ -9,18 +13,24 @@ export interface WaPreKeyMemoryStoreOptions {
     readonly maxPreKeys?: number
 }
 
-export class WaPreKeyMemoryStore implements WaPreKeyStoreContract {
+export class WaPreKeyMemoryStore implements WaPreKeyStoreContract, WaPqPreKeyStore {
     private readonly preKeys: Map<number, PreKeyRecord>
     private readonly uploadedPreKeys: Set<number>
+    private readonly kyberPreKeys: Map<number, KyberPreKeyRecord>
     private serverHasPreKeys: boolean
     private nextPreKeyId: number
+    private nextKyberPreKeyId: number
+    private pqMigrated: boolean
     private readonly maxPreKeys: number
 
     public constructor(options: WaPreKeyMemoryStoreOptions = {}) {
         this.preKeys = new Map()
         this.uploadedPreKeys = new Set()
+        this.kyberPreKeys = new Map()
         this.serverHasPreKeys = false
         this.nextPreKeyId = 1
+        this.nextKyberPreKeyId = 1
+        this.pqMigrated = false
         this.maxPreKeys = resolvePositive(
             options.maxPreKeys,
             DEFAULT_MAX_PRE_KEYS,
@@ -125,10 +135,67 @@ export class WaPreKeyMemoryStore implements WaPreKeyStoreContract {
         return this.serverHasPreKeys
     }
 
+    public async putKyberPreKeys(records: readonly KyberPreKeyRecord[]): Promise<void> {
+        for (const record of records) {
+            setBoundedMapEntry(this.kyberPreKeys, record.keyId, record, this.maxPreKeys)
+        }
+    }
+
+    public async getKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
+        return this.kyberPreKeys.get(keyId) ?? null
+    }
+
+    public async consumeKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
+        const record = this.kyberPreKeys.get(keyId) ?? null
+        if (!record) {
+            return null
+        }
+        if (record.lastResort !== true) {
+            this.kyberPreKeys.delete(keyId)
+        }
+        return record
+    }
+
+    public async removeKyberPreKeys(keyIds: readonly number[]): Promise<void> {
+        for (let index = 0; index < keyIds.length; index += 1) {
+            this.kyberPreKeys.delete(keyIds[index])
+        }
+    }
+
+    public async getLatestKyberLastResortKey(): Promise<KyberPreKeyRecord | null> {
+        let latest: KyberPreKeyRecord | null = null
+        for (const record of this.kyberPreKeys.values()) {
+            if (record.lastResort === true && (latest === null || record.keyId > latest.keyId)) {
+                latest = record
+            }
+        }
+        return latest
+    }
+
+    public async reserveKyberPreKeyIds(count: number): Promise<number> {
+        if (!Number.isSafeInteger(count) || count <= 0) {
+            throw new Error(`invalid kyber prekey count: ${count}`)
+        }
+        const first = this.nextKyberPreKeyId
+        this.nextKyberPreKeyId = (first + count) % SIGNAL_KYBER_PREKEY_ID_BORDER
+        return first
+    }
+
+    public async getPqMigrated(): Promise<boolean> {
+        return this.pqMigrated
+    }
+
+    public async setPqMigrated(value: boolean): Promise<void> {
+        this.pqMigrated = value
+    }
+
     public async clear(): Promise<void> {
         this.preKeys.clear()
         this.uploadedPreKeys.clear()
+        this.kyberPreKeys.clear()
         this.serverHasPreKeys = false
         this.nextPreKeyId = 1
+        this.nextKyberPreKeyId = 1
+        this.pqMigrated = false
     }
 }

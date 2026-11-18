@@ -472,6 +472,29 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
                 ALTER TABLE mailbox_contacts ADD COLUMN username TEXT;
             `)
         }
+    },
+    {
+        id: '0021_signal_kyber_prekey_schema',
+        domain: 'signal',
+        up: (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS signal_kyber_prekey (
+                    session_id TEXT NOT NULL,
+                    key_id INTEGER NOT NULL,
+                    pub_key BLOB NOT NULL,
+                    priv_key BLOB NOT NULL,
+                    signature BLOB NOT NULL,
+                    last_resort INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (session_id, key_id)
+                );
+
+                ALTER TABLE signal_meta
+                    ADD COLUMN next_kyber_prekey_id INTEGER NOT NULL DEFAULT 1;
+
+                ALTER TABLE signal_meta
+                    ADD COLUMN pq_migrated INTEGER NOT NULL DEFAULT 0;
+            `)
+        }
     }
 ]
 

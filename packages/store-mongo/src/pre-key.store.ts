@@ -1,6 +1,6 @@
 import type { Binary } from 'mongodb'
-import type { PreKeyRecord } from 'zapo-js/signal'
-import type { WaPreKeyStore } from 'zapo-js/store'
+import type { KyberPreKeyRecord, PreKeyRecord } from 'zapo-js/signal'
+import type { WaPqPreKeyStore, WaPreKeyStore } from 'zapo-js/store'
 
 import { BaseMongoStore } from './BaseMongoStore'
 import { fromBinary, safeLimit, toBinary } from './helpers'
@@ -10,6 +10,8 @@ interface MetaDoc {
     _id: string
     server_has_prekeys: boolean
     next_prekey_id: number
+    next_kyber_prekey_id?: number
+    pq_migrated?: boolean
     signed_prekey_rotation_ts: number | null
 }
 
@@ -20,7 +22,18 @@ interface PreKeyDoc {
     uploaded: boolean
 }
 
-export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore {
+interface KyberPreKeyDoc {
+    _id: { session_id: string; key_id: number }
+    pub_key: Binary
+    priv_key: Binary
+    signature: Binary
+    last_resort: boolean
+}
+
+/** Kyber pre-key ids are 3 bytes on the wire; the id counter wraps just before 2^24. */
+const KYBER_PREKEY_ID_BORDER = 16_777_215
+
+export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore, WaPqPreKeyStore {
     public constructor(options: WaMongoStorageOptions) {
         super(options)
     }
@@ -28,6 +41,8 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
     protected override async createIndexes(): Promise<void> {
         const prekeys = this.col<PreKeyDoc>('signal_prekeys')
         await prekeys.createIndex({ '_id.session_id': 1, uploaded: 1, '_id.key_id': 1 })
+        const kyberPrekeys = this.col<KyberPreKeyDoc>('signal_kyber_prekey')
+        await kyberPrekeys.createIndex({ '_id.session_id': 1, '_id.key_id': 1 })
     }
 
     // ── PreKeys ───────────────────────────────────────────────────────
@@ -250,6 +265,121 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
         await this.col<PreKeyDoc>('signal_prekeys').deleteMany({
             '_id.session_id': this.sessionId
         })
+        await this.col<KyberPreKeyDoc>('signal_kyber_prekey').deleteMany({
+            '_id.session_id': this.sessionId
+        })
+        await this.col<MetaDoc>('signal_meta').updateOne(
+            { _id: this.sessionId },
+            { $set: { next_kyber_prekey_id: 1, pq_migrated: false } }
+        )
+    }
+
+    // ── Kyber PreKeys (ML-KEM-1024) ───────────────────────────────────
+
+    public async putKyberPreKeys(records: readonly KyberPreKeyRecord[]): Promise<void> {
+        if (records.length === 0) return
+        await this.ensureIndexes()
+        const col = this.col<KyberPreKeyDoc>('signal_kyber_prekey')
+        const ops = records.map((record) => ({
+            updateOne: {
+                filter: {
+                    _id: { session_id: this.sessionId, key_id: record.keyId }
+                },
+                update: {
+                    $set: {
+                        pub_key: toBinary(record.keyPair.pubKey),
+                        priv_key: toBinary(record.keyPair.privKey),
+                        signature: toBinary(record.signature),
+                        last_resort: record.lastResort === true
+                    }
+                },
+                upsert: true
+            }
+        }))
+        await col.bulkWrite(ops, { ordered: false })
+    }
+
+    public async getKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
+        await this.ensureIndexes()
+        const col = this.col<KyberPreKeyDoc>('signal_kyber_prekey')
+        const doc = await col.findOne({
+            _id: { session_id: this.sessionId, key_id: keyId }
+        })
+        if (!doc) return null
+        return this.decodeKyberPreKeyDoc(doc)
+    }
+
+    public async consumeKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
+        await this.ensureIndexes()
+        const col = this.col<KyberPreKeyDoc>('signal_kyber_prekey')
+        const _id = { session_id: this.sessionId, key_id: keyId }
+        const consumed = await col.findOneAndDelete({ _id, last_resort: { $ne: true } })
+        if (consumed) return this.decodeKyberPreKeyDoc(consumed)
+        // Last-resort keys are reused when the pool empties, never consumed.
+        const reusable = await col.findOne({ _id, last_resort: true })
+        return reusable ? this.decodeKyberPreKeyDoc(reusable) : null
+    }
+
+    public async removeKyberPreKeys(keyIds: readonly number[]): Promise<void> {
+        if (keyIds.length === 0) return
+        await this.ensureIndexes()
+        await this.col<KyberPreKeyDoc>('signal_kyber_prekey').deleteMany({
+            _id: {
+                $in: [...new Set(keyIds)].map((keyId) => ({
+                    session_id: this.sessionId,
+                    key_id: keyId
+                }))
+            }
+        })
+    }
+
+    public async getLatestKyberLastResortKey(): Promise<KyberPreKeyRecord | null> {
+        await this.ensureIndexes()
+        const [doc] = await this.col<KyberPreKeyDoc>('signal_kyber_prekey')
+            .find({ '_id.session_id': this.sessionId, last_resort: true })
+            .sort({ '_id.key_id': -1 })
+            .limit(1)
+            .toArray()
+        return doc ? this.decodeKyberPreKeyDoc(doc) : null
+    }
+
+    public async reserveKyberPreKeyIds(count: number): Promise<number> {
+        if (!Number.isSafeInteger(count) || count <= 0) {
+            throw new Error(`invalid kyber prekey count: ${count}`)
+        }
+        await this.getMeta()
+        const col = this.col<MetaDoc>('signal_meta')
+        const before = await col.findOneAndUpdate(
+            { _id: this.sessionId },
+            [
+                {
+                    $set: {
+                        next_kyber_prekey_id: {
+                            $mod: [
+                                { $add: [{ $ifNull: ['$next_kyber_prekey_id', 1] }, count] },
+                                KYBER_PREKEY_ID_BORDER
+                            ]
+                        }
+                    }
+                }
+            ],
+            { returnDocument: 'before' }
+        )
+        if (!before) throw new Error('signal meta row not found')
+        return before.next_kyber_prekey_id ?? 1
+    }
+
+    public async getPqMigrated(): Promise<boolean> {
+        const meta = await this.getMeta()
+        return meta.pqMigrated
+    }
+
+    public async setPqMigrated(value: boolean): Promise<void> {
+        await this.getMeta()
+        await this.col<MetaDoc>('signal_meta').updateOne(
+            { _id: this.sessionId },
+            { $set: { pq_migrated: value } }
+        )
     }
 
     // ── Private helpers ───────────────────────────────────────────────
@@ -257,6 +387,7 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
     private async getMeta(): Promise<{
         serverHasPreKeys: boolean
         nextPreKeyId: number
+        pqMigrated: boolean
         signedPreKeyRotationTs: number | null
     }> {
         await this.ensureIndexes()
@@ -277,6 +408,7 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
         return {
             serverHasPreKeys: doc.server_has_prekeys,
             nextPreKeyId: doc.next_prekey_id,
+            pqMigrated: doc.pq_migrated === true,
             signedPreKeyRotationTs: doc.signed_prekey_rotation_ts
         }
     }
@@ -303,6 +435,18 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
                 privKey: fromBinary(doc.priv_key)
             },
             uploaded: doc.uploaded
+        }
+    }
+
+    private decodeKyberPreKeyDoc(doc: KyberPreKeyDoc): KyberPreKeyRecord {
+        return {
+            keyId: doc._id.key_id,
+            keyPair: {
+                pubKey: fromBinary(doc.pub_key),
+                privKey: fromBinary(doc.priv_key)
+            },
+            signature: fromBinary(doc.signature),
+            lastResort: doc.last_resort
         }
     }
 }

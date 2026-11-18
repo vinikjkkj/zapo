@@ -61,6 +61,11 @@ export class WaAbPropsCoordinator {
         return AB_PROPS[name].defaultValue as T
     }
 
+    /** Settles when the sync in flight, if any, is done (it never rejects). */
+    public waitForSync(): Promise<void> {
+        return this.syncPromise ?? Promise.resolve()
+    }
+
     public sync(): void {
         if (this.syncPromise) {
             this.pendingSync = true

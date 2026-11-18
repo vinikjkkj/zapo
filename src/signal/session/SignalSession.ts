@@ -1,5 +1,11 @@
 import { hkdfSplit, toRawPubKey, toSerializedPubKey, X25519 } from '@crypto'
-import { SIGNAL_PREFIX, WHISPER_RATCHET_INFO, WHISPER_TEXT_INFO } from '@signal/constants'
+import {
+    SIGNAL_PQXDH_VERSION,
+    SIGNAL_PREFIX,
+    WHISPER_RATCHET_INFO,
+    WHISPER_TEXT_INFO,
+    WHISPER_TEXT_PQXDH_INFO
+} from '@signal/constants'
 import { decodeSignalSessionSnapshot, encodeSignalSessionSnapshot } from '@signal/session/encoding'
 import type {
     RawSignalRecvChain,
@@ -27,6 +33,17 @@ interface IncomingRatchetKeys {
     readonly signed: SignalSerializedKeyPair
     readonly oneTime?: SignalSerializedKeyPair
     readonly ratchet: SignalSerializedKeyPair
+}
+
+/**
+ * PQXDH initiator inputs: the ML-KEM shared secret to fold into the KDF, plus
+ * the ciphertext and pre-key id the caller obtained from encapsulation, which
+ * are stored on the session so the first pre-key message can carry them.
+ */
+interface PqxdhOutgoingKem {
+    readonly kemSharedSecret: Uint8Array
+    readonly kemCiphertext: Uint8Array
+    readonly kyberPreKeyId: number
 }
 
 export function snapshotToRecord(snapshot: SignalSessionSnapshot): SignalSessionRecord {
@@ -89,7 +106,8 @@ export async function initiateSessionOutgoing(
         ratchetKey?: Uint8Array
         regId: number
     },
-    localOneTimeBase: SignalSerializedKeyPair
+    localOneTimeBase: SignalSerializedKeyPair,
+    pq?: PqxdhOutgoingKem
 ): Promise<SignalSessionRecord> {
     const remoteIdentity = toSerializedPubKey(remoteBundle.identity)
     const remoteSignedKey = toSerializedPubKey(remoteBundle.signedKey.publicKey)
@@ -113,9 +131,14 @@ export async function initiateSessionOutgoing(
         signedDh,
         identityDh,
         baseDh,
-        ...(oneTimeDh ? [oneTimeDh] : [])
+        ...(oneTimeDh ? [oneTimeDh] : []),
+        ...(pq ? [pq.kemSharedSecret] : [])
     ])
-    const [rootKey, chainKey] = hkdfSplit(secret, null, WHISPER_TEXT_INFO)
+    const [rootKey, chainKey] = hkdfSplit(
+        secret,
+        null,
+        pq ? WHISPER_TEXT_PQXDH_INFO : WHISPER_TEXT_INFO
+    )
 
     const recvChain: RawSignalRecvChain = {
         senderRatchetKey: remoteRatchetKey,
@@ -138,11 +161,13 @@ export async function initiateSessionOutgoing(
         initialExchangeInfo: {
             remoteOneTimeId: remoteBundle.oneTimeKey?.id ?? null,
             remoteSignedId: remoteBundle.signedKey.id,
-            localOneTimePubKey: localOneTimeBase.pubKey
+            localOneTimePubKey: localOneTimeBase.pubKey,
+            ...(pq ? { kyberPreKeyId: pq.kyberPreKeyId, kemCiphertext: pq.kemCiphertext } : {})
         },
         prevSendChainHighestIndex: 0,
         prevSessions: [],
-        aliceBaseKey: localOneTimeBase.pubKey
+        aliceBaseKey: localOneTimeBase.pubKey,
+        ...(pq ? { version: SIGNAL_PQXDH_VERSION } : {})
     }
 }
 
@@ -150,7 +175,8 @@ export async function initiateSessionIncoming(
     local: LocalIdentityContext,
     remote: { regId: number; pubKey: Uint8Array },
     sessionBaseKey: Uint8Array,
-    localKeys: IncomingRatchetKeys
+    localKeys: IncomingRatchetKeys,
+    pqSharedSecret?: Uint8Array | null
 ): Promise<SignalSessionRecord> {
     const baseKey = toSerializedPubKey(sessionBaseKey)
     const remotePub = toSerializedPubKey(remote.pubKey)
@@ -168,9 +194,14 @@ export async function initiateSessionIncoming(
         identityDh,
         staticDh,
         signedDh,
-        ...(oneTimeDh ? [oneTimeDh] : [])
+        ...(oneTimeDh ? [oneTimeDh] : []),
+        ...(pqSharedSecret ? [pqSharedSecret] : [])
     ])
-    const [rootKey, chainKey] = hkdfSplit(secret, null, WHISPER_TEXT_INFO)
+    const [rootKey, chainKey] = hkdfSplit(
+        secret,
+        null,
+        pqSharedSecret ? WHISPER_TEXT_PQXDH_INFO : WHISPER_TEXT_INFO
+    )
 
     return {
         local: { regId: local.regId, pubKey: local.staticKeyPair.pubKey },
@@ -185,7 +216,8 @@ export async function initiateSessionIncoming(
         initialExchangeInfo: null,
         prevSendChainHighestIndex: 0,
         prevSessions: [],
-        aliceBaseKey: baseKey
+        aliceBaseKey: baseKey,
+        ...(pqSharedSecret ? { version: SIGNAL_PQXDH_VERSION } : {})
     }
 }
 

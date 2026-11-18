@@ -5,6 +5,7 @@ import { MongoClient } from 'mongodb'
 import { toSerializedPubKey, X25519 } from 'zapo-js/crypto'
 import { WA_APP_STATE_COLLECTIONS } from 'zapo-js/protocol'
 import type { SignalAddress, SignalSessionRecord } from 'zapo-js/signal'
+import { hasPqPreKeyStore } from 'zapo-js/store'
 
 import { createMongoStore, type WaMongoStoreResult } from '../index'
 
@@ -1419,5 +1420,100 @@ describe('store-mongo integration', { timeout: 60_000 }, () => {
         assert.equal(await session.getSession(addressMissing), null)
 
         await session.clear()
+    })
+
+    it('signal: kyber prekeys, id reservation and migrated flag', async (t) => {
+        if (!store) return t.skip('ZAPO_TEST_MONGO_* not set')
+
+        const preKey = store.stores.preKey(`kyber-${Date.now()}`)
+        assert.ok(hasPqPreKeyStore(preKey))
+        const kyberKey = (keyId: number, lastResort: boolean) => ({
+            keyId,
+            keyPair: {
+                pubKey: new Uint8Array(1568).fill(keyId & 0xff),
+                privKey: new Uint8Array(3266).fill(7)
+            },
+            signature: new Uint8Array(64).fill(3),
+            lastResort
+        })
+
+        const sameKey = (
+            actual: Awaited<ReturnType<typeof preKey.getKyberPreKeyById>>,
+            expected: ReturnType<typeof kyberKey>
+        ) => {
+            assert.ok(actual)
+            assert.equal(actual.keyId, expected.keyId)
+            assert.equal(actual.lastResort, expected.lastResort)
+            for (const field of ['pubKey', 'privKey'] as const) {
+                assert.ok(Buffer.from(actual.keyPair[field]).equals(expected.keyPair[field]))
+            }
+            assert.ok(Buffer.from(actual.signature).equals(expected.signature))
+        }
+
+        assert.equal(await preKey.reserveKyberPreKeyIds(201), 1)
+        assert.equal(await preKey.reserveKyberPreKeyIds(10), 202)
+        assert.equal(await preKey.reserveKyberPreKeyIds(16_777_215 - 212), 212)
+        assert.equal(await preKey.reserveKyberPreKeyIds(2), 0)
+        assert.equal(await preKey.reserveKyberPreKeyIds(1), 2)
+
+        assert.equal(await preKey.getLatestKyberLastResortKey(), null)
+        await preKey.putKyberPreKeys([kyberKey(5, true), kyberKey(9, true), kyberKey(7, false)])
+        sameKey(await preKey.getKyberPreKeyById(7), kyberKey(7, false))
+        sameKey(await preKey.getKyberPreKeyById(9), kyberKey(9, true))
+        assert.equal(await preKey.getKyberPreKeyById(8), null)
+        assert.equal((await preKey.getLatestKyberLastResortKey())?.keyId, 9)
+
+        sameKey(await preKey.consumeKyberPreKeyById(7), kyberKey(7, false))
+        assert.equal(await preKey.getKyberPreKeyById(7), null)
+        sameKey(await preKey.consumeKyberPreKeyById(9), kyberKey(9, true))
+        sameKey(await preKey.getKyberPreKeyById(9), kyberKey(9, true))
+        assert.equal(await preKey.consumeKyberPreKeyById(404), null)
+
+        await preKey.removeKyberPreKeys([9, 404])
+        await preKey.removeKyberPreKeys([])
+        assert.equal(await preKey.getKyberPreKeyById(9), null)
+        assert.equal((await preKey.getLatestKyberLastResortKey())?.keyId, 5)
+
+        assert.equal(await preKey.getPqMigrated(), false)
+        await preKey.setPqMigrated(true)
+        assert.equal(await preKey.getPqMigrated(), true)
+
+        await preKey.clear()
+        assert.equal(await preKey.getKyberPreKeyById(5), null)
+        assert.equal(await preKey.getPqMigrated(), false)
+        assert.equal(await preKey.reserveKyberPreKeyIds(1), 1)
+    })
+
+    it('signal: a one-time kyber prekey goes to exactly one concurrent consumer', async (t) => {
+        if (!store) return t.skip('ZAPO_TEST_MONGO_* not set')
+
+        const preKey = store.stores.preKey(`kyber-race-${Date.now()}`)
+        assert.ok(hasPqPreKeyStore(preKey))
+        const record = (keyId: number, lastResort: boolean) => ({
+            keyId,
+            keyPair: {
+                pubKey: new Uint8Array(1568).fill(keyId & 0xff),
+                privKey: new Uint8Array(3266).fill(7)
+            },
+            signature: new Uint8Array(64).fill(3),
+            lastResort
+        })
+        await preKey.putKyberPreKeys([record(1, false), record(2, false), record(3, true)])
+
+        for (const keyId of [1, 2]) {
+            const results = await Promise.all(
+                Array.from({ length: 24 }, () => preKey.consumeKyberPreKeyById(keyId))
+            )
+            assert.equal(results.filter((result) => result !== null).length, 1)
+            assert.equal(await preKey.getKyberPreKeyById(keyId), null)
+        }
+
+        const reusable = await Promise.all(
+            Array.from({ length: 8 }, () => preKey.consumeKyberPreKeyById(3))
+        )
+        assert.equal(reusable.filter((result) => result?.keyId === 3).length, 8)
+        assert.equal((await preKey.getKyberPreKeyById(3))?.keyId, 3)
+
+        await preKey.clear()
     })
 })

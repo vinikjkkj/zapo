@@ -5,6 +5,7 @@ import Redis from 'ioredis'
 import { toSerializedPubKey, X25519 } from 'zapo-js/crypto'
 import { WA_APP_STATE_COLLECTIONS } from 'zapo-js/protocol'
 import type { SignalAddress, SignalSessionRecord } from 'zapo-js/signal'
+import { hasPqPreKeyStore } from 'zapo-js/store'
 
 import { createRedisStore, type WaRedisStoreResult } from '../index'
 
@@ -15,6 +16,18 @@ let sessionSeed = 0
 function nextSessionId(label: string): string {
     sessionSeed += 1
     return `test-session-${label}-${Date.now()}-${sessionSeed}`
+}
+
+function kyberRecord(keyId: number, lastResort: boolean) {
+    return {
+        keyId,
+        keyPair: {
+            pubKey: new Uint8Array(1568).fill(keyId & 0xff),
+            privKey: new Uint8Array(3266).fill(7)
+        },
+        signature: new Uint8Array(64).fill(3),
+        lastResort
+    }
 }
 
 function makeAddress(user: string, device: number): SignalAddress {
@@ -1432,6 +1445,7 @@ describe('store-redis storeTtlMs', { timeout: 60_000 }, () => {
             redis,
             storeTtlMs: {
                 messagesMs: TTL,
+                preKeyMs: TTL,
                 signalMs: TTL,
                 appStateMs: TTL
             }
@@ -1501,6 +1515,49 @@ describe('store-redis storeTtlMs', { timeout: 60_000 }, () => {
         await signal.clear()
     })
 
+    it('kyber last-resort reads keep the lookup index alive with the key', async (t) => {
+        if (!store || !redis) return t.skip('ZAPO_TEST_REDIS_* not set')
+
+        const sessionId = nextSessionId('ttl-kyber')
+        const preKey = store.stores.preKey(sessionId)
+        assert.ok(hasPqPreKeyStore(preKey))
+        await preKey.putKyberPreKeys([kyberRecord(20, true)])
+
+        const indexKey = `signal:kyberlr:${sessionId}`
+        await new Promise((resolve) => setTimeout(resolve, 400))
+        const beforeRead = await redis.pttl(indexKey)
+        assert.ok(beforeRead > 0 && beforeRead < TTL, `index pttl out of range: ${beforeRead}`)
+
+        assert.equal((await preKey.getKyberPreKeyById(20))?.keyId, 20)
+        const afterGet = await redis.pttl(indexKey)
+        assert.ok(afterGet > beforeRead, `get did not refresh the index: ${beforeRead} ${afterGet}`)
+
+        await new Promise((resolve) => setTimeout(resolve, 400))
+        const beforeConsume = await redis.pttl(indexKey)
+        assert.equal((await preKey.consumeKyberPreKeyById(20))?.keyId, 20)
+        const afterConsume = await redis.pttl(indexKey)
+        assert.ok(
+            afterConsume > beforeConsume,
+            `consume did not refresh the index: ${beforeConsume} ${afterConsume}`
+        )
+
+        await preKey.clear()
+    })
+
+    it('kyber latest last-resort lookup skips index entries whose key expired', async (t) => {
+        if (!store || !redis) return t.skip('ZAPO_TEST_REDIS_* not set')
+
+        const sessionId = nextSessionId('stale-kyber')
+        const preKey = store.stores.preKey(sessionId)
+        assert.ok(hasPqPreKeyStore(preKey))
+        await preKey.putKyberPreKeys([kyberRecord(5, true), kyberRecord(9, true)])
+        await redis.del(`signal:kyberprekey:${sessionId}:9`)
+
+        assert.equal((await preKey.getLatestKyberLastResortKey())?.keyId, 5)
+
+        await preKey.clear()
+    })
+
     it('auth keys never receive a TTL even when storeTtlMs is set', async (t) => {
         if (!store || !redis) return t.skip('ZAPO_TEST_REDIS_* not set')
 
@@ -1540,5 +1597,95 @@ describe('store-redis storeTtlMs', { timeout: 60_000 }, () => {
                 }).stores.messages('x'),
             /ttlMs must be a positive integer/
         )
+    })
+
+    it('signal: kyber prekeys, id reservation and migrated flag', async (t) => {
+        if (!store) return t.skip('ZAPO_TEST_REDIS_* not set')
+
+        const preKey = store.stores.preKey(`kyber-${Date.now()}`)
+        assert.ok(hasPqPreKeyStore(preKey))
+        const kyberKey = (keyId: number, lastResort: boolean) => ({
+            keyId,
+            keyPair: {
+                pubKey: new Uint8Array(1568).fill(keyId & 0xff),
+                privKey: new Uint8Array(3266).fill(7)
+            },
+            signature: new Uint8Array(64).fill(3),
+            lastResort
+        })
+
+        const sameKey = (
+            actual: Awaited<ReturnType<typeof preKey.getKyberPreKeyById>>,
+            expected: ReturnType<typeof kyberKey>
+        ) => {
+            assert.ok(actual)
+            assert.equal(actual.keyId, expected.keyId)
+            assert.equal(actual.lastResort, expected.lastResort)
+            for (const field of ['pubKey', 'privKey'] as const) {
+                assert.ok(Buffer.from(actual.keyPair[field]).equals(expected.keyPair[field]))
+            }
+            assert.ok(Buffer.from(actual.signature).equals(expected.signature))
+        }
+
+        assert.equal(await preKey.reserveKyberPreKeyIds(201), 1)
+        assert.equal(await preKey.reserveKyberPreKeyIds(10), 202)
+        assert.equal(await preKey.reserveKyberPreKeyIds(16_777_215 - 212), 212)
+        assert.equal(await preKey.reserveKyberPreKeyIds(2), 0)
+        assert.equal(await preKey.reserveKyberPreKeyIds(1), 2)
+
+        assert.equal(await preKey.getLatestKyberLastResortKey(), null)
+        await preKey.putKyberPreKeys([kyberKey(5, true), kyberKey(9, true), kyberKey(7, false)])
+        sameKey(await preKey.getKyberPreKeyById(7), kyberKey(7, false))
+        sameKey(await preKey.getKyberPreKeyById(9), kyberKey(9, true))
+        assert.equal(await preKey.getKyberPreKeyById(8), null)
+        assert.equal((await preKey.getLatestKyberLastResortKey())?.keyId, 9)
+
+        sameKey(await preKey.consumeKyberPreKeyById(7), kyberKey(7, false))
+        assert.equal(await preKey.getKyberPreKeyById(7), null)
+        sameKey(await preKey.consumeKyberPreKeyById(9), kyberKey(9, true))
+        sameKey(await preKey.getKyberPreKeyById(9), kyberKey(9, true))
+        assert.equal(await preKey.consumeKyberPreKeyById(404), null)
+
+        await preKey.removeKyberPreKeys([9, 404])
+        await preKey.removeKyberPreKeys([])
+        assert.equal(await preKey.getKyberPreKeyById(9), null)
+        assert.equal((await preKey.getLatestKyberLastResortKey())?.keyId, 5)
+
+        assert.equal(await preKey.getPqMigrated(), false)
+        await preKey.setPqMigrated(true)
+        assert.equal(await preKey.getPqMigrated(), true)
+
+        await preKey.clear()
+        assert.equal(await preKey.getKyberPreKeyById(5), null)
+        assert.equal(await preKey.getPqMigrated(), false)
+        assert.equal(await preKey.reserveKyberPreKeyIds(1), 1)
+    })
+
+    it('signal: a one-time kyber prekey goes to exactly one concurrent consumer', async (t) => {
+        if (!store) return t.skip('ZAPO_TEST_REDIS_* not set')
+
+        const preKey = store.stores.preKey(`kyber-race-${Date.now()}`)
+        assert.ok(hasPqPreKeyStore(preKey))
+        await preKey.putKyberPreKeys([
+            kyberRecord(1, false),
+            kyberRecord(2, false),
+            kyberRecord(3, true)
+        ])
+
+        for (const keyId of [1, 2]) {
+            const results = await Promise.all(
+                Array.from({ length: 24 }, () => preKey.consumeKyberPreKeyById(keyId))
+            )
+            assert.equal(results.filter((result) => result !== null).length, 1)
+            assert.equal(await preKey.getKyberPreKeyById(keyId), null)
+        }
+
+        const reusable = await Promise.all(
+            Array.from({ length: 8 }, () => preKey.consumeKyberPreKeyById(3))
+        )
+        assert.equal(reusable.filter((result) => result?.keyId === 3).length, 8)
+        assert.equal((await preKey.getKyberPreKeyById(3))?.keyId, 3)
+
+        await preKey.clear()
     })
 })

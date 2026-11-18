@@ -1,6 +1,9 @@
 import { TEXT_ENCODER } from '@util/bytes'
 
 export const SIGNAL_VERSION = 3
+export const SIGNAL_PQXDH_VERSION = 4
+export const SIGNAL_KYBER_PREKEY_ID_BORDER = 16_777_215
+export const SIGNAL_PQ_SESSION_SERVER = 'lid_pq'
 export const SIGNAL_GROUP_VERSION = 3
 export const SIGNAL_MAC_SIZE = 8
 export const MAX_PREV_SESSIONS = 40
@@ -13,5 +16,8 @@ export const WHISPER_GROUP_INFO: Readonly<Uint8Array> = TEXT_ENCODER.encode('Whi
 export const WHISPER_MESSAGE_KEYS_INFO: Readonly<Uint8Array> =
     TEXT_ENCODER.encode('WhisperMessageKeys')
 export const WHISPER_TEXT_INFO: Readonly<Uint8Array> = TEXT_ENCODER.encode('WhisperText')
+export const WHISPER_TEXT_PQXDH_INFO: Readonly<Uint8Array> = TEXT_ENCODER.encode(
+    'WhisperText_X25519_SHA-256_CRYSTALS-KYBER-1024'
+)
 export const WHISPER_RATCHET_INFO: Readonly<Uint8Array> = TEXT_ENCODER.encode('WhisperRatchet')
 export const SIGNAL_PREFIX: Readonly<Uint8Array> = new Uint8Array(32).fill(0xff)

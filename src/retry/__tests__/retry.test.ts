@@ -609,3 +609,87 @@ test('retry replay service handles opaque replay compatibility checks', async ()
     )
     assert.equal(sendNodeCalls.length, 1)
 })
+
+test('retry receipt carries the Kyber key of the requester through build and parse', () => {
+    const kyberKey = {
+        id: 4242,
+        publicKey: new Uint8Array(1568).fill(5),
+        signature: new Uint8Array(64).fill(6)
+    }
+    const node = buildRetryReceiptNode({
+        stanzaId: 'stanza-pq',
+        to: 'me@s.whatsapp.net',
+        originalMsgId: 'm1',
+        retryCount: 2,
+        t: '100',
+        registrationId: 321,
+        keys: {
+            identity: new Uint8Array(32).fill(1),
+            key: { id: 9, publicKey: new Uint8Array(32).fill(2) },
+            skey: {
+                id: 10,
+                publicKey: new Uint8Array(32).fill(3),
+                signature: new Uint8Array(64).fill(4)
+            },
+            kyberKey,
+            deviceIdentity: new Uint8Array([7])
+        }
+    })
+
+    const keysNode = (node.content as BinaryNode[]).find((child) => child.tag === 'keys')!
+    assert.deepEqual(
+        (keysNode.content as BinaryNode[]).map((child) => child.tag),
+        ['type', 'identity', 'skey', 'key', 'pqkey', 'device-identity']
+    )
+
+    const parsed = parseRetryReceiptRequest(
+        { ...node, attrs: { ...node.attrs, from: 'peer@lid' } },
+        { expectedToJids: ['me@s.whatsapp.net'] }
+    )
+    assert.deepEqual(parsed?.keyBundle?.kyberKey, kyberKey)
+})
+
+test('retry receipt parser accepts the legacy pq tag and ignores a malformed Kyber key', () => {
+    const buildWith = (pqNode: BinaryNode): BinaryNode => {
+        const node = buildRetryReceiptNode({
+            stanzaId: 'stanza-pq',
+            to: 'me@s.whatsapp.net',
+            originalMsgId: 'm1',
+            retryCount: 2,
+            t: '100',
+            registrationId: 321,
+            keys: {
+                identity: new Uint8Array(32).fill(1),
+                key: { id: 9, publicKey: new Uint8Array(32).fill(2) },
+                skey: {
+                    id: 10,
+                    publicKey: new Uint8Array(32).fill(3),
+                    signature: new Uint8Array(64).fill(4)
+                }
+            }
+        })
+        const content = (node.content as BinaryNode[]).map((child) =>
+            child.tag === 'keys'
+                ? { ...child, content: [...(child.content as BinaryNode[]), pqNode] }
+                : child
+        )
+        return { ...node, attrs: { ...node.attrs, from: 'peer@lid' }, content }
+    }
+    const pqNode = (tag: string, valueLength: number): BinaryNode => ({
+        tag,
+        attrs: {},
+        content: [
+            { tag: 'id', attrs: {}, content: new Uint8Array([0, 0, 1]) },
+            { tag: 'value', attrs: {}, content: new Uint8Array(valueLength).fill(1) },
+            { tag: 'signature', attrs: {}, content: new Uint8Array(64).fill(2) }
+        ]
+    })
+
+    assert.equal(
+        parseRetryReceiptRequest(buildWith(pqNode('pq', 1568)))?.keyBundle?.kyberKey?.id,
+        1
+    )
+    const malformed = parseRetryReceiptRequest(buildWith(pqNode('pqkey', 10)))
+    assert.ok(malformed?.keyBundle)
+    assert.equal(malformed.keyBundle.kyberKey, undefined)
+})

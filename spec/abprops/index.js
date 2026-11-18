@@ -1248,6 +1248,13 @@ const WA_ABPROPS = Object.freeze({
     poll_result_snapshot_polltype_envelope_enabled: Object.freeze({ code: 12258, type: "bool", defaultValue: false, debugDefaultValue: true }),
     poll_tc_receiving_enabled: Object.freeze({ code: 31592, type: "bool", defaultValue: false, debugDefaultValue: false }),
     poll_tc_sending_enabled: Object.freeze({ code: 31593, type: "bool", defaultValue: false, debugDefaultValue: false }),
+    pq_1on1_message_enabled: Object.freeze({ code: 24160, type: "bool", defaultValue: false, debugDefaultValue: false }),
+    pq_1on1_messaging_killswitch: Object.freeze({ code: 35210, type: "bool", defaultValue: false, debugDefaultValue: false }),
+    pq_batch_upload_size: Object.freeze({ code: 21201, type: "int", defaultValue: 10, debugDefaultValue: 10 }),
+    pq_keys_upload: Object.freeze({ code: 21198, type: "bool", defaultValue: false, debugDefaultValue: false }),
+    pq_max_keys_on_server: Object.freeze({ code: 21200, type: "int", defaultValue: 200, debugDefaultValue: 200 }),
+    pq_session_upgrade_max_devices_per_period: Object.freeze({ code: 35305, type: "int", defaultValue: 0, debugDefaultValue: 0 }),
+    pq_session_upgrade_period_days: Object.freeze({ code: 35744, type: "int", defaultValue: 0, debugDefaultValue: 0 }),
     premium_blue_enabled: Object.freeze({ code: 5318, type: "bool", defaultValue: false, debugDefaultValue: false }),
     premium_broadcast_smb_capping_enabled: Object.freeze({ code: 13808, type: "bool", defaultValue: false, debugDefaultValue: true }),
     premium_msg_bb_campaign_sync_enabled: Object.freeze({ code: 29650, type: "bool", defaultValue: false, debugDefaultValue: false }),
@@ -3211,6 +3218,9 @@ const WA_ABPROPS_BY_CODE = Object.freeze({
     21139: "ai_rewrite_languages_and_tones_config",
     21156: "chatlist_prevent_autoread",
     21184: "enable_sharing_files_from_web_windows_hybrid",
+    21198: "pq_keys_upload",
+    21200: "pq_max_keys_on_server",
+    21201: "pq_batch_upload_size",
     21235: "paa_support_for_disabled_epehemerality",
     21250: "web_navigation_bar_updates_tab",
     21261: "group_history_settings",
@@ -3376,6 +3386,7 @@ const WA_ABPROPS_BY_CODE = Object.freeze({
     24114: "biz_ai_agent_3p_store_links_enabled",
     24133: "lists_chat_list_row_pill_enabled",
     24147: "web_history_sync_worker_enabled",
+    24160: "pq_1on1_message_enabled",
     24161: "bug_reporting_using_graphql",
     24173: "wavoip_ml_transport_download_versions",
     24174: "wavoip_ml_nadl_model_download_versions",
@@ -4331,7 +4342,10 @@ const WA_ABPROPS_BY_CODE = Object.freeze({
     34047: "functional_emoji_text_enabled",
     34062: "br_consumer_delete_payment_info_web_enabled",
     34081: "ai_chat_threads_export_by_threads_enabled",
-    34093: "enable_join_ongoing_call_refactor"
+    34093: "enable_join_ongoing_call_refactor",
+    35210: "pq_1on1_messaging_killswitch",
+    35305: "pq_session_upgrade_max_devices_per_period",
+    35744: "pq_session_upgrade_period_days"
 })
 
 const WA_GROUP_ABPROPS_BY_CODE = Object.freeze({

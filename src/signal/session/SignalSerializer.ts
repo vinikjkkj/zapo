@@ -1,6 +1,6 @@
 import { readVersionedContent, toSerializedPubKey } from '@crypto'
 import { proto } from '@proto'
-import { SIGNAL_MAC_SIZE, SIGNAL_VERSION } from '@signal/constants'
+import { SIGNAL_MAC_SIZE, SIGNAL_PQXDH_VERSION, SIGNAL_VERSION } from '@signal/constants'
 import type {
     ParsedPreKeySignalMessage,
     ParsedSignalMessage,
@@ -11,7 +11,12 @@ import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 
 export function deserializeMsg(versionContentMac: Uint8Array): ParsedSignalMessage {
-    const content = readVersionedContent(versionContentMac, SIGNAL_VERSION, SIGNAL_MAC_SIZE)
+    const content = readVersionedContent(
+        versionContentMac,
+        SIGNAL_VERSION,
+        SIGNAL_MAC_SIZE,
+        SIGNAL_PQXDH_VERSION
+    )
     const parsed = proto.SignalMessage.decode(content)
     if (
         parsed.ratchetKey === null ||
@@ -32,7 +37,7 @@ export function deserializeMsg(versionContentMac: Uint8Array): ParsedSignalMessa
 }
 
 export function deserializePkMsg(versionContent: Uint8Array): ParsedPreKeySignalMessage {
-    const content = readVersionedContent(versionContent, SIGNAL_VERSION, 0)
+    const content = readVersionedContent(versionContent, SIGNAL_VERSION, 0, SIGNAL_PQXDH_VERSION)
     const parsed = proto.PreKeySignalMessage.decode(content)
     if (
         parsed.registrationId === null ||
@@ -58,7 +63,9 @@ export function deserializePkMsg(versionContent: Uint8Array): ParsedPreKeySignal
         },
         sessionBaseKey: toSerializedPubKey(parsed.baseKey),
         localSignedPreKeyId: parsed.signedPreKeyId,
-        localOneTimeKeyId: parsed.preKeyId ?? null
+        localOneTimeKeyId: parsed.preKeyId ?? null,
+        localKyberPreKeyId: parsed.kyberPreKeyId ?? null,
+        kemCiphertext: parsed.kyberCiphertext ?? null
     }
 }
 

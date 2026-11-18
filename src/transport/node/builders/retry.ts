@@ -58,6 +58,29 @@ function buildRetryKeysNode(keys: WaRetryKeyBundle): BinaryNode {
             ]
         })
     }
+    if (keys.kyberKey) {
+        content.push({
+            tag: WA_NODE_TAGS.PQKEY,
+            attrs: {},
+            content: [
+                {
+                    tag: WA_NODE_TAGS.ID,
+                    attrs: {},
+                    content: intToBytes(3, keys.kyberKey.id)
+                },
+                {
+                    tag: WA_NODE_TAGS.VALUE,
+                    attrs: {},
+                    content: keys.kyberKey.publicKey
+                },
+                {
+                    tag: WA_NODE_TAGS.SIGNATURE,
+                    attrs: {},
+                    content: keys.kyberKey.signature
+                }
+            ]
+        })
+    }
     if (keys.deviceIdentity) {
         content.push({
             tag: WA_NODE_TAGS.DEVICE_IDENTITY,

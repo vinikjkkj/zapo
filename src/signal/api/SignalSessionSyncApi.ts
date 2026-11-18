@@ -84,11 +84,14 @@ export class SignalSessionSyncApi {
 
     /**
      * Batched key-bundle fetch. Returns one entry per JID – either a bundle
-     * (success) or an error envelope. Duplicate JIDs are coalesced.
+     * (success) or an error envelope. Duplicate JIDs are coalesced. With
+     * `options.pqSupport` the request asks for post-quantum keys too, so a
+     * device that has one returns it in `bundle.kyberKey`.
      */
     public async fetchKeyBundles(
         targets: readonly { readonly jid: string; readonly reasonIdentity?: boolean }[],
-        timeoutMs = this.defaultTimeoutMs
+        timeoutMs = this.defaultTimeoutMs,
+        options: { readonly pqSupport?: boolean } = {}
     ): Promise<readonly SignalSessionKeyBundleResult[]> {
         if (targets.length === 0) {
             return []
@@ -141,7 +144,7 @@ export class SignalSessionSyncApi {
                 content: [
                     {
                         tag: WA_NODE_TAGS.KEY,
-                        attrs: {},
+                        attrs: options.pqSupport === true ? { pqsupport: 'true' } : {},
                         content: userNodes
                     }
                 ]
@@ -243,7 +246,8 @@ export class SignalSessionSyncApi {
                 regId,
                 identity: parsed.identity,
                 signedKey: parsed.signedKey,
-                ...(parsed.oneTimeKey ? { oneTimeKey: parsed.oneTimeKey } : {})
+                ...(parsed.oneTimeKey ? { oneTimeKey: parsed.oneTimeKey } : {}),
+                ...(parsed.kyberKey ? { kyberKey: parsed.kyberKey } : {})
             },
             ...(parsed.deviceIdentity ? { deviceIdentity: parsed.deviceIdentity } : {})
         }

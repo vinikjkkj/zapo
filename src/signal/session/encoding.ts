@@ -24,7 +24,7 @@ export function encodeSignalSessionSnapshot(
     session: SignalSessionSnapshot
 ): Proto.ISessionStructure {
     return {
-        sessionVersion: 3,
+        sessionVersion: session.version ?? 3,
         localRegistrationId: session.local.regId,
         localIdentityPublic: session.local.pubKey,
         remoteRegistrationId: session.remote.regId,
@@ -37,7 +37,13 @@ export function encodeSignalSessionSnapshot(
             ? {
                   preKeyId: session.initialExchangeInfo.remoteOneTimeId ?? undefined,
                   signedPreKeyId: session.initialExchangeInfo.remoteSignedId,
-                  baseKey: session.initialExchangeInfo.localOneTimePubKey
+                  baseKey: session.initialExchangeInfo.localOneTimePubKey,
+                  ...(typeof session.initialExchangeInfo.kyberPreKeyId === 'number'
+                      ? {
+                            kyberPreKeyId: session.initialExchangeInfo.kyberPreKeyId,
+                            kyberCiphertext: session.initialExchangeInfo.kemCiphertext ?? undefined
+                        }
+                      : {})
               }
             : undefined,
         aliceBaseKey: session.aliceBaseKey ?? undefined
@@ -217,12 +223,25 @@ export function decodeSignalSessionSnapshot(
                       pendingPreKey.signedPreKeyId,
                       `${field}.pendingPreKey.signedPreKeyId`
                   ),
-                  localOneTimePubKey: localOneTimePubKey!
+                  localOneTimePubKey: localOneTimePubKey!,
+                  ...(typeof pendingPreKey.kyberPreKeyId === 'number'
+                      ? {
+                            kyberPreKeyId: asNumber(
+                                pendingPreKey.kyberPreKeyId,
+                                `${field}.pendingPreKey.kyberPreKeyId`
+                            ),
+                            kemCiphertext: asBytes(
+                                pendingPreKey.kyberCiphertext,
+                                `${field}.pendingPreKey.kyberCiphertext`
+                            )
+                        }
+                      : {})
               }
             : null,
         prevSendChainHighestIndex:
             asOptionalNumber(session.previousCounter, `${field}.previousCounter`) ?? 0,
-        aliceBaseKey
+        aliceBaseKey,
+        ...(session.sessionVersion === 4 ? { version: 4 } : {})
     }
 }
 

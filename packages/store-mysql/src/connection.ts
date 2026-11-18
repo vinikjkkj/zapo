@@ -402,6 +402,25 @@ const MIGRATIONS: readonly Migration[] = [
             ALTER TABLE \`__PREFIX__mailbox_contacts\`
                 ADD COLUMN username VARCHAR(255)
         `
+    },
+    {
+        name: '0022_signal_kyber_prekey_schema',
+        domain: 'signal',
+        sql: `
+            CREATE TABLE IF NOT EXISTS \`__PREFIX__signal_kyber_prekey\` (
+                session_id VARCHAR(255) NOT NULL,
+                key_id BIGINT NOT NULL,
+                pub_key LONGBLOB NOT NULL,
+                priv_key LONGBLOB NOT NULL,
+                signature LONGBLOB NOT NULL,
+                last_resort TINYINT(1) NOT NULL DEFAULT 0,
+                PRIMARY KEY (session_id, key_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+            ALTER TABLE \`__PREFIX__signal_meta\`
+                ADD COLUMN next_kyber_prekey_id BIGINT NOT NULL DEFAULT 1,
+                ADD COLUMN pq_migrated TINYINT(1) NOT NULL DEFAULT 0
+        `
     }
 ]
 

@@ -28,6 +28,7 @@ export type WaSqliteTableName =
     | 'signal_registration'
     | 'signal_signed_prekey'
     | 'signal_prekey'
+    | 'signal_kyber_prekey'
     | 'signal_session'
     | 'signal_identity'
     | 'sender_keys'

@@ -7,12 +7,16 @@ import test from 'node:test'
 import {
     WaContactMemoryStore,
     WaMessageMemoryStore,
+    type WaPqPreKeyStore,
+    WaPreKeyMemoryStore,
+    type WaPreKeyStore,
     WaPrivacyTokenMemoryStore,
     WaThreadMemoryStore
 } from 'zapo-js/store'
 
 import { WaContactSqliteStore } from '../contact.store'
 import { WaMessageSqliteStore } from '../message.store'
+import { WaPreKeySqliteStore } from '../pre-key.store'
 import { WaPrivacyTokenSqliteStore } from '../privacy-token.store'
 import { WaThreadSqliteStore } from '../thread.store'
 
@@ -261,6 +265,93 @@ async function runPrivacyTokenStoreContract(
 
         await store.clear()
         assert.equal(await store.getByJid('5511@s.whatsapp.net'), null)
+    } finally {
+        await store.destroy?.()
+    }
+}
+
+test('kyber prekey contract parity between memory and sqlite providers', async () => {
+    await runKyberPreKeyContract(async () => new WaPreKeyMemoryStore())
+
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-kyber-contract-'))
+    try {
+        await runKyberPreKeyContract(
+            async () =>
+                new WaPreKeySqliteStore({
+                    path: join(dir, 'state.sqlite'),
+                    sessionId: 'session-kyber',
+                    driver: TEST_SQLITE_DRIVER
+                })
+        )
+        // another session on the same database keeps its own counter, keys and flag
+        const other = new WaPreKeySqliteStore({
+            path: join(dir, 'state.sqlite'),
+            sessionId: 'session-other',
+            driver: TEST_SQLITE_DRIVER
+        })
+        try {
+            assert.equal(await other.reserveKyberPreKeyIds(1), 1)
+            assert.equal(await other.getPqMigrated(), false)
+            assert.equal(await other.getKyberPreKeyById(1), null)
+        } finally {
+            await other.destroy?.()
+        }
+    } finally {
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+function kyberKey(keyId: number, lastResort: boolean) {
+    return {
+        keyId,
+        keyPair: {
+            pubKey: new Uint8Array(1568).fill(keyId & 0xff),
+            privKey: new Uint8Array(3266).fill(7)
+        },
+        signature: new Uint8Array(64).fill(3),
+        lastResort
+    }
+}
+
+async function runKyberPreKeyContract(
+    create: () => Promise<WaPreKeyStore & WaPqPreKeyStore & Destroyable>
+) {
+    const store = await create()
+    try {
+        assert.equal(await store.reserveKyberPreKeyIds(201), 1)
+        assert.equal(await store.reserveKyberPreKeyIds(10), 202)
+        assert.equal(await store.reserveKyberPreKeyIds(16_777_215 - 212), 212)
+        assert.equal(await store.reserveKyberPreKeyIds(2), 0)
+        assert.equal(await store.reserveKyberPreKeyIds(1), 2)
+
+        assert.equal(await store.getLatestKyberLastResortKey(), null)
+        await store.putKyberPreKeys([kyberKey(5, true), kyberKey(9, true), kyberKey(7, false)])
+        assert.deepEqual(await store.getKyberPreKeyById(7), kyberKey(7, false))
+        assert.deepEqual(await store.getKyberPreKeyById(9), kyberKey(9, true))
+        assert.equal(await store.getKyberPreKeyById(8), null)
+        assert.equal((await store.getLatestKyberLastResortKey())?.keyId, 9)
+
+        // a one-time key goes with its first use, a last-resort key stays
+        assert.deepEqual(await store.consumeKyberPreKeyById(7), kyberKey(7, false))
+        assert.equal(await store.getKyberPreKeyById(7), null)
+        assert.deepEqual(await store.consumeKyberPreKeyById(9), kyberKey(9, true))
+        assert.deepEqual(await store.getKyberPreKeyById(9), kyberKey(9, true))
+        assert.equal(await store.consumeKyberPreKeyById(404), null)
+
+        await store.removeKyberPreKeys([9, 404])
+        await store.removeKyberPreKeys([])
+        assert.equal(await store.getKyberPreKeyById(9), null)
+        assert.equal((await store.getLatestKyberLastResortKey())?.keyId, 5)
+
+        assert.equal(await store.getPqMigrated(), false)
+        await store.setPqMigrated(true)
+        assert.equal(await store.getPqMigrated(), true)
+
+        await store.clear()
+        assert.equal(await store.getKyberPreKeyById(5), null)
+        assert.equal(await store.getLatestKyberLastResortKey(), null)
+        assert.equal(await store.getPqMigrated(), false)
+        assert.equal(await store.reserveKyberPreKeyIds(1), 1)
     } finally {
         await store.destroy?.()
     }

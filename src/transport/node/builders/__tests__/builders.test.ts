@@ -70,6 +70,8 @@ import {
     buildGetCountryCodeRequestNode
 } from '@transport/node/builders/pairing'
 import {
+    buildKyberPreKeyAddIq,
+    buildKyberPreKeySetIq,
     buildMissingPreKeysFetchIq,
     buildPreKeyUploadIq,
     buildSignedPreKeyRotateIq
@@ -2175,4 +2177,114 @@ test('disallowed-list entries prefer the username identifier under lid addressin
         action: 'remove',
         jid: '88881111@lid'
     })
+})
+
+function kyberKeyRecord(keyId: number, lastResort: boolean) {
+    return {
+        keyId,
+        keyPair: {
+            pubKey: new Uint8Array(1568).fill(keyId),
+            privKey: new Uint8Array(3168).fill(2)
+        },
+        signature: new Uint8Array(64).fill(keyId + 100),
+        lastResort
+    }
+}
+
+function expectedKyberKeyNode(tag: string, keyId: number): BinaryNode {
+    return {
+        tag,
+        attrs: {},
+        content: [
+            { tag: 'id', attrs: {}, content: new Uint8Array([0, 0, keyId]) },
+            { tag: 'value', attrs: {}, content: new Uint8Array(1568).fill(keyId) },
+            { tag: 'signature', attrs: {}, content: new Uint8Array(64).fill(keyId + 100) }
+        ]
+    }
+}
+
+test('buildKyberPreKeySetIq sends the last-resort key first, then the pq_list', () => {
+    const iq = buildKyberPreKeySetIq(
+        [kyberKeyRecord(1, false), kyberKeyRecord(2, false)],
+        kyberKeyRecord(3, true)
+    )
+
+    assert.deepEqual(iq, {
+        tag: 'iq',
+        attrs: { to: 's.whatsapp.net', type: 'set', xmlns: 'encrypt' },
+        content: [
+            expectedKyberKeyNode('pq_last_resort_key', 3),
+            {
+                tag: 'pq_list',
+                attrs: {},
+                content: [expectedKyberKeyNode('key', 1), expectedKyberKeyNode('key', 2)]
+            }
+        ]
+    })
+})
+
+test('buildKyberPreKeyAddIq sends op add before the pq_list and no last-resort key', () => {
+    const iq = buildKyberPreKeyAddIq([kyberKeyRecord(4, false)])
+
+    assert.deepEqual(iq, {
+        tag: 'iq',
+        attrs: { to: 's.whatsapp.net', type: 'set', xmlns: 'encrypt' },
+        content: [
+            { tag: 'op', attrs: { mode: 'add' } },
+            { tag: 'pq_list', attrs: {}, content: [expectedKyberKeyNode('key', 4)] }
+        ]
+    })
+})
+
+test('buildKyberPreKeySetIq writes a 3-byte big-endian id', () => {
+    const iq = buildKyberPreKeySetIq([], kyberKeyRecord(0x010203 & 0xff, true))
+    const lastResort = (iq.content as BinaryNode[])[0].content as BinaryNode[]
+    assert.deepEqual(lastResort[0].content, new Uint8Array([0, 0, 3]))
+
+    const high = buildKyberPreKeyAddIq([{ ...kyberKeyRecord(1, false), keyId: 0x010203 }])
+    const key = ((high.content as BinaryNode[])[1].content as BinaryNode[])[0]
+    assert.deepEqual((key.content as BinaryNode[])[0].content, new Uint8Array([1, 2, 3]))
+})
+
+test('buildMissingPreKeysFetchIq marks key_fetch pqsupport only on request', () => {
+    const targets = [{ userJid: '1@lid', devices: [{ deviceId: 0, registrationId: 7 }] }]
+
+    const plain = buildMissingPreKeysFetchIq(targets)
+    assert.deepEqual((plain.content as BinaryNode[])[0].attrs, {})
+
+    const pq = buildMissingPreKeysFetchIq(targets, { pqSupport: true })
+    assert.deepEqual((pq.content as BinaryNode[])[0].attrs, { pqsupport: 'true' })
+})
+
+test('direct fanout enc carries session_type pq only for a version 4 ciphertext', () => {
+    const node = buildDirectMessageFanoutNode({
+        to: '1@lid',
+        type: 'text',
+        id: 'M1',
+        participants: [
+            { jid: '1:0@lid', encType: 'pkmsg', ciphertext: new Uint8Array([0x44, 1, 2]) },
+            { jid: '1:1@lid', encType: 'msg', ciphertext: new Uint8Array([0x33, 1, 2]) },
+            { jid: '1:2@lid', encType: 'msg', ciphertext: new Uint8Array([0x44, 9]) }
+        ]
+    })
+
+    const participants = (node.content as BinaryNode[])[0].content as BinaryNode[]
+    const encAttrs = participants.map((to) => (to.content as BinaryNode[])[0].attrs)
+    assert.deepEqual(encAttrs, [
+        { v: '2', type: 'pkmsg', session_type: 'pq' },
+        { v: '2', type: 'msg' },
+        { v: '2', type: 'msg', session_type: 'pq' }
+    ])
+})
+
+test('group sender key enc never carries session_type', () => {
+    const node = buildGroupSenderKeyMessageNode({
+        to: '1@g.us',
+        type: 'text',
+        id: 'M1',
+        participants: [],
+        groupCiphertext: new Uint8Array([0x44, 1])
+    })
+    const enc = (node.content as BinaryNode[]).find((child) => child.tag === 'enc')
+    assert.deepEqual(enc?.attrs, { v: '2', type: 'skmsg' })
 })

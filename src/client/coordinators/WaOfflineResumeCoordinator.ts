@@ -41,6 +41,7 @@ export class WaOfflineResumeCoordinator {
     private lastBatchRequestMs: number
     private batchTimeout: ReturnType<typeof setTimeout> | null
     private stanzaTimeout: ReturnType<typeof setTimeout> | null
+    private completionWaiters: (() => void)[]
 
     public constructor(options: WaOfflineResumeCoordinatorOptions) {
         this.logger = options.logger
@@ -54,6 +55,20 @@ export class WaOfflineResumeCoordinator {
         this.lastBatchRequestMs = 0
         this.batchTimeout = null
         this.stanzaTimeout = null
+        this.completionWaiters = []
+    }
+
+    /**
+     * Settles once offline stanzas have been delivered. Resolves at once when
+     * no resume is running; a `reset` releases the waiters too.
+     */
+    public waitForCompletion(): Promise<void> {
+        if (this.state !== WA_OFFLINE_RESUME_STATE.RESUMING) {
+            return Promise.resolve()
+        }
+        return new Promise((resolve) => {
+            this.completionWaiters.push(resolve)
+        })
     }
 
     public get isComplete(): boolean {
@@ -112,6 +127,15 @@ export class WaOfflineResumeCoordinator {
         this.batchRetries = 0
         this.resumeGeneration += 1
         this.lastBatchRequestMs = 0
+        this.releaseCompletionWaiters()
+    }
+
+    private releaseCompletionWaiters(): void {
+        const waiters = this.completionWaiters
+        this.completionWaiters = []
+        for (const resolve of waiters) {
+            resolve()
+        }
     }
 
     private completeResume(forced: boolean, serverStanzaCount?: number): void {
@@ -130,6 +154,7 @@ export class WaOfflineResumeCoordinator {
             remainingStanzas: this.pendingStanzas,
             forced
         })
+        this.releaseCompletionWaiters()
     }
 
     /**

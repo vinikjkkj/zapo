@@ -48,6 +48,7 @@ export interface DecryptOutcome {
         readonly newIdentity: Uint8Array | null
         readonly baseSession: SignalSessionRecord
         readonly usedPreKey: number | null
+        readonly usedKyberPreKeyId?: number | null
     } | null
 }
 
@@ -160,9 +161,15 @@ function deriveMsgKeyFromChainKey(
     }
 }
 
+/**
+ * Encrypts one message on `session`. `pq` lets a post-quantum session write its
+ * own version byte and the Kyber fields of the first pre-key message; without
+ * it the output is classic v3 whatever the session derived.
+ */
 export function encryptMsg(
     session: SignalSessionRecord,
-    plaintext: Uint8Array
+    plaintext: Uint8Array,
+    pq = false
 ): readonly [SignalSessionRecord, { type: 'msg' | 'pkmsg'; ciphertext: Uint8Array }] {
     const { nextChainKey, messageKey } = deriveMsgKey(
         session.sendChain.nextMsgIndex,
@@ -176,9 +183,10 @@ export function encryptMsg(
         previousCounter: session.prevSendChainHighestIndex,
         ciphertext
     }).finish()
+    const version = pq ? (session.version ?? SIGNAL_VERSION) : SIGNAL_VERSION
     const versionedLength = 1 + signalPayload.length
     const signalMessage = new Uint8Array(versionedLength + SIGNAL_MAC_SIZE)
-    signalMessage[0] = ((SIGNAL_VERSION << 4) | SIGNAL_VERSION) & 0xff
+    signalMessage[0] = ((version << 4) | version) & 0xff
     signalMessage.set(signalPayload, 1)
     const mac = hmacSha256Sign(messageKey.macKey, [
         session.local.pubKey,
@@ -196,10 +204,16 @@ export function encryptMsg(
             signedPreKeyId: session.initialExchangeInfo.remoteSignedId,
             baseKey: session.initialExchangeInfo.localOneTimePubKey,
             identityKey: session.local.pubKey,
-            message: signalMessage
+            message: signalMessage,
+            ...(pq && typeof session.initialExchangeInfo.kyberPreKeyId === 'number'
+                ? {
+                      kyberPreKeyId: session.initialExchangeInfo.kyberPreKeyId,
+                      kyberCiphertext: session.initialExchangeInfo.kemCiphertext ?? undefined
+                  }
+                : {})
         }).finish()
         type = 'pkmsg'
-        output = prependVersion(preKeyPayload, SIGNAL_VERSION)
+        output = prependVersion(preKeyPayload, version)
     }
 
     const updated = {

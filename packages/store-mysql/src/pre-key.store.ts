@@ -1,6 +1,6 @@
 import type { PoolConnection } from 'mysql2/promise'
-import type { PreKeyRecord } from 'zapo-js/signal'
-import type { WaPreKeyStore } from 'zapo-js/store'
+import type { KyberPreKeyRecord, PreKeyRecord } from 'zapo-js/signal'
+import type { WaPqPreKeyStore, WaPreKeyStore } from 'zapo-js/store'
 
 import { BaseMysqlStore } from './BaseMysqlStore'
 import { affectedRows, type MysqlRow, queryFirst, queryRows, safeLimit, toBytes } from './helpers'
@@ -9,7 +9,10 @@ import type { MysqlParam, WaMysqlStorageOptions } from './types'
 const BATCH_SIZE = 250
 const FIXED_IN_PLACEHOLDERS = Array.from({ length: BATCH_SIZE }, () => '?').join(', ')
 
-export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore {
+/** Kyber pre-key ids are 3 bytes on the wire; the id counter wraps just before 2^24. */
+const KYBER_PREKEY_ID_BORDER = 16_777_215
+
+export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore, WaPqPreKeyStore {
     public constructor(options: WaMysqlStorageOptions) {
         super(options, ['signal'])
     }
@@ -211,6 +214,158 @@ export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore 
         )
     }
 
+    // ── Kyber PreKeys (ML-KEM-1024) ───────────────────────────────────
+
+    public async putKyberPreKeys(records: readonly KyberPreKeyRecord[]): Promise<void> {
+        if (records.length === 0) return
+        await this.withTransaction(async (conn) => {
+            for (const record of records) {
+                await conn.execute(
+                    `INSERT INTO ${this.t('signal_kyber_prekey')} (
+                        session_id, key_id, pub_key, priv_key, signature, last_resort
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        pub_key = VALUES(pub_key),
+                        priv_key = VALUES(priv_key),
+                        signature = VALUES(signature),
+                        last_resort = VALUES(last_resort)`,
+                    [
+                        this.sessionId,
+                        record.keyId,
+                        record.keyPair.pubKey,
+                        record.keyPair.privKey,
+                        record.signature,
+                        record.lastResort === true ? 1 : 0
+                    ]
+                )
+            }
+        })
+    }
+
+    public async getKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
+        await this.ensureReady()
+        const row = queryFirst(
+            await this.pool.execute(
+                `SELECT key_id, pub_key, priv_key, signature, last_resort
+             FROM ${this.t('signal_kyber_prekey')}
+             WHERE session_id = ? AND key_id = ?`,
+                [this.sessionId, keyId]
+            )
+        )
+        if (!row) return null
+        return this.decodeKyberPreKeyRow(row)
+    }
+
+    public async consumeKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
+        return this.withTransaction(async (conn) => {
+            const row = queryFirst(
+                await conn.execute(
+                    `SELECT key_id, pub_key, priv_key, signature, last_resort
+                 FROM ${this.t('signal_kyber_prekey')}
+                 WHERE session_id = ? AND key_id = ?
+                 FOR UPDATE`,
+                    [this.sessionId, keyId]
+                )
+            )
+            if (!row) return null
+            const record = this.decodeKyberPreKeyRow(row)
+            if (record.lastResort !== true) {
+                await conn.execute(
+                    `DELETE FROM ${this.t('signal_kyber_prekey')}
+                     WHERE session_id = ? AND key_id = ?`,
+                    [this.sessionId, keyId]
+                )
+            }
+            return record
+        })
+    }
+
+    public async removeKyberPreKeys(keyIds: readonly number[]): Promise<void> {
+        if (keyIds.length === 0) return
+        const uniqueKeyIds = [...new Set(keyIds)]
+        await this.withTransaction(async (conn) => {
+            for (let start = 0; start < uniqueKeyIds.length; start += BATCH_SIZE) {
+                const batch = uniqueKeyIds.slice(start, start + BATCH_SIZE)
+                while (batch.length < BATCH_SIZE) batch.push(-1)
+                const params: MysqlParam[] = [this.sessionId, ...batch]
+                await conn.execute(
+                    `DELETE FROM ${this.t('signal_kyber_prekey')}
+                     WHERE session_id = ? AND key_id IN (${FIXED_IN_PLACEHOLDERS})`,
+                    params
+                )
+            }
+        })
+    }
+
+    public async getLatestKyberLastResortKey(): Promise<KyberPreKeyRecord | null> {
+        await this.ensureReady()
+        const row = queryFirst(
+            await this.pool.execute(
+                `SELECT key_id, pub_key, priv_key, signature, last_resort
+             FROM ${this.t('signal_kyber_prekey')}
+             WHERE session_id = ? AND last_resort = 1
+             ORDER BY key_id DESC
+             LIMIT 1`,
+                [this.sessionId]
+            )
+        )
+        if (!row) return null
+        return this.decodeKyberPreKeyRow(row)
+    }
+
+    public async reserveKyberPreKeyIds(count: number): Promise<number> {
+        if (!Number.isSafeInteger(count) || count <= 0) {
+            throw new Error(`invalid kyber prekey count: ${count}`)
+        }
+        return this.withTransaction(async (conn) => {
+            await this.ensureMetaRow(conn)
+            const row = queryFirst(
+                await conn.execute(
+                    `SELECT next_kyber_prekey_id
+                 FROM ${this.t('signal_meta')}
+                 WHERE session_id = ?
+                 FOR UPDATE`,
+                    [this.sessionId]
+                )
+            )
+            if (!row) throw new Error('signal meta row not found')
+            const first = Number(row.next_kyber_prekey_id)
+            await conn.execute(
+                `UPDATE ${this.t('signal_meta')}
+                 SET next_kyber_prekey_id = ?
+                 WHERE session_id = ?`,
+                [(first + count) % KYBER_PREKEY_ID_BORDER, this.sessionId]
+            )
+            return first
+        })
+    }
+
+    public async getPqMigrated(): Promise<boolean> {
+        return this.withTransaction(async (conn) => {
+            await this.ensureMetaRow(conn)
+            const row = queryFirst(
+                await conn.execute(
+                    `SELECT pq_migrated FROM ${this.t('signal_meta')} WHERE session_id = ?`,
+                    [this.sessionId]
+                )
+            )
+            if (!row) throw new Error('signal meta row not found')
+            return Number(row.pq_migrated) === 1
+        })
+    }
+
+    public async setPqMigrated(value: boolean): Promise<void> {
+        await this.withTransaction(async (conn) => {
+            await this.ensureMetaRow(conn)
+            await conn.execute(
+                `UPDATE ${this.t('signal_meta')}
+                 SET pq_migrated = ?
+                 WHERE session_id = ?`,
+                [value ? 1 : 0, this.sessionId]
+            )
+        })
+    }
+
     // ── Server State ──────────────────────────────────────────────────
 
     public async setServerHasPreKeys(value: boolean): Promise<void> {
@@ -238,8 +393,15 @@ export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore 
                 this.sessionId
             ])
             await conn.execute(
+                `DELETE FROM ${this.t('signal_kyber_prekey')} WHERE session_id = ?`,
+                [this.sessionId]
+            )
+            await conn.execute(
                 `UPDATE ${this.t('signal_meta')}
-                 SET server_has_prekeys = 0, next_prekey_id = 1
+                 SET server_has_prekeys = 0,
+                     next_prekey_id = 1,
+                     next_kyber_prekey_id = 1,
+                     pq_migrated = 0
                  WHERE session_id = ?`,
                 [this.sessionId]
             )
@@ -321,6 +483,18 @@ export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore 
                 privKey: toBytes(row.priv_key)
             },
             uploaded: row.uploaded !== null ? Number(row.uploaded) === 1 : undefined
+        }
+    }
+
+    private decodeKyberPreKeyRow(row: MysqlRow): KyberPreKeyRecord {
+        return {
+            keyId: Number(row.key_id),
+            keyPair: {
+                pubKey: toBytes(row.pub_key),
+                privKey: toBytes(row.priv_key)
+            },
+            signature: toBytes(row.signature),
+            lastResort: Number(row.last_resort) === 1
         }
     }
 }

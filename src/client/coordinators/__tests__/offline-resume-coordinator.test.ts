@@ -276,3 +276,37 @@ test('offline resume coordinator ignores a rejection from a torn-down resume', a
 
     coordinator.reset()
 })
+
+test('waitForCompletion resolves at once outside a resume and waits during one', async () => {
+    const coordinator = new WaOfflineResumeCoordinator({
+        logger: createNoopLogger(),
+        runtime: { sendNode: async () => undefined, emitOfflineResume: () => undefined }
+    })
+
+    await coordinator.waitForCompletion()
+
+    coordinator.handleOfflinePreview(3)
+    let released = false
+    const waiting = coordinator.waitForCompletion().then(() => {
+        released = true
+    })
+    await Promise.resolve()
+    assert.equal(released, false)
+
+    coordinator.handleOfflineComplete(3)
+    await waiting
+    assert.equal(released, true)
+})
+
+test('a reset releases whoever waits for the offline resume', async () => {
+    const coordinator = new WaOfflineResumeCoordinator({
+        logger: createNoopLogger(),
+        runtime: { sendNode: async () => undefined, emitOfflineResume: () => undefined }
+    })
+    coordinator.handleOfflinePreview(5)
+    const waiting = coordinator.waitForCompletion()
+
+    coordinator.reset()
+
+    await waiting
+})

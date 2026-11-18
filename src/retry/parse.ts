@@ -53,11 +53,12 @@ function parseRetryKeyBundle(node: BinaryNode | undefined): WaRetryKeyBundle | u
     if (!node) {
         return undefined
     }
-    const parsed = parseSignalKeyBundleFromNode(node, 'retry.keys')
+    const parsed = parseSignalKeyBundleFromNode(node, 'retry.keys', { pqLegacyAlias: true })
     return {
         identity: parsed.identity,
         ...(parsed.deviceIdentity ? { deviceIdentity: parsed.deviceIdentity } : {}),
         ...(parsed.oneTimeKey ? { key: parsed.oneTimeKey } : {}),
+        ...(parsed.kyberKey ? { kyberKey: parsed.kyberKey } : {}),
         skey: parsed.signedKey
     }
 }

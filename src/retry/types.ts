@@ -18,6 +18,8 @@ export interface WaRetryKeyBundle {
     readonly deviceIdentity?: Uint8Array
     readonly key?: WaRetryKey
     readonly skey: WaRetryKey
+    /** Post-quantum pre-key: the requester's last-resort Kyber key. */
+    readonly kyberKey?: Required<WaRetryKey>
 }
 
 export interface WaParsedRetryRequest {

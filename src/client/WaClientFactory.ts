@@ -124,6 +124,7 @@ import { SignalMissingPreKeysSyncApi } from '@signal/api/SignalMissingPreKeysSyn
 import { SignalRotateKeyApi } from '@signal/api/SignalRotateKeyApi'
 import { SignalSessionSyncApi } from '@signal/api/SignalSessionSyncApi'
 import { SenderKeyManager } from '@signal/group/SenderKeyManager'
+import { createSignalPqPolicy, deleteSessionScopes } from '@signal/session/pq-scope'
 import { createSignalSessionResolver, type SignalSessionResolver } from '@signal/session/resolver'
 import { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { WaStoredContactRecord } from '@store/contracts/contact.store'
@@ -430,6 +431,7 @@ function createPassiveTasksRuntime(input: {
     readonly receiptQueue: WaReceiptQueue
     readonly getCurrentCredentials: () => ReturnType<WaAuthClient['getCurrentCredentials']>
     readonly abPropsCoordinator: WaAbPropsCoordinator
+    readonly offlineResume: WaOfflineResumeCoordinator
     readonly markOnlineOnConnect: boolean
 }): ConstructorParameters<typeof WaPassiveTasksCoordinator>[0]['runtime'] {
     const {
@@ -439,6 +441,7 @@ function createPassiveTasksRuntime(input: {
         receiptQueue,
         getCurrentCredentials,
         abPropsCoordinator,
+        offlineResume,
         markOnlineOnConnect
     } = input
 
@@ -452,6 +455,9 @@ function createPassiveTasksRuntime(input: {
         requeueDanglingReceipt: (node) => receiptQueue.enqueue(node),
         shouldQueueDanglingReceipt: (node, error) => receiptQueue.shouldQueue(node, error),
         syncAbProps: () => abPropsCoordinator.sync(),
+        waitForAbPropsSync: () => abPropsCoordinator.waitForSync(),
+        getAbPropNumber: (name) => abPropsCoordinator.getConfigValue<number>(name),
+        waitForOfflineDeliveryEnd: () => offlineResume.waitForCompletion(),
         sendInitialPresence: async () => {
             const credentials = getCurrentCredentials()
             const name = credentials?.meDisplayName ?? undefined
@@ -562,6 +568,10 @@ export function buildWaClientDependencies(input: {
             abPropsCoordinator.getConfigValue('web_signal_future_messages_max'),
         skipSignatureVerification: options.dangerous?.disableSenderKeySignatureVerification
     })
+    const pqPolicy = createSignalPqPolicy(
+        (name) => abPropsCoordinator.getConfigValue<boolean>(name),
+        sessionStore.preKey
+    )
     const signalProtocol = new SignalProtocol(
         {
             signal: sessionStore.signal,
@@ -569,7 +579,8 @@ export function buildWaClientDependencies(input: {
             session: sessionStore.session,
             identity: sessionStore.identity
         },
-        logger
+        logger,
+        pqPolicy
     )
     const signalSystemQuery: WaClientBuildRuntime['query'] = (node, timeoutMs) =>
         runtime.query(node, timeoutMs, { useSystemId: true })
@@ -708,7 +719,8 @@ export function buildWaClientDependencies(input: {
         identityStore: sessionStore.identity,
         signalIdentitySync,
         signalSessionSync,
-        logger
+        logger,
+        pqPolicy
     })
     const fanoutResolver = createDeviceFanoutResolver({
         signalDeviceSync,
@@ -880,7 +892,8 @@ export function buildWaClientDependencies(input: {
                 .catch((err) => runtime.handleError(toError(err)))
         },
         isMobilePrimary,
-        getAbPropNumber: (name) => abPropsCoordinator.getConfigValue<number>(name)
+        getAbPropNumber: (name) => abPropsCoordinator.getConfigValue<number>(name),
+        pqPolicy
     })
 
     const botCoordinator = createBotCoordinator({
@@ -1186,9 +1199,28 @@ export function buildWaClientDependencies(input: {
             }
 
             const childTag = firstChild.tag
+            const hasCount = findNodeChild(node, 'count') !== undefined
+            const hasPqCount = !hasCount && findNodeChild(node, WA_NODE_TAGS.PQ_COUNT) !== undefined
+
+            // <pq_count value="N"/> – server post-quantum prekeys running low
+            if (hasPqCount) {
+                const ackNode = buildAckNode({
+                    kind: 'notification',
+                    node,
+                    includeType: false
+                })
+                await runtime.sendNode(ackNode)
+
+                await passiveTasks?.handlePqPreKeyLowNotification().catch((error) => {
+                    logger.warn('encrypt-pq-count: prekey replenish failed', {
+                        message: toError(error).message
+                    })
+                })
+                return true
+            }
 
             // <count value="N"/> – server prekeys running low
-            if (childTag === 'count') {
+            if (hasCount) {
                 const ackNode = buildAckNode({
                     kind: 'notification',
                     node,
@@ -1277,7 +1309,7 @@ export function buildWaClientDependencies(input: {
                     logger.info('identity-change: clearing session', {
                         jid: parsed.fromJid
                     })
-                    await sessionStore.session.deleteSession(address)
+                    await deleteSessionScopes(sessionStore.session, address)
 
                     const userJid = toUserJid(parsed.fromJid)
                     await trustedContactToken.reissueOnIdentityChange(userJid).catch((error) => {
@@ -1361,7 +1393,7 @@ export function buildWaClientDependencies(input: {
                         server: baseAddress.server,
                         device: device.deviceId
                     }
-                    await sessionStore.session.deleteSession(address).catch((error) => {
+                    await deleteSessionScopes(sessionStore.session, address).catch((error) => {
                         logger.warn('devices-notification: delete session failed', {
                             message: toError(error).message
                         })
@@ -1461,10 +1493,12 @@ export function buildWaClientDependencies(input: {
             receiptQueue,
             getCurrentCredentials,
             abPropsCoordinator,
+            offlineResume,
             markOnlineOnConnect: options.markOnlineOnConnect ?? false
         }),
         mobilePrimary: isMobilePrimary,
-        appStateSync
+        appStateSync,
+        pqPolicy
     })
 
     const lowLevelCoordinator = createLowLevelCoordinator({

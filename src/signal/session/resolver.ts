@@ -4,6 +4,11 @@ import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { normalizeDeviceJid, parseSignalAddressFromJid, signalAddressKey } from '@protocol/jid'
 import type { SignalIdentitySyncApi } from '@signal/api/SignalIdentitySyncApi'
 import type { SignalSessionSyncApi } from '@signal/api/SignalSessionSyncApi'
+import {
+    SIGNAL_PQ_DISABLED,
+    type SignalPqPolicy,
+    toPqSessionAddress
+} from '@signal/session/pq-scope'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress, SignalPreKeyBundle, SignalSessionRecord } from '@signal/types'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
@@ -40,8 +45,19 @@ export type SignalSessionResolver = {
      */
     ensureSessionsBatch(
         targetJids: readonly string[],
-        expectedIdentityByJid?: ReadonlyMap<string, Uint8Array>
+        expectedIdentityByJid?: ReadonlyMap<string, Uint8Array>,
+        options?: SignalEnsureSessionsBatchOptions
     ): Promise<readonly SignalResolvedSessionTarget[]>
+}
+
+export interface SignalEnsureSessionsBatchOptions {
+    /**
+     * 1:1 chat fanout: a device that already has a post-quantum session is
+     * resolved to it, and a missing session is requested with post-quantum
+     * support so a device offering a Kyber key gets one. Ignored unless the
+     * policy allows post-quantum 1:1 sessions.
+     */
+    readonly oneToOne?: boolean
 }
 
 /** Builds a {@link SignalSessionResolver} backed by the given Signal APIs and stores. */
@@ -52,6 +68,7 @@ export function createSignalSessionResolver(options: {
     readonly signalIdentitySync: SignalIdentitySyncApi
     readonly signalSessionSync: SignalSessionSyncApi
     readonly logger: Logger
+    readonly pqPolicy?: SignalPqPolicy
 }): SignalSessionResolver {
     const {
         signalProtocol,
@@ -61,6 +78,7 @@ export function createSignalSessionResolver(options: {
         signalSessionSync,
         logger
     } = options
+    const pqPolicy = options.pqPolicy ?? SIGNAL_PQ_DISABLED
     const dedup = new PromiseDedup()
 
     const ensureSessionInternal = async (
@@ -172,8 +190,10 @@ export function createSignalSessionResolver(options: {
 
     const ensureSessionsBatch = async (
         targetJids: readonly string[],
-        expectedIdentityByJid?: ReadonlyMap<string, Uint8Array>
+        expectedIdentityByJid?: ReadonlyMap<string, Uint8Array>,
+        batchOptions?: SignalEnsureSessionsBatchOptions
     ): Promise<readonly SignalResolvedSessionTarget[]> => {
+        const pqEnabled = batchOptions?.oneToOne === true && pqPolicy.isOneToOneEnabled()
         const seenTargetJids = new Set<string>()
         const normalizedTargetJids = new Array<string>(targetJids.length)
         const normalizedTargetAddresses = new Array<SignalAddress>(targetJids.length)
@@ -212,9 +232,38 @@ export function createSignalSessionResolver(options: {
             }
         }
 
-        const resolvedByIndex = (await sessionStore.getSessionsBatch(
-            normalizedTargetAddresses
-        )) as (SignalSessionRecord | null)[]
+        // The address a target's session lives at: the classic one, or the
+        // post-quantum twin when that session exists or is created below.
+        const sessionAddresses = normalizedTargetAddresses.slice()
+        const pqTwinIndexes: number[] = []
+        const pqTwinAddresses: SignalAddress[] = []
+        if (pqEnabled) {
+            for (let index = 0; index < normalizedTargetCount; index += 1) {
+                const twin = toPqSessionAddress(normalizedTargetAddresses[index])
+                if (twin) {
+                    pqTwinIndexes.push(index)
+                    pqTwinAddresses.push(twin)
+                }
+            }
+        }
+        const [classicSessions, pqSessions] = await Promise.all([
+            sessionStore.getSessionsBatch(normalizedTargetAddresses),
+            pqTwinAddresses.length > 0
+                ? sessionStore.getSessionsBatch(pqTwinAddresses)
+                : Promise.resolve([] as readonly (SignalSessionRecord | null)[])
+        ])
+        const resolvedByIndex = classicSessions.slice()
+        for (let i = 0; i < pqTwinIndexes.length; i += 1) {
+            const pqSession = pqSessions[i]
+            if (pqSession) {
+                resolvedByIndex[pqTwinIndexes[i]] = pqSession
+                sessionAddresses[pqTwinIndexes[i]] = pqTwinAddresses[i]
+            }
+        }
+        const pqTwinByIndex = new Map<number, SignalAddress>()
+        for (let i = 0; i < pqTwinIndexes.length; i += 1) {
+            pqTwinByIndex.set(pqTwinIndexes[i], pqTwinAddresses[i])
+        }
         const collectResolvedTargets = (): readonly SignalResolvedSessionTarget[] => {
             const resolvedTargets = new Array<SignalResolvedSessionTarget>(
                 normalizedTargetJids.length
@@ -227,7 +276,7 @@ export function createSignalSessionResolver(options: {
                 }
                 resolvedTargets[resolvedTargetCount] = {
                     jid: normalizedTargetJids[index],
-                    address: normalizedTargetAddresses[index],
+                    address: sessionAddresses[index],
                     session
                 }
                 resolvedTargetCount += 1
@@ -268,7 +317,9 @@ export function createSignalSessionResolver(options: {
 
         let batchResults: readonly unknown[]
         try {
-            batchResults = await signalSessionSync.fetchKeyBundles(batchRequest)
+            batchResults = await signalSessionSync.fetchKeyBundles(batchRequest, undefined, {
+                pqSupport: pqEnabled
+            })
         } catch (error) {
             logger.warn('signal batch key fetch failed', {
                 requested: missingIndices.length,
@@ -319,8 +370,11 @@ export function createSignalSessionResolver(options: {
                 })
                 throw new Error('identity mismatch')
             }
-            const targetAddress = normalizedTargetAddresses[targetIndex]
             const bundle = batchResult.bundle
+            const targetAddress =
+                (bundle.kyberKey ? pqTwinByIndex.get(targetIndex) : undefined) ??
+                normalizedTargetAddresses[targetIndex]
+            sessionAddresses[targetIndex] = targetAddress
             prepareTargetIndices[prepareCount] = targetIndex
             localIdentityPromise ??= signalProtocol.loadLocalIdentity()
             preparePromises[prepareCount] = localIdentityPromise
@@ -374,7 +428,7 @@ export function createSignalSessionResolver(options: {
                 continue
             }
             batchEntries.push({
-                address: normalizedTargetAddresses[targetIndex],
+                address: sessionAddresses[targetIndex],
                 session: result.value.session,
                 remoteIdentity: result.value.remoteIdentity
             })
@@ -413,7 +467,7 @@ export function createSignalSessionResolver(options: {
         }
         for (let i = 0; i < entryToTargetIndex.length; i += 1) {
             const targetIndex = entryToTargetIndex[i]
-            const addrKey = signalAddressKey(normalizedTargetAddresses[targetIndex])
+            const addrKey = signalAddressKey(sessionAddresses[targetIndex])
             const session = sessionByAddressKey.get(addrKey)
             if (session) {
                 resolvedByIndex[targetIndex] = session
@@ -430,7 +484,7 @@ export function createSignalSessionResolver(options: {
         if (fallbackIndices.length > 0) {
             const fallbackAddresses = new Array<SignalAddress>(fallbackIndices.length)
             for (let i = 0; i < fallbackIndices.length; i++) {
-                fallbackAddresses[i] = normalizedTargetAddresses[fallbackIndices[i]]
+                fallbackAddresses[i] = sessionAddresses[fallbackIndices[i]]
             }
             const fallbackSessions = await sessionStore.getSessionsBatch(fallbackAddresses)
             for (let i = 0; i < fallbackIndices.length; i++) {

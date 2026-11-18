@@ -516,3 +516,66 @@ test('memory signal stores report hits, writes, removals and clears to their ent
         'clear'
     ])
 })
+
+test('memory prekey store persists and consumes kyber prekeys', async () => {
+    const store = new WaPreKeyMemoryStore()
+    const oneTime = {
+        keyId: 1,
+        keyPair: { pubKey: new Uint8Array([1, 1]), privKey: new Uint8Array([2, 2]) },
+        signature: new Uint8Array([3, 3]),
+        lastResort: false
+    }
+    const lastResort = {
+        keyId: 2,
+        keyPair: { pubKey: new Uint8Array([4, 4]), privKey: new Uint8Array([5, 5]) },
+        signature: new Uint8Array([6, 6]),
+        lastResort: true
+    }
+    await store.putKyberPreKeys([oneTime, lastResort])
+    assert.deepEqual(await store.getKyberPreKeyById(1), oneTime)
+    assert.deepEqual(await store.getKyberPreKeyById(2), lastResort)
+
+    // one-time key is deleted on consume
+    assert.deepEqual(await store.consumeKyberPreKeyById(1), oneTime)
+    assert.equal(await store.getKyberPreKeyById(1), null)
+
+    // last-resort key is returned but kept
+    assert.deepEqual(await store.consumeKyberPreKeyById(2), lastResort)
+    assert.ok(await store.getKyberPreKeyById(2))
+    assert.equal(await store.consumeKyberPreKeyById(99), null)
+
+    await store.clear()
+    assert.equal(await store.getKyberPreKeyById(2), null)
+})
+
+test('memory prekey store tracks kyber ids, the last-resort key and the migrated flag', async () => {
+    const store = new WaPreKeyMemoryStore()
+    const key = (keyId: number, lastResort: boolean) => ({
+        keyId,
+        keyPair: { pubKey: new Uint8Array([keyId]), privKey: new Uint8Array([keyId]) },
+        signature: new Uint8Array([keyId]),
+        lastResort
+    })
+
+    assert.equal(await store.reserveKyberPreKeyIds(201), 1)
+    assert.equal(await store.reserveKyberPreKeyIds(10), 202)
+    await assert.rejects(() => store.reserveKyberPreKeyIds(0), /invalid kyber prekey count/)
+    // the counter wraps at 16777215
+    assert.equal(await store.reserveKyberPreKeyIds(16_777_215 - 212), 212)
+    assert.equal(await store.reserveKyberPreKeyIds(1), 0)
+
+    assert.equal(await store.getLatestKyberLastResortKey(), null)
+    await store.putKyberPreKeys([key(5, true), key(9, true), key(7, false)])
+    assert.equal((await store.getLatestKyberLastResortKey())?.keyId, 9)
+
+    await store.removeKyberPreKeys([9, 7, 1234])
+    assert.equal((await store.getLatestKyberLastResortKey())?.keyId, 5)
+    assert.equal(await store.getKyberPreKeyById(7), null)
+
+    assert.equal(await store.getPqMigrated(), false)
+    await store.setPqMigrated(true)
+    assert.equal(await store.getPqMigrated(), true)
+    await store.clear()
+    assert.equal(await store.getPqMigrated(), false)
+    assert.equal(await store.reserveKyberPreKeyIds(1), 1)
+})

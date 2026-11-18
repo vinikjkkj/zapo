@@ -1,10 +1,17 @@
-import { toSerializedPubKey } from '@crypto'
+import { toRawPubKey, toSerializedPubKey, xeddsaVerify } from '@crypto'
+import { isMlKemSupported, kemDecapsulate, kemEncapsulate } from '@crypto/kem/MlKem'
 import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
 import { StoreLock } from '@infra/perf/StoreLock'
 import { signalAddressKey } from '@protocol/jid'
 import { MAX_PREV_SESSIONS } from '@signal/constants'
 import { encodeSignalSessionSnapshot } from '@signal/session/encoding'
+import {
+    isPqSessionAddress,
+    SIGNAL_PQ_DISABLED,
+    type SignalPqPolicy,
+    toClassicSessionAddress
+} from '@signal/session/pq-scope'
 import {
     decryptMsg,
     decryptMsgFromSession,
@@ -33,10 +40,11 @@ import type {
     SignalSessionRecord
 } from '@signal/types'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
-import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
+import { hasPqPreKeyStore, type WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { uint8Equal } from '@util/bytes'
+import { toError } from '@util/primitives'
 
 function signalAddressLockKey(address: SignalAddress): string {
     return `signal:${signalAddressKey(address)}`
@@ -69,11 +77,17 @@ export class SignalProtocol {
     private readonly stores: SignalProtocolStores
     private readonly logger: Logger
     private readonly sessionMutationLock: StoreLock
+    private readonly pqPolicy: SignalPqPolicy
 
-    public constructor(stores: SignalProtocolStores, logger: Logger = new ConsoleLogger('info')) {
+    public constructor(
+        stores: SignalProtocolStores,
+        logger: Logger = new ConsoleLogger('info'),
+        pqPolicy: SignalPqPolicy = SIGNAL_PQ_DISABLED
+    ) {
         this.stores = stores
         this.logger = logger
         this.sessionMutationLock = new StoreLock()
+        this.pqPolicy = pqPolicy
     }
 
     /**
@@ -86,8 +100,10 @@ export class SignalProtocol {
     }
 
     /**
-     * Builds an outgoing Signal session against a remote prekey bundle. Set
-     * `options.reuseExisting` to skip the handshake when a session already
+     * Builds an outgoing Signal session against a remote prekey bundle. An
+     * address from `toPqSessionAddress` builds a post-quantum session and needs
+     * a bundle with a valid Kyber pre-key; any other address is classic X3DH.
+     * Set `options.reuseExisting` to skip the handshake when a session already
      * exists for the same remote identity. Set `options.knownAbsent` only
      * when the caller already proved (within the same logical step) that no
      * session exists; it skips the in-lock recheck and forces a new handshake.
@@ -108,13 +124,22 @@ export class SignalProtocol {
                     return existing
                 }
             }
-            const [local, localOneTimeBase] = await Promise.all([
+            const [local, localOneTimeBase, pqParams] = await Promise.all([
                 options.localIdentity ?? requireLocalIdentity(this.stores.signal),
-                generateSerializedKeyPair()
+                generateSerializedKeyPair(),
+                this.resolveOutgoingPqParams(address, remoteBundle)
             ])
-            const session = await initiateSessionOutgoing(local, remoteBundle, localOneTimeBase)
+            const session = await initiateSessionOutgoing(
+                local,
+                remoteBundle,
+                localOneTimeBase,
+                pqParams
+            )
             // Keep writes ordered: a stored session without matching remote identity causes false mismatch checks.
-            await this.stores.identity.setRemoteIdentity(address, session.remote.pubKey)
+            await this.stores.identity.setRemoteIdentity(
+                toClassicSessionAddress(address),
+                session.remote.pubKey
+            )
             await this.stores.session.setSession(address, session)
             return session
         })
@@ -150,11 +175,17 @@ export class SignalProtocol {
                     }
                 }
             }
-            const [local, localOneTimeBase] = await Promise.all([
+            const [local, localOneTimeBase, pqParams] = await Promise.all([
                 options.localIdentity ?? requireLocalIdentity(this.stores.signal),
-                generateSerializedKeyPair()
+                generateSerializedKeyPair(),
+                this.resolveOutgoingPqParams(address, remoteBundle)
             ])
-            const session = await initiateSessionOutgoing(local, remoteBundle, localOneTimeBase)
+            const session = await initiateSessionOutgoing(
+                local,
+                remoteBundle,
+                localOneTimeBase,
+                pqParams
+            )
             return {
                 session,
                 remoteIdentity: session.remote.pubKey,
@@ -210,7 +241,7 @@ export class SignalProtocol {
                     continue
                 }
                 identityUpdates.push({
-                    address: entry.address,
+                    address: toClassicSessionAddress(entry.address),
                     identityKey: entry.remoteIdentity
                 })
                 sessionUpdates.push({ address: entry.address, session: entry.session })
@@ -324,6 +355,7 @@ export class SignalProtocol {
                 readonly baseKey: Uint8Array | null
             }>(requests.length)
 
+            const pq = this.pqPolicy.isOneToOneEnabled()
             for (let index = 0; index < requests.length; index += 1) {
                 const request = requests[index]
                 const address = request.address
@@ -339,7 +371,7 @@ export class SignalProtocol {
                     throw new Error('identity mismatch')
                 }
 
-                const [updatedSession, encrypted] = encryptMsg(session, request.plaintext)
+                const [updatedSession, encrypted] = encryptMsg(session, request.plaintext, pq)
                 latestSessionByAddress.set(addressKey, updatedSession)
                 sessionUpdatesByAddress.set(addressKey, {
                     address,
@@ -347,7 +379,7 @@ export class SignalProtocol {
                 })
                 if (!uint8Equal(updatedSession.remote.pubKey, session.remote.pubKey)) {
                     identityUpdatesByAddress.set(addressKey, {
-                        address,
+                        address: toClassicSessionAddress(address),
                         identityKey: updatedSession.remote.pubKey
                     })
                 }
@@ -422,15 +454,102 @@ export class SignalProtocol {
                 !currentSession || !uint8Equal(currentSession.remote.pubKey, nextRemoteIdentity)
             // Keep writes ordered for consistency with resolver identity checks.
             if (identityChanged) {
-                await this.stores.identity.setRemoteIdentity(address, nextRemoteIdentity)
+                await this.stores.identity.setRemoteIdentity(
+                    toClassicSessionAddress(address),
+                    nextRemoteIdentity
+                )
             }
             await this.stores.session.setSession(address, outcome.updatedSession)
+            await this.consumeUsedPreKeys(outcome.newSessionInfo)
             return outcome.plaintext
         })
     }
 
+    /**
+     * Drops the one-time keys a new session was built from, only once that
+     * session is persisted so a failed write leaves them for the redelivery.
+     * A failed cleanup is logged: the message and its session are already safe.
+     */
+    private async consumeUsedPreKeys(info: DecryptOutcome['newSessionInfo']): Promise<void> {
+        if (!info) {
+            return
+        }
+        if (info.usedPreKey !== null && info.usedPreKey !== undefined) {
+            try {
+                await this.stores.preKey.consumePreKeyById(info.usedPreKey)
+            } catch (error) {
+                this.logger.warn('signal one-time prekey cleanup failed', {
+                    preKeyId: info.usedPreKey,
+                    message: toError(error).message
+                })
+            }
+        }
+        const preKeyStore = this.stores.preKey
+        if (
+            info.usedKyberPreKeyId !== null &&
+            info.usedKyberPreKeyId !== undefined &&
+            hasPqPreKeyStore(preKeyStore)
+        ) {
+            try {
+                await preKeyStore.consumeKyberPreKeyById(info.usedKyberPreKeyId)
+            } catch (error) {
+                this.logger.warn('signal kyber prekey cleanup failed', {
+                    kyberPreKeyId: info.usedKyberPreKeyId,
+                    message: toError(error).message
+                })
+            }
+        }
+    }
+
     private runWithAddressLock<T>(address: SignalAddress, task: () => Promise<T>): Promise<T> {
         return this.sessionMutationLock.run(signalAddressLockKey(address), task)
+    }
+
+    /**
+     * PQXDH initiator inputs for a post-quantum session address: checks the
+     * signed pre-key and the Kyber pre-key against the peer identity, then
+     * encapsulates. Returns `undefined` for a classic address; any other
+     * failure throws, so no session is created rather than a weaker one.
+     */
+    private async resolveOutgoingPqParams(
+        address: SignalAddress,
+        remoteBundle: SignalPreKeyBundle
+    ): Promise<
+        | {
+              readonly kemSharedSecret: Uint8Array
+              readonly kemCiphertext: Uint8Array
+              readonly kyberPreKeyId: number
+          }
+        | undefined
+    > {
+        if (!isPqSessionAddress(address)) {
+            return undefined
+        }
+        if (!isMlKemSupported()) {
+            throw new Error('signal pqxdh session requires ML-KEM runtime support')
+        }
+        const kyberKey = remoteBundle.kyberKey
+        if (!kyberKey) {
+            throw new Error('signal pqxdh session requires a kyber pre-key in the bundle')
+        }
+        const identity = toRawPubKey(remoteBundle.identity)
+        const [signedKeyValid, kyberKeyValid] = await Promise.all([
+            xeddsaVerify(
+                identity,
+                toSerializedPubKey(remoteBundle.signedKey.publicKey),
+                remoteBundle.signedKey.signature
+            ),
+            xeddsaVerify(identity, kyberKey.publicKey, kyberKey.signature)
+        ])
+        if (!signedKeyValid || !kyberKeyValid) {
+            throw new Error('signal pqxdh pre-key signature invalid')
+        }
+        const { ciphertext, sharedSecret } = kemEncapsulate(kyberKey.publicKey)
+        return {
+            kemSharedSecret: sharedSecret,
+            kemCiphertext: ciphertext,
+            kyberPreKeyId: kyberKey.id
+        }
     }
 
     private async decryptPkMsg(
@@ -454,6 +573,37 @@ export class SignalProtocol {
                 ? Promise.resolve(null)
                 : requirePreKey(this.stores.preKey, parsed.localOneTimeKeyId)
         ])
+        let pqSharedSecret: Uint8Array | null = null
+        let usedKyberPreKeyId: number | null = null
+        if (parsed.kemCiphertext && parsed.localKyberPreKeyId !== null) {
+            if (!isMlKemSupported()) {
+                throw new Error('signal pqxdh message requires ML-KEM runtime support')
+            }
+            const preKeyStore = this.stores.preKey
+            if (!hasPqPreKeyStore(preKeyStore)) {
+                throw new Error('signal pqxdh message requires a pre-key store with pq support')
+            }
+            const kyberPreKey = await preKeyStore.getKyberPreKeyById(parsed.localKyberPreKeyId)
+            if (kyberPreKey) {
+                try {
+                    pqSharedSecret = kemDecapsulate(
+                        kyberPreKey.keyPair.privKey,
+                        parsed.kemCiphertext
+                    )
+                } catch (error) {
+                    this.logger.warn('signal pqxdh decapsulation failed', {
+                        kyberPreKeyId: parsed.localKyberPreKeyId,
+                        message: toError(error).message
+                    })
+                    throw new Error('signal pqxdh decapsulation failed')
+                }
+                usedKyberPreKeyId = parsed.localKyberPreKeyId
+            } else {
+                this.logger.warn('signal pqxdh local kyber prekey not found', {
+                    kyberPreKeyId: parsed.localKyberPreKeyId
+                })
+            }
+        }
         const incoming = await initiateSessionIncoming(
             local,
             parsed.remote,
@@ -462,7 +612,8 @@ export class SignalProtocol {
                 signed: toSerializedKeyPair(signedPreKey.keyPair),
                 oneTime: oneTimePreKey ? toSerializedKeyPair(oneTimePreKey.keyPair) : undefined,
                 ratchet: toSerializedKeyPair(signedPreKey.keyPair)
-            }
+            },
+            pqSharedSecret
         )
 
         const newIdentity =
@@ -480,17 +631,14 @@ export class SignalProtocol {
             : incoming
 
         const [updatedSession, plaintext] = await decryptMsgFromSession(baseSession, parsed)
-        // Only consume one-time prekeys after successful decrypt/session materialization.
-        if (parsed.localOneTimeKeyId !== null && parsed.localOneTimeKeyId !== undefined) {
-            await this.stores.preKey.consumePreKeyById(parsed.localOneTimeKeyId)
-        }
         return {
             updatedSession,
             plaintext,
             newSessionInfo: {
                 newIdentity,
                 baseSession,
-                usedPreKey: parsed.localOneTimeKeyId
+                usedPreKey: parsed.localOneTimeKeyId,
+                usedKyberPreKeyId
             }
         }
     }

@@ -1,9 +1,12 @@
-import type { PreKeyRecord } from 'zapo-js/signal'
-import type { WaPreKeyStore } from 'zapo-js/store'
+import type { KyberPreKeyRecord, PreKeyRecord } from 'zapo-js/signal'
+import type { WaPqPreKeyStore, WaPreKeyStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
 import { deleteKeysChunked, safeLimit, scanKeys, toRedisBuffer } from './helpers'
 import type { WaRedisStorageOptions } from './types'
+
+/** Kyber pre-key ids are 3 bytes on the wire; the id counter wraps just before 2^24. */
+const KYBER_PREKEY_ID_BORDER = 16_777_215
 
 const LUA_CONSUME_PREKEY = `
 local hashKey = KEYS[1]
@@ -17,6 +20,20 @@ end
 redis.call('DEL', hashKey)
 redis.call('SREM', idsKey, keyId)
 redis.call('ZREM', availKey, keyId)
+return data
+`
+
+const LUA_CONSUME_KYBER_PREKEY = `
+local data = redis.call('HGETALL', KEYS[1])
+if #data == 0 then
+    return nil
+end
+for i = 1, #data, 2 do
+    if data[i] == 'lastresort' and data[i + 1] == '1' then
+        return data
+    end
+end
+redis.call('DEL', KEYS[1])
 return data
 `
 
@@ -43,7 +60,16 @@ redis.call('HSET', metaKey, 'next_prekey_id', tostring(nextId + count))
 return ids
 `
 
-export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore {
+const LUA_RESERVE_KYBER_PREKEY_IDS = `
+local metaKey = KEYS[1]
+local count = tonumber(ARGV[1])
+local border = tonumber(ARGV[2])
+local first = tonumber(redis.call('HGET', metaKey, 'next_kyber_prekey_id') or '1')
+redis.call('HSET', metaKey, 'next_kyber_prekey_id', tostring((first + count) % border))
+return first
+`
+
+export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore, WaPqPreKeyStore {
     public constructor(options: WaRedisStorageOptions) {
         super(options)
     }
@@ -322,14 +348,136 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
         return raw === '1'
     }
 
+    // ── Kyber PreKeys ─────────────────────────────────────────────────
+
+    public async putKyberPreKeys(records: readonly KyberPreKeyRecord[]): Promise<void> {
+        if (records.length === 0) return
+        const pipeline = this.redis.pipeline()
+        const touchedKeys: string[] = []
+        const lastResortKey = this.k('signal:kyberlr', this.sessionId)
+        for (const record of records) {
+            const kyberKey = this.k('signal:kyberprekey', this.sessionId, String(record.keyId))
+            // Single hash mixing string flags + binary fields, mirroring the
+            // classic prekey hash. ioredis accepts Buffer values in variadic HSET.
+            ;(pipeline.hset as (...args: unknown[]) => unknown)(
+                kyberKey,
+                'lastresort',
+                record.lastResort === true ? '1' : '0',
+                'pub',
+                toRedisBuffer(record.keyPair.pubKey),
+                'priv',
+                toRedisBuffer(record.keyPair.privKey),
+                'sig',
+                toRedisBuffer(record.signature)
+            )
+            touchedKeys.push(kyberKey)
+            if (record.lastResort === true) {
+                pipeline.zadd(lastResortKey, record.keyId, String(record.keyId))
+                touchedKeys.push(lastResortKey)
+            } else {
+                pipeline.zrem(lastResortKey, String(record.keyId))
+            }
+        }
+        this.touch(pipeline, touchedKeys)
+        await pipeline.exec()
+    }
+
+    public async getKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
+        const kyberKey = this.k('signal:kyberprekey', this.sessionId, String(keyId))
+        const data = await this.redis.hgetallBuffer(kyberKey)
+        const record = this.decodeKyberPreKey(keyId, data)
+        if (record) await this.refreshKyberTtl(kyberKey, record)
+        return record
+    }
+
+    public async consumeKyberPreKeyById(keyId: number): Promise<KyberPreKeyRecord | null> {
+        const kyberKey = this.k('signal:kyberprekey', this.sessionId, String(keyId))
+        // One script reads the hash and deletes it unless it is a last-resort
+        // key, so concurrent callers cannot both receive a one-time key.
+        const raw = await (
+            this.redis as unknown as {
+                evalBuffer: (...args: unknown[]) => Promise<Buffer[] | null>
+            }
+        ).evalBuffer(LUA_CONSUME_KYBER_PREKEY, 1, kyberKey)
+        if (!raw || raw.length === 0) return null
+
+        const data: Record<string, Buffer> = {}
+        for (let i = 0; i < raw.length; i += 2) {
+            data[raw[i].toString()] = raw[i + 1]
+        }
+        const record = this.decodeKyberPreKey(keyId, data)
+        if (record?.lastResort === true) await this.refreshKyberTtl(kyberKey, record)
+        return record
+    }
+
+    public async removeKyberPreKeys(keyIds: readonly number[]): Promise<void> {
+        if (keyIds.length === 0) return
+        const lastResortKey = this.k('signal:kyberlr', this.sessionId)
+        const pipeline = this.redis.pipeline()
+        for (const keyId of new Set(keyIds)) {
+            pipeline.del(this.k('signal:kyberprekey', this.sessionId, String(keyId)))
+            pipeline.zrem(lastResortKey, String(keyId))
+        }
+        await pipeline.exec()
+    }
+
+    public async getLatestKyberLastResortKey(): Promise<KyberPreKeyRecord | null> {
+        const lastResortKey = this.k('signal:kyberlr', this.sessionId)
+        for (const latest of await this.redis.zrevrange(lastResortKey, 0, -1)) {
+            const kyberKey = this.k('signal:kyberprekey', this.sessionId, latest)
+            const record = this.decodeKyberPreKey(
+                Number(latest),
+                await this.redis.hgetallBuffer(kyberKey)
+            )
+            if (record) {
+                await this.refreshTtl([kyberKey, lastResortKey])
+                return record
+            }
+        }
+        return null
+    }
+
+    public async reserveKyberPreKeyIds(count: number): Promise<number> {
+        if (!Number.isSafeInteger(count) || count <= 0) {
+            throw new Error(`invalid kyber prekey count: ${count}`)
+        }
+        await this.ensureMetaHash()
+        const first = await this.redis.eval(
+            LUA_RESERVE_KYBER_PREKEY_IDS,
+            1,
+            this.k('signal:meta', this.sessionId),
+            String(count),
+            String(KYBER_PREKEY_ID_BORDER)
+        )
+        return Number(first)
+    }
+
+    public async getPqMigrated(): Promise<boolean> {
+        const raw = await this.redis.hget(this.k('signal:meta', this.sessionId), 'pq_migrated')
+        return raw === '1'
+    }
+
+    public async setPqMigrated(value: boolean): Promise<void> {
+        await this.ensureMetaHash()
+        await this.redis.hset(
+            this.k('signal:meta', this.sessionId),
+            'pq_migrated',
+            value ? '1' : '0'
+        )
+    }
+
     // ── Clear ─────────────────────────────────────────────────────────
 
     public async clear(): Promise<void> {
         const patterns = [
             this.k('signal:pk:ids', this.sessionId),
-            this.k('signal:pk:avail', this.sessionId)
+            this.k('signal:pk:avail', this.sessionId),
+            this.k('signal:kyberlr', this.sessionId)
         ]
-        const scanPatterns = [this.k('signal:pk', this.sessionId, '*')]
+        const scanPatterns = [
+            this.k('signal:pk', this.sessionId, '*'),
+            this.k('signal:kyberprekey', this.sessionId, '*')
+        ]
         const scannedKeys = await Promise.all(scanPatterns.map((p) => scanKeys(this.redis, p)))
         const allKeys = [...patterns, ...scannedKeys.flat()]
         if (allKeys.length > 0) {
@@ -338,7 +486,9 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
         const metaKey = this.k('signal:meta', this.sessionId)
         await this.redis.hmset(metaKey, {
             server_has_prekeys: '0',
-            next_prekey_id: '1'
+            next_prekey_id: '1',
+            next_kyber_prekey_id: '1',
+            pq_migrated: '0'
         })
     }
 
@@ -366,6 +516,33 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
             keyId,
             keyPair: { pubKey: new Uint8Array(pub), privKey: new Uint8Array(priv) },
             uploaded: uploadedRaw ? uploadedRaw.toString() === '1' : undefined
+        }
+    }
+
+    /** Last-resort records are found through the index, so it lives as long as the key. */
+    private async refreshKyberTtl(kyberKey: string, record: KyberPreKeyRecord): Promise<void> {
+        await this.refreshTtl(
+            record.lastResort === true
+                ? [kyberKey, this.k('signal:kyberlr', this.sessionId)]
+                : [kyberKey]
+        )
+    }
+
+    private decodeKyberPreKey(
+        keyId: number,
+        data: Record<string, Buffer> | null | undefined
+    ): KyberPreKeyRecord | null {
+        if (!data) return null
+        const pub = data.pub
+        const priv = data.priv
+        const sig = data.sig
+        if (!pub || !priv || !sig) return null
+        const lastResortRaw = data.lastresort
+        return {
+            keyId,
+            keyPair: { pubKey: new Uint8Array(pub), privKey: new Uint8Array(priv) },
+            signature: new Uint8Array(sig),
+            lastResort: lastResortRaw ? lastResortRaw.toString() === '1' : undefined
         }
     }
 
