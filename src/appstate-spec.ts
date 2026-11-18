@@ -118,17 +118,6 @@ interface WaAppstateLegacyIndexArgMap {
 export type WaAppstateLegacyIndexArgs<K extends WaAppstateActionKey> =
     K extends keyof WaAppstateLegacyIndexArgMap ? WaAppstateLegacyIndexArgMap[K] : unknown
 
-/** Current name of a legacy index arg of `key`, or `undefined`. */
-export function resolveLegacyIndexArgName(
-    key: WaAppstateActionKey,
-    argName: string
-): string | undefined {
-    const legacy = WA_APPSTATE_LEGACY_INDEX_ARGS[key]
-    return legacy && Object.prototype.hasOwnProperty.call(legacy, argName)
-        ? legacy[argName]
-        : undefined
-}
-
 export function resolveEnumObject(protoEnumPath: string): Record<string, number | string> | null {
     const segments = protoEnumPath.split('.')
     let cursor: unknown = proto.SyncActionValue

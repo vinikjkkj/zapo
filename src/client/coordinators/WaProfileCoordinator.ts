@@ -778,7 +778,7 @@ export function createProfileCoordinator(
         },
 
         getAboutStatus: async (jid) =>
-            (await getStatus(toUserJid(jid, { canonicalizeSignalServer: true }))).status,
+            (await getStatus(toUserJid(jid, { canonicalizeSignalServer: true }))).status || null,
 
         checkUsernameAvailability: async (username) => {
             const data = await runMexQuery(mexSocket, 'UsernameAvailability', {

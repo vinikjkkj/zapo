@@ -1228,14 +1228,22 @@ test('app-state mutation coordinator accepts the legacy index arg name of a rena
         })
     })
 
+    const legacyFirst = { schema: 'LabelEdit', id: '7', labelId: undefined, name: 'a' } as const
+    const legacyLast = { schema: 'LabelEdit', labelId: undefined, id: '7', name: 'a' } as const
+
     await coordinator.set({ schema: 'LabelEdit', labelId: '7', name: 'a' })
     await coordinator.set({ schema: 'LabelEdit', id: '7', name: 'a' })
+    await coordinator.set(legacyFirst)
+    await coordinator.set(legacyLast)
+    await coordinator.set({ schema: 'LabelEdit', labelId: '7', id: '9', name: 'a' } as never)
     await coordinator.remove({ schema: 'BusinessBroadcastCampaign', campaign: 'c1' })
 
-    assert.equal(syncCalls.length, 3)
+    assert.equal(syncCalls.length, 6)
     assert.equal(syncCalls[0][0].index, JSON.stringify(['label_edit', '7']))
-    assert.deepEqual(syncCalls[1][0], syncCalls[0][0])
-    assert.equal(syncCalls[2][0].index, JSON.stringify(['business_broadcast_campaign', 'c1']))
+    for (let i = 1; i < 5; i += 1) {
+        assert.deepEqual(syncCalls[i][0], syncCalls[0][0])
+    }
+    assert.equal(syncCalls[5][0].index, JSON.stringify(['business_broadcast_campaign', 'c1']))
 })
 
 test('app-state mutation coordinator emits pin + archive mutations when pinning chat', async () => {

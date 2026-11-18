@@ -121,6 +121,11 @@ test('protobuf emits unpacked repeated scalars and accepts both wire forms', () 
         proto.BotCapabilityMetadata.decode(hexToBytes('0a020152')).capabilities,
         [1, 82]
     )
+    // One unpacked record followed by a packed run.
+    assert.deepEqual(
+        proto.BotCapabilityMetadata.decode(hexToBytes('08010a025201')).capabilities,
+        [1, 82, 1]
+    )
 })
 
 test('protobuf exports the latest bot, audience and platform enum values', () => {

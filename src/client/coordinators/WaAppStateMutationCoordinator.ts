@@ -11,8 +11,8 @@ import {
     type DataForKey,
     encodeEnumValue,
     type EnumNamesAt,
-    resolveLegacyIndexArgName,
     type ValueForSchema,
+    WA_APPSTATE_LEGACY_INDEX_ARGS,
     WA_APPSTATE_SCHEMAS,
     type WaAppstateActionKey,
     type WaAppstateIndexArgs,
@@ -186,7 +186,7 @@ function splitFlatInput(
             indexNames.add(part.name)
         }
     }
-    const schemaKey = input.schema as WaAppstateActionKey
+    const legacy = WA_APPSTATE_LEGACY_INDEX_ARGS[input.schema as WaAppstateActionKey]
     const indexArgs: Record<string, unknown> = {}
     const data: Record<string, unknown> = {}
     for (const key of Object.keys(input)) {
@@ -195,12 +195,13 @@ function splitFlatInput(
             indexArgs[key] = input[key]
             continue
         }
-        const current = resolveLegacyIndexArgName(schemaKey, key)
-        if (current !== undefined) {
-            indexArgs[current] ??= input[key]
-            continue
-        }
+        if (legacy && Object.prototype.hasOwnProperty.call(legacy, key)) continue
         data[key] = input[key]
+    }
+    if (legacy) {
+        for (const legacyName of Object.keys(legacy)) {
+            indexArgs[legacy[legacyName]] ??= input[legacyName]
+        }
     }
     return { indexArgs, data }
 }

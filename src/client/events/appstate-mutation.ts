@@ -125,17 +125,21 @@ function applyDecodeAtPath(
         }
         return
     }
+    // Copy each container on the path: the input objects are shared with `_raw.value`.
     const next = obj[head]
     if (Array.isArray(next)) {
-        for (const item of next) {
-            if (item && typeof item === 'object') {
-                applyDecodeAtPath(item as Record<string, unknown>, rest, transform)
-            }
-        }
+        obj[head] = next.map((item) => {
+            if (!item || typeof item !== 'object') return item
+            const copy = { ...(item as Record<string, unknown>) }
+            applyDecodeAtPath(copy, rest, transform)
+            return copy
+        })
         return
     }
     if (next && typeof next === 'object') {
-        applyDecodeAtPath(next as Record<string, unknown>, rest, transform)
+        const copy = { ...(next as Record<string, unknown>) }
+        obj[head] = copy
+        applyDecodeAtPath(copy, rest, transform)
     }
 }
 
