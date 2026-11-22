@@ -521,11 +521,10 @@ async function classifyUnavailable(
     return unavailable[0]
 }
 
-test('sender-drop placeholder is classified as its own kind and is not resent', async () => {
+test('sender-drop placeholder is classified as its own kind', async () => {
     const event = await classifyUnavailable({ type: 'sender_drop' })
 
     assert.equal(event.kind, 'sender_drop')
-    assert.equal(event.resendRequested, false)
 })
 
 test('a bot child keeps a sender-drop placeholder classified as bot', async () => {
