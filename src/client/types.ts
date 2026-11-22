@@ -1008,11 +1008,13 @@ export interface WaIncomingDecryptedPayloadEvent extends WaIncomingBaseEvent {
 
 /**
  * Why an incoming message arrived as a content-less placeholder. `view_once`: a
- * view-once already consumed elsewhere. `hosted`: a hosted account whose message
- * could not be fanned out. `bot`: a bot message whose fanout never ran. `other`:
- * a plain fanout placeholder – the only kind the primary device resends.
+ * view-once already consumed elsewhere. `sender_drop`: a restricted chat whose
+ * message can only be shown on the primary phone. `hosted`: a hosted account
+ * whose message could not be fanned out. `bot`: a bot message whose fanout never
+ * ran. `other`: a plain fanout placeholder – the only kind the primary device
+ * resends.
  */
-export type WaUnavailableMessageKind = 'view_once' | 'hosted' | 'bot' | 'other'
+export type WaUnavailableMessageKind = 'view_once' | 'sender_drop' | 'hosted' | 'bot' | 'other'
 
 export interface WaIncomingUnavailableMessageEvent extends Omit<
     WaIncomingBaseEvent,
@@ -1551,8 +1553,9 @@ export interface WaClientEventMap {
      * A message the server delivered as a content-less placeholder. The lib acks
      * it and emits this instead of a `message` event for the same stanza. A plain
      * fanout placeholder is asked back from the primary device and arrives later
-     * as a `message` event (see `event.resendRequested`); a consumed view-once or
-     * a hosted/bot message that could not be fanned out is never resent.
+     * as a `message` event (see `event.resendRequested`); a consumed view-once, a
+     * restricted-chat (`sender_drop`) message, or a hosted/bot message that could
+     * not be fanned out is never resent.
      */
     readonly message_unavailable: (event: WaIncomingUnavailableMessageEvent) => void
     /**

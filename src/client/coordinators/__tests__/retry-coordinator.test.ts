@@ -281,6 +281,15 @@ test('placeholder resend: skips unavailable fanout subtypes', async () => {
             }
         })
     )
+    harness.enqueue(
+        buildPlaceholderContext({
+            stanzaId: 'restricted-chat-msg',
+            messageNode: {
+                tag: 'message',
+                attrs: { subtype: 'acp_unavailable_fanout' }
+            }
+        })
+    )
     harness.enqueue(buildPlaceholderContext({ stanzaId: 'normal' }))
     const flushPromise = harness.flush()
     harness.resolveNext([])
@@ -412,7 +421,7 @@ test('unavailable message: requests a resend for a plain fanout placeholder', as
     assert.equal(harness.emitted[0].message?.conversation, 'recovered')
 })
 
-test('unavailable message: skips bot, hosted and view-once placeholders', () => {
+test('unavailable message: skips bot, hosted, view-once and sender-drop placeholders', () => {
     const harness = createPlaceholderHarness()
     const buildUnavailable = (unavailableAttrs: Record<string, string>, bot = false) =>
         buildPlaceholderContext({
@@ -434,6 +443,10 @@ test('unavailable message: skips bot, hosted and view-once placeholders', () => 
     )
     assert.equal(
         harness.coordinator.onUnavailableMessage(buildUnavailable({ type: 'view_once' })),
+        false
+    )
+    assert.equal(
+        harness.coordinator.onUnavailableMessage(buildUnavailable({ type: 'sender_drop' })),
         false
     )
     assert.equal(harness.captured.length, 0)

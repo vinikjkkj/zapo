@@ -1,11 +1,14 @@
 import type { WaAbPropName } from '@abprops-spec'
 import type { WaAuthCredentials } from '@auth/types'
-import type { WaIncomingMessageEvent } from '@client/types'
+import type { WaIncomingMessageEvent, WaUnavailableMessageKind } from '@client/types'
 import { toRawPubKey } from '@crypto/core/keys'
 import type { Logger } from '@infra/log/types'
 import { BoundedTaskQueue, BoundedTaskQueueFullError } from '@infra/perf/BoundedTaskQueue'
 import type { IcdcMeta } from '@message/crypto/icdc'
-import { buildRecoveredIncomingEvent } from '@message/primitives/incoming'
+import {
+    buildRecoveredIncomingEvent,
+    resolveUnavailableMessageKind
+} from '@message/primitives/incoming'
 import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto } from '@proto'
@@ -47,7 +50,6 @@ import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { buildAckNode } from '@transport/node/builders/global'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
-import { findNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { uint8Equal } from '@util/bytes'
 import { tryAsNumber } from '@util/coercion'
@@ -129,11 +131,17 @@ const PLACEHOLDER_RESEND_FALLBACK_MAX_AGE_DAYS = 14
 const PLACEHOLDER_RESEND_IN_FLIGHT_MAX = 256
 const PLACEHOLDER_RESEND_TIMEOUT_MS = 120_000
 const DAY_SECONDS = 24 * 60 * 60
-const PLACEHOLDER_RESEND_SKIP_SUBTYPES = new Set<string>([
-    'bot_unavailable_fanout',
-    'hosted_unavailable_fanout',
-    'view_once_unavailable_fanout'
-])
+const PLACEHOLDER_RESEND_SKIP_SUBTYPE_BY_KIND: Readonly<
+    Record<Exclude<WaUnavailableMessageKind, 'other'>, string>
+> = {
+    bot: 'bot_unavailable_fanout',
+    hosted: 'hosted_unavailable_fanout',
+    view_once: 'view_once_unavailable_fanout',
+    sender_drop: 'acp_unavailable_fanout'
+}
+const PLACEHOLDER_RESEND_SKIP_SUBTYPES = new Set<string>(
+    Object.values(PLACEHOLDER_RESEND_SKIP_SUBTYPE_BY_KIND)
+)
 
 interface PlaceholderResendQueueItem {
     readonly remoteJid: string
@@ -171,27 +179,16 @@ function getRemoteRetryReasonLogFields(reason: number | undefined): {
 
 /**
  * Returns the placeholder subtype the primary never resends (bot fanout, hosted
- * account, consumed view-once), or `null` when the message is recoverable.
+ * account, consumed view-once, restricted chat), or `null` when the message is
+ * recoverable.
  */
 function resolvePlaceholderResendSkipSubtype(node: BinaryNode): string | null {
     const subtype = node.attrs.subtype
     if (typeof subtype === 'string' && PLACEHOLDER_RESEND_SKIP_SUBTYPES.has(subtype)) {
         return subtype
     }
-    const unavailable = findNodeChild(node, 'unavailable')
-    if (!unavailable) {
-        return null
-    }
-    if (findNodeChild(node, 'bot')) {
-        return 'bot_unavailable_fanout'
-    }
-    if (unavailable.attrs.hosted === 'true') {
-        return 'hosted_unavailable_fanout'
-    }
-    if (unavailable.attrs.type === 'view_once') {
-        return 'view_once_unavailable_fanout'
-    }
-    return null
+    const kind = resolveUnavailableMessageKind(node)
+    return kind === null || kind === 'other' ? null : PLACEHOLDER_RESEND_SKIP_SUBTYPE_BY_KIND[kind]
 }
 
 export class WaRetryCoordinator {
