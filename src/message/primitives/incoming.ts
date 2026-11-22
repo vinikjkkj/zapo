@@ -602,6 +602,31 @@ async function decryptAndProcessEncNode(
     }
 }
 
+/**
+ * Classifies a message stanza carrying `<unavailable/>`, or returns `null` when
+ * it has none. Priority: bot, hosted, then the `type` attribute.
+ */
+export function resolveUnavailableMessageKind(node: BinaryNode): WaUnavailableMessageKind | null {
+    const unavailable = findNodeChild(node, 'unavailable')
+    if (!unavailable) {
+        return null
+    }
+    if (findNodeChild(node, 'bot')) {
+        return 'bot'
+    }
+    if (unavailable.attrs.hosted === 'true') {
+        return 'hosted'
+    }
+    const type = unavailable.attrs.type
+    switch (type) {
+        case 'view_once':
+        case 'sender_drop':
+            return type
+        default:
+            return 'other'
+    }
+}
+
 export async function handleIncomingMessageAck(
     node: BinaryNode,
     options: WaIncomingMessageAckHandlerOptions
@@ -763,15 +788,8 @@ export async function handleIncomingMessageAck(
         return true
     }
 
-    const unavailableNode = findNodeChild(node, 'unavailable')
-    if (unavailableNode) {
-        const kind: WaUnavailableMessageKind = findNodeChild(node, 'bot')
-            ? 'bot'
-            : unavailableNode.attrs.hosted === 'true'
-              ? 'hosted'
-              : unavailableNode.attrs.type === 'view_once'
-                ? 'view_once'
-                : 'other'
+    const kind = resolveUnavailableMessageKind(node)
+    if (kind) {
         const senderJid = node.attrs.participant ?? node.attrs.from
         const sender = senderJid ? parseJidFull(senderJid) : null
         const { key, pushName } = buildIncomingMessageKey(

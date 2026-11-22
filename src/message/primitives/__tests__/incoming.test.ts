@@ -497,6 +497,57 @@ test('bot fanout placeholder is classified as its own kind', async () => {
     assert.equal(unavailable[0].resendRequested, false)
 })
 
+async function classifyUnavailable(
+    unavailableAttrs: Record<string, string>,
+    extraChildren: readonly BinaryNode[] = []
+): Promise<WaIncomingUnavailableMessageEvent> {
+    const unavailable: WaIncomingUnavailableMessageEvent[] = []
+    await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: { id: 'msg-unavailable', from: '5511777777777@s.whatsapp.net', type: 'text' },
+            content: [{ tag: 'unavailable', attrs: unavailableAttrs }, ...extraChildren]
+        },
+        {
+            logger: createNoopLogger(),
+            sendNode: async () => undefined,
+            requestPlaceholderResend: () => false,
+            emitUnavailableMessage: (event) => {
+                unavailable.push(event)
+            }
+        }
+    )
+    assert.equal(unavailable.length, 1)
+    return unavailable[0]
+}
+
+test('sender-drop placeholder is classified as its own kind and is not resent', async () => {
+    const event = await classifyUnavailable({ type: 'sender_drop' })
+
+    assert.equal(event.kind, 'sender_drop')
+    assert.equal(event.resendRequested, false)
+})
+
+test('a bot child keeps a sender-drop placeholder classified as bot', async () => {
+    const event = await classifyUnavailable({ type: 'sender_drop' }, [
+        { tag: 'bot', attrs: { biz_bot: '1' } }
+    ])
+
+    assert.equal(event.kind, 'bot')
+})
+
+test('hosted="true" keeps a sender-drop placeholder classified as hosted', async () => {
+    const event = await classifyUnavailable({ type: 'sender_drop', hosted: 'true' })
+
+    assert.equal(event.kind, 'hosted')
+})
+
+test('type="hosted" is not a hosted placeholder', async () => {
+    const event = await classifyUnavailable({ type: 'hosted' })
+
+    assert.equal(event.kind, 'other')
+})
+
 test('incoming message ack falls back to retry receipt when decrypt fails', async () => {
     const sentNodes: BinaryNode[] = []
 
