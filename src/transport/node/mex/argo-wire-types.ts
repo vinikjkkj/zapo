@@ -5,7 +5,7 @@
 // the operations listed in the generator and re-keyed by zapo operation name.
 //
 // Covered operations:
-// - FetchNewChatMessageCappingInfo (android: XWA2MessageCappingInfoQuery without data.xwa2_message_capping_info.subscription_status)
+// - FetchNewChatMessageCappingInfo (android: XWA2MessageCappingInfoQuery)
 // - FetchReachoutTimelock (android: FetchReachoutTimelockQuery)
 //
 // Encoded as a token stream to keep the resident cost at a few KB; see
@@ -14,11 +14,11 @@
 
 /** Field names and block keys shared by every encoded wire type, `|` separated. */
 export const WA_MEX_ARGO_WIRE_POOL =
-    'data|xwa2_message_capping_info|total_quota|Int|used_quota|cycle_start_timestamp|String|cycle_end_timestamp|server_sent_timestamp|ote_status|XWA2MessageCappingOTEStatus|mv_status|XWA2MessageCappingMVStatus|capping_status|XWA2MessageCappingStatus|errors|extensions|xwa2_fetch_account_reachout_timelock|is_active|time_enforcement_ends|enforcement_type|XWA2ReachoutTimelockType'
+    'data|xwa2_message_capping_info|total_quota|Int|used_quota|cycle_start_timestamp|String|cycle_end_timestamp|server_sent_timestamp|ote_status|XWA2MessageCappingOTEStatus|mv_status|XWA2MessageCappingMVStatus|capping_status|XWA2MessageCappingStatus|subscription_status|status|XWA2MessageCappingSubscriptionStatusType|name|XWA2MessageCappingSubscriptionName|errors|extensions|xwa2_fetch_account_reachout_timelock|is_active|time_enforcement_ends|enforcement_type|XWA2ReachoutTimelockType'
 
 /** Encoded wire type per zapo operation name, expanded lazily on first use. */
 export const WA_MEX_ARGO_WIRE_TYPES: Readonly<Record<string, string>> = Object.freeze({
     FetchNewChatMessageCappingInfo:
-        'r3;0;?r1;1;?r8;2;n3;I4;n3;I5;b6;S7;b6;S8;b6;S9;ba;Sb;bc;Sd;be;Sf?*Eg?X',
-    FetchReachoutTimelock: 'r3;0;?r1;h;r3;i;Bj;?b6;Sk;?bl;Sf?*Eg?X'
+        'r3;0;?r1;1;?r9;2;n3;I4;n3;I5;b6;S7;b6;S8;b6;S9;ba;Sb;bc;Sd;be;Sf;?r2;g;?bh;Si;?bj;Sk?*El?X',
+    FetchReachoutTimelock: 'r3;0;?r1;m;r3;n;Bo;?b6;Sp;?bq;Sk?*El?X'
 })

@@ -47,9 +47,12 @@ export interface WaNewsletterFetchOptions {
 }
 
 export interface WaNewsletterInsightMetricRequest {
-    readonly id: number
+    /** Sent as a string on the wire; numbers are stringified. */
+    readonly id: number | string
+    /** `FOLLOWER`, `FOLLOWS`, `NET_FOLLOWS` or `UNFOLLOWS`. */
     readonly type: string
-    readonly group_by?: { readonly number_of_days?: number }
+    readonly group_by?: { readonly number_of_days?: number; readonly country?: boolean }
+    readonly limit?: number
 }
 
 export interface WaNewsletterDirectorySearchOptions {

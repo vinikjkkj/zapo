@@ -262,6 +262,13 @@ test('profile coordinator gets status via usync', async () => {
     assert.equal(calls.length, 1)
     assert.equal(calls[0].context, 'profile.getStatus')
     assert.equal(calls[0].node.attrs.xmlns, 'usync')
+
+    assert.equal(await coordinator.getAboutStatus('5511999999999:3@s.whatsapp.net'), 'Hello World')
+    assert.equal(calls[1].context, 'profile.getStatus')
+    const usync = (calls[1].node.content as readonly BinaryNode[])[0]
+    const list = (usync.content as readonly BinaryNode[]).find((node) => node.tag === 'list')
+    const user = (list?.content as readonly BinaryNode[])[0]
+    assert.equal(user.attrs.jid, '5511999999999@s.whatsapp.net')
 })
 
 test('profile coordinator returns null status when no content', async () => {

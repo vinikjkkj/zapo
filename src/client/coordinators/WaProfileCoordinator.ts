@@ -1,7 +1,7 @@
 import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { Logger } from '@infra/log/types'
 import type { WaMexOperationResponses } from '@mex'
-import { parseJidFull, parsePhoneJid } from '@protocol/jid'
+import { parsePhoneJid, toUserJid } from '@protocol/jid'
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import {
     isUsernameKey,
@@ -201,7 +201,12 @@ export interface WaProfileCoordinator {
     readonly setUsername: (input: WaSetUsernameInput) => Promise<boolean>
     /** Deletes the current account's username. Returns `true` on success. */
     readonly deleteUsername: () => Promise<boolean>
-    /** Fetches the "About" text for a single JID via MEX. */
+    /**
+     * Fetches the "About" text for a single JID through `getStatus` (WA Web
+     * dropped the MEX query this used). An empty status is `null` here and
+     * `''` from `getStatus`.
+     * @deprecated Use `getStatus`.
+     */
     readonly getAboutStatus: (jid: string) => Promise<string | null>
     /** Checks whether a username is available and returns server suggestions. */
     readonly checkUsernameAvailability: (username: string) => Promise<WaUsernameAvailabilityResult>
@@ -481,12 +486,6 @@ function isMexSetUsernameSuccess(data: WaMexOperationResponses['SetUsername'] | 
     return data?.xwa2_username_set?.result === 'SUCCESS'
 }
 
-function parseAboutStatusMexResponse(
-    data: WaMexOperationResponses['FetchAboutStatus'] | null
-): string | null {
-    return data?.xwa2_users_updates_since?.[0]?.updates?.[0]?.text ?? null
-}
-
 function parseUsernameAvailabilityMexResponse(
     data: WaMexOperationResponses['UsernameAvailability'] | null
 ): WaUsernameAvailabilityResult {
@@ -548,6 +547,23 @@ export function createProfileCoordinator(
         logger
     } = options
 
+    const getStatus: WaProfileCoordinator['getStatus'] = async (jid) => {
+        const sid = await generateSid()
+        const queryNodes = buildGetStatusUsyncQueryNodes()
+        const privacyTokenNode = await resolvePrivacyTokenNode(jid)
+        const usyncNode = buildUsyncIq({
+            sid,
+            queryProtocolNodes: [queryNodes[1]],
+            users: [{ jid, ...(privacyTokenNode ? { content: [privacyTokenNode] } : {}) }]
+        })
+        const result = await queryWithContext('profile.getStatus', usyncNode, undefined, {
+            jid
+        })
+        assertIqResult(result, 'profile.getStatus')
+        logUsyncProtocolErrors(parseUsyncResultEnvelope(result), logger, 'profile.getStatus')
+        return parseUsyncStatus(result)
+    }
+
     return {
         getProfilePicture: async (jid, type, existingId) => {
             const privacyTokenNode = (await resolvePrivacyTokenNode(jid)) ?? undefined
@@ -578,22 +594,7 @@ export function createProfileCoordinator(
             assertIqResult(result, 'profile.deletePicture')
         },
 
-        getStatus: async (jid) => {
-            const sid = await generateSid()
-            const queryNodes = buildGetStatusUsyncQueryNodes()
-            const privacyTokenNode = await resolvePrivacyTokenNode(jid)
-            const usyncNode = buildUsyncIq({
-                sid,
-                queryProtocolNodes: [queryNodes[1]],
-                users: [{ jid, ...(privacyTokenNode ? { content: [privacyTokenNode] } : {}) }]
-            })
-            const result = await queryWithContext('profile.getStatus', usyncNode, undefined, {
-                jid
-            })
-            assertIqResult(result, 'profile.getStatus')
-            logUsyncProtocolErrors(parseUsyncResultEnvelope(result), logger, 'profile.getStatus')
-            return parseUsyncStatus(result)
-        },
+        getStatus,
 
         setStatus: async (text) => {
             const node = buildSetStatusIq(text)
@@ -777,12 +778,8 @@ export function createProfileCoordinator(
             return isMexSetUsernameSuccess(data)
         },
 
-        getAboutStatus: async (jid) => {
-            const data = await runMexQuery(mexSocket, 'FetchAboutStatus', {
-                user: { user_id: parseJidFull(jid).address.user }
-            })
-            return parseAboutStatusMexResponse(data)
-        },
+        getAboutStatus: async (jid) =>
+            (await getStatus(toUserJid(jid, { canonicalizeSignalServer: true }))).status || null,
 
         checkUsernameAvailability: async (username) => {
             const data = await runMexQuery(mexSocket, 'UsernameAvailability', {

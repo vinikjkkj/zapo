@@ -137,7 +137,7 @@ export function parsePendingInvites(
     const invites = data?.xwa2_newsletter_admin?.pending_admin_invites ?? []
     const result: string[] = []
     for (const invite of invites) {
-        const id = invite?.user?.pn ?? invite?.user?.id
+        const id = invite?.user?.id
         if (id) result.push(id)
     }
     return result

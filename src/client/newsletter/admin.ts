@@ -24,7 +24,7 @@ import type {
     WaNewsletterReactionSenders,
     WaNewsletterUpdateInput
 } from '@client/newsletter/types'
-import type { WaMexOperationResponses } from '@mex'
+import type { WaMexOperationResponses, WaMexOperationVariables } from '@mex'
 import {
     buildTosQueryIq,
     buildTosUpdateIq,
@@ -33,6 +33,10 @@ import {
 } from '@transport/node/builders/tos'
 import { assertIqResult } from '@transport/node/query'
 import { bytesToBase64 } from '@util/bytes'
+
+type WaMexInsightMetric = NonNullable<
+    NonNullable<WaMexOperationVariables['FetchNewsletterInsights']['input']>['metrics']
+>[number]
 
 /** Admin-side newsletter operations (create/update/delete + insights). */
 export interface WaNewsletterAdminOps {
@@ -182,7 +186,13 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
             return runMex(deps, 'FetchNewsletterInsights', {
                 input: {
                     newsletter_id: newsletterJid,
-                    metrics
+                    metrics: metrics.map(
+                        (metric): WaMexInsightMetric => ({
+                            ...metric,
+                            id: String(metric.id),
+                            type: metric.type as WaMexInsightMetric['type']
+                        })
+                    )
                 }
             })
         },

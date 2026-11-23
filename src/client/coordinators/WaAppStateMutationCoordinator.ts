@@ -12,9 +12,11 @@ import {
     encodeEnumValue,
     type EnumNamesAt,
     type ValueForSchema,
+    WA_APPSTATE_LEGACY_INDEX_ARGS,
     WA_APPSTATE_SCHEMAS,
     type WaAppstateActionKey,
     type WaAppstateIndexArgs,
+    type WaAppstateLegacyIndexArgs,
     type WaAppstateSchema
 } from '@appstate-spec'
 import { parseAppStateMutationEvent } from '@client/events/appstate-mutation'
@@ -150,12 +152,16 @@ function buildSetMutationFromSchema<S extends WaAppstateSchema>(input: {
     }
 }
 
+type IndexArgsInputFor<K extends WaAppstateActionKey> =
+    | WaAppstateIndexArgs<K>
+    | (unknown extends WaAppstateLegacyIndexArgs<K> ? never : WaAppstateLegacyIndexArgs<K>)
+
 type SetMutationInputFor<K extends WaAppstateActionKey> = K extends K
-    ? { readonly schema: K } & WaAppstateIndexArgs<K> & Partial<DataForKey<K>>
+    ? { readonly schema: K } & IndexArgsInputFor<K> & Partial<DataForKey<K>>
     : never
 
 type RemoveMutationInputFor<K extends WaAppstateActionKey> = K extends K
-    ? { readonly schema: K } & WaAppstateIndexArgs<K>
+    ? { readonly schema: K } & IndexArgsInputFor<K>
     : never
 
 export interface WaSetMutationInputMap {
@@ -180,14 +186,21 @@ function splitFlatInput(
             indexNames.add(part.name)
         }
     }
+    const legacy = WA_APPSTATE_LEGACY_INDEX_ARGS[input.schema as WaAppstateActionKey]
     const indexArgs: Record<string, unknown> = {}
     const data: Record<string, unknown> = {}
     for (const key of Object.keys(input)) {
         if (key === 'schema') continue
         if (indexNames.has(key)) {
             indexArgs[key] = input[key]
-        } else {
-            data[key] = input[key]
+            continue
+        }
+        if (legacy && Object.prototype.hasOwnProperty.call(legacy, key)) continue
+        data[key] = input[key]
+    }
+    if (legacy) {
+        for (const legacyName of Object.keys(legacy)) {
+            indexArgs[legacy[legacyName]] ??= input[legacyName]
         }
     }
     return { indexArgs, data }
@@ -1080,14 +1093,17 @@ export class WaAppStateMutationCoordinator {
      * await client.chat.set({
      *     schema: 'Contact',
      *     id: '5511999999999@s.whatsapp.net',
-     *     contactAction: { fullName: 'Maria Silva', firstName: 'Maria' }
+     *     fullName: 'Maria Silva',
+     *     firstName: 'Maria'
      * })
      *
      * // Create a chat label (color is a server-side palette index)
      * await client.chat.set({
      *     schema: 'LabelEdit',
-     *     id: 'label-1',
-     *     labelEditAction: { name: 'Pendente', color: 0, isActive: true }
+     *     labelId: 'label-1',
+     *     name: 'Pendente',
+     *     color: 0,
+     *     isActive: true
      * })
      *
      * // Apply that label to a chat
@@ -1095,14 +1111,15 @@ export class WaAppStateMutationCoordinator {
      *     schema: 'LabelJid',
      *     labelId: 'label-1',
      *     chatJid: '5511999999999@s.whatsapp.net',
-     *     labelAssociationAction: { labeled: true }
+     *     labeled: true
      * })
      *
      * // Save a business quick reply
      * await client.chat.set({
      *     schema: 'QuickReply',
      *     id: 'qr-greeting',
-     *     quickReplyAction: { shortcut: '/oi', message: 'Olá! Tudo bem?' }
+     *     shortcut: '/oi',
+     *     message: 'Olá! Tudo bem?'
      * })
      * ```
      */

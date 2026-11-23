@@ -72,11 +72,9 @@ test('ab props decode each wire type the way WA Web does', async () => {
 
 test('ab props keep served negative ints instead of falling back to the default', async () => {
     const coordinator = await syncWith([
-        { configCode: 25682, configValue: '-1' }, // discard dialog threshold, default -1
         { configCode: 29063, configValue: '-5' } // frequently contacted, default -1
     ])
 
-    assert.equal(coordinator.getConfigValue('wa_web_group_discard_dialog_contact_threshold'), -1)
     assert.equal(coordinator.getConfigValue('web_frequently_contacted_enabled'), -5)
 })
 

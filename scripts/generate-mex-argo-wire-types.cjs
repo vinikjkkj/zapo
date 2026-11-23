@@ -31,11 +31,8 @@ const OUTPUT = path.join(ROOT, 'src', 'transport', 'node', 'mex', 'argo-wire-typ
 const OPERATIONS = Object.freeze({
     // Checked against a captured argo response.
     FetchReachoutTimelock: { android: 'FetchReachoutTimelockQuery' },
-    // Checked against the web response type only; no argo capture yet.
-    FetchNewChatMessageCappingInfo: {
-        android: 'XWA2MessageCappingInfoQuery',
-        omit: ['data.xwa2_message_capping_info.subscription_status']
-    }
+    // Checked against a captured argo response.
+    FetchNewChatMessageCappingInfo: { android: 'XWA2MessageCappingInfoQuery' }
 })
 
 const SCALAR_MARKERS = Object.freeze({
