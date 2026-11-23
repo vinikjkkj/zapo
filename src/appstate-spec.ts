@@ -147,10 +147,11 @@ export function decodeEnumValue(protoEnumPath: string, value: number): string | 
     return null
 }
 
+/** Decodes index parts into a fresh args object, or `null` when they do not fit `schema`. */
 export function decodeIndexArgsFromSchema(
     schema: WaAppstateSchema,
     parts: readonly string[]
-): Readonly<Record<string, string | boolean | null>> | null {
+): Record<string, string | boolean | null> | null {
     if (parts.length !== schema.indexParts.length) {
         return null
     }

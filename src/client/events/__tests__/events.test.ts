@@ -73,7 +73,7 @@ test('appstate mutation parser sets the legacy index arg name next to the rename
 test('appstate mutation parser decodes nested enums without touching the raw value', () => {
     const value = proto.SyncActionValue.decode(
         proto.SyncActionValue.encode({
-            wasaRootSecretAction: { secrets: [{ id: 's1', status: 1 }] }
+            wasaRootSecretAction: { secrets: [{ id: 's1', status: 1 }, { id: 's2' }] }
         }).finish()
     )
     const parsed = parseAppStateMutationEvent({
@@ -91,9 +91,40 @@ test('appstate mutation parser decodes nested enums without touching the raw val
 
     assert.ok(parsed && parsed.schema === 'WasaRootSecret' && parsed.operation === 'set')
     if (parsed?.schema === 'WasaRootSecret' && parsed.operation === 'set') {
+        const rawSecrets = value.wasaRootSecretAction?.secrets
         assert.equal(parsed.secrets?.[0]?.status, 'ACTIVE')
         assert.equal(parsed.secrets?.[0]?.epoch, null)
-        assert.equal(parsed._raw.value?.wasaRootSecretAction?.secrets?.[0]?.status, 1)
+        assert.equal(rawSecrets?.[0]?.status, 1)
+        // Only the entry whose enum changed is copied.
+        assert.equal(parsed.secrets?.[1], rawSecrets?.[1])
+    }
+})
+
+test('appstate mutation parser shares nested values when no enum changes', () => {
+    // CallLogRecord enums do not resolve in the proto, so nothing is decoded.
+    const value = proto.SyncActionValue.decode(
+        proto.SyncActionValue.encode({
+            callLogAction: {
+                callLogRecord: { callResult: 1, participants: [{ callResult: 1 }] }
+            }
+        }).finish()
+    )
+    const parsed = parseAppStateMutationEvent({
+        collection: 'regular',
+        operation: 'set',
+        source: 'patch',
+        index: JSON.stringify(['call_log', 'k1', 'call-1', '0']),
+        value,
+        version: 1,
+        indexMac: new Uint8Array(),
+        valueMac: new Uint8Array(),
+        keyId: new Uint8Array(),
+        timestamp: 10
+    })
+
+    assert.ok(parsed && parsed.schema === 'CallLog' && parsed.operation === 'set')
+    if (parsed?.schema === 'CallLog' && parsed.operation === 'set') {
+        assert.equal(parsed.callLogRecord, value.callLogAction?.callLogRecord)
     }
 })
 

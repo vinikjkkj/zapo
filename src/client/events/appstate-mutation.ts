@@ -3,8 +3,10 @@ import {
     decodeEnumValue,
     decodeIndexArgsFromSchema,
     getAppstateSchemaByActionName,
+    resolveEnumObject,
     WA_APPSTATE_LEGACY_INDEX_ARGS,
-    type WaAppstateSchema
+    type WaAppstateSchema,
+    type WaAppstateValueEnumFields
 } from '@appstate-spec'
 import type { WaAppStateMutationEvent } from '@client/types'
 import type { Proto } from '@proto'
@@ -20,12 +22,16 @@ export function parseAppStateMutationEvent(
     if (!resolved) {
         return null
     }
-    const decoded = decodeIndexArgsFromSchema(resolved.schema, parts)
-    if (!decoded) {
+    const indexArgs = decodeIndexArgsFromSchema(resolved.schema, parts)
+    if (!indexArgs) {
         return null
     }
     const legacy = WA_APPSTATE_LEGACY_INDEX_ARGS[resolved.key]
-    const indexArgs = legacy ? withLegacyIndexArgs(decoded, legacy) : decoded
+    if (legacy) {
+        for (const legacyName of Object.keys(legacy)) {
+            indexArgs[legacyName] = indexArgs[legacy[legacyName]]
+        }
+    }
     const valueRaw: Proto.ISyncActionValue | null = mutation.value ?? null
 
     const base = {
@@ -55,17 +61,6 @@ export function parseAppStateMutationEvent(
     } as WaAppStateMutationEvent
 }
 
-function withLegacyIndexArgs(
-    args: Readonly<Record<string, string | boolean | null>>,
-    legacy: Readonly<Record<string, string>>
-): Readonly<Record<string, string | boolean | null>> {
-    const out: Record<string, string | boolean | null> = { ...args }
-    for (const legacyName of Object.keys(legacy)) {
-        out[legacyName] = args[legacy[legacyName]]
-    }
-    return out
-}
-
 function unwrapData(
     schema: WaAppstateSchema,
     value: Proto.ISyncActionValue | null
@@ -93,54 +88,94 @@ function unwrapData(
     return inner
 }
 
+interface EnumDecodePath {
+    readonly segments: readonly string[]
+    readonly enumPath: string
+}
+
+/** Per-schema enum paths that resolve, split once; schemas are static. */
+const ENUM_DECODE_PATHS = new WeakMap<WaAppstateValueEnumFields, readonly EnumDecodePath[]>()
+
+function getEnumDecodePaths(enumFields: WaAppstateValueEnumFields): readonly EnumDecodePath[] {
+    let paths = ENUM_DECODE_PATHS.get(enumFields)
+    if (!paths) {
+        const built: EnumDecodePath[] = []
+        for (const fieldPath of Object.keys(enumFields)) {
+            const enumPath = enumFields[fieldPath]
+            if (resolveEnumObject(enumPath)) {
+                built.push({ segments: fieldPath.split('.'), enumPath })
+            }
+        }
+        paths = built
+        ENUM_DECODE_PATHS.set(enumFields, paths)
+    }
+    return paths
+}
+
+/** Writes enum names into `data`, which the caller owns; nested containers stay shared with `_raw.value`. */
 function applyEnumDecodeToData(
     enumFields: WaAppstateSchema['valueEnumFields'],
     data: Record<string, unknown>
 ): void {
     if (!enumFields) return
-    for (const [fieldPath, enumPath] of Object.entries(enumFields)) {
-        applyDecodeAtPath(data, fieldPath.split('.'), (raw) => {
-            if (typeof raw !== 'number') return raw
-            const name = decodeEnumValue(enumPath, raw)
-            return name ?? raw
-        })
+    for (const { segments, enumPath } of getEnumDecodePaths(enumFields)) {
+        decodeAtPath(data, segments, 0, data, enumPath)
     }
 }
 
-function applyDecodeAtPath(
-    obj: Record<string, unknown>,
+function decodeEnumName(raw: unknown, enumPath: string): unknown {
+    return typeof raw === 'number' ? (decodeEnumValue(enumPath, raw) ?? raw) : raw
+}
+
+/**
+ * Decodes the enum at `segments[depth]` below `container`, copying a container
+ * only when a value under it changes. Returns `container` when nothing changed.
+ */
+function decodeAtPath(
+    container: Record<string, unknown>,
     segments: readonly string[],
-    transform: (value: unknown) => unknown
-): void {
-    if (segments.length === 0) return
-    const [head, ...rest] = segments
-    if (rest.length === 0) {
-        if (head in obj) {
-            const value = obj[head]
-            if (Array.isArray(value)) {
-                obj[head] = value.map(transform)
-            } else if (value !== null && value !== undefined) {
-                obj[head] = transform(value)
-            }
+    depth: number,
+    root: Record<string, unknown>,
+    enumPath: string
+): Record<string, unknown> {
+    const head = segments[depth]
+    const value = container[head]
+    if (value === null || value === undefined) return container
+    let next: unknown
+    if (depth === segments.length - 1) {
+        next = Array.isArray(value)
+            ? mapIfChanged(value, (item) => decodeEnumName(item, enumPath))
+            : decodeEnumName(value, enumPath)
+    } else if (Array.isArray(value)) {
+        next = mapIfChanged(value, (item) =>
+            item && typeof item === 'object'
+                ? decodeAtPath(item as Record<string, unknown>, segments, depth + 1, root, enumPath)
+                : item
+        )
+    } else if (typeof value === 'object') {
+        next = decodeAtPath(value as Record<string, unknown>, segments, depth + 1, root, enumPath)
+    } else {
+        return container
+    }
+    if (next === value) return container
+    const target = container === root ? container : cloneMessage(container)
+    target[head] = next
+    return target
+}
+
+function mapIfChanged(
+    items: readonly unknown[],
+    map: (item: unknown) => unknown
+): readonly unknown[] {
+    let out: unknown[] | null = null
+    for (let i = 0; i < items.length; i += 1) {
+        const mapped = map(items[i])
+        if (mapped !== items[i]) {
+            out ??= items.slice()
+            out[i] = mapped
         }
-        return
     }
-    // Copy each container on the path: the input objects are shared with `_raw.value`.
-    const next = obj[head]
-    if (Array.isArray(next)) {
-        obj[head] = next.map((item) => {
-            if (!item || typeof item !== 'object') return item
-            const copy = cloneMessage(item as Record<string, unknown>)
-            applyDecodeAtPath(copy, rest, transform)
-            return copy
-        })
-        return
-    }
-    if (next && typeof next === 'object') {
-        const copy = cloneMessage(next as Record<string, unknown>)
-        obj[head] = copy
-        applyDecodeAtPath(copy, rest, transform)
-    }
+    return out ?? items
 }
 
 /** Shallow copy that keeps the generated message prototype (field defaults) and every own property. */
