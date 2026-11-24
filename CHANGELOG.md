@@ -1,5 +1,12 @@
 # zapo-js
 
+## 1.12.1
+
+### Patch Changes
+
+- Classify `sender_drop` unavailable placeholders and skip their resend. `<unavailable type="sender_drop"/>` marks a message from a restricted chat that can only be shown on the primary phone. It fell into the `other` kind, so a companion queued a placeholder resend that WhatsApp Web never asks for in this case. `message_unavailable` now reports it as its own `sender_drop` kind, and it joins bot, hosted and view-once in the resend skip list.
+- Sync the vendored spec to WA Web `2.3000.1055156383` and refresh the advertised version, keeping the public API working across the upstream changes. `profile.getAboutStatus` resolves through the usync status query, since WA Web dropped the `FetchAboutStatus` MEX query; it still returns `null` for an empty status. `newsletter.fetchInsights` sends metric ids as strings, as the new variable shape requires, and still accepts numbers. `newsletter.fetchPendingInvites` carries the user id, since the query no longer selects `pn`. The app-state index args the spec renamed (`LabelEdit` `id` → `labelId`, `BusinessBroadcastCampaign` `campaign` → `campaignId`) are still accepted by `chat.set` and `chat.remove`, and mutation events carry both names. The `FetchNewChatMessageCappingInfo` argo reply decodes again on mobile-primary sessions, now that it selects `subscription_status`. `BotCapabilityMetadata.capabilities` is now encoded unpacked, as in WA Web's schema, and the default of `group_history_messages_time_limit_receiver_enforcement_secs` goes from 14 to 45 days.
+
 ## 1.12.0
 
 ### Minor Changes
