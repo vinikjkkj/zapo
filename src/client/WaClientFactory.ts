@@ -11,6 +11,7 @@ import {
     createBroadcastListCoordinator,
     type WaBroadcastListCoordinator
 } from '@client/coordinators/WaBroadcastListCoordinator'
+import { createBusinessAgentCoordinator } from '@client/coordinators/WaBusinessAgentCoordinator'
 import {
     createBusinessCoordinator,
     type WaBusinessCoordinator
@@ -128,13 +129,14 @@ import { createSignalSessionResolver, type SignalSessionResolver } from '@signal
 import { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { WaStoredContactRecord } from '@store/contracts/contact.store'
 import { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
+import { isBusinessAuthenticationNode } from '@transport/node/builders/business-agent'
 import { buildAckNode } from '@transport/node/builders/global'
 import { buildPresenceNode } from '@transport/node/builders/presence'
 import { findNodeChild, getFirstNodeChild } from '@transport/node/helpers'
 import { createUsyncSidGenerator } from '@transport/node/usync'
 import { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import { WaNodeTransport } from '@transport/node/WaNodeTransport'
-import { isProxyTransport, toProxyAgent } from '@transport/proxy'
+import { isProxyDispatcher, isProxyTransport, toProxyAgent } from '@transport/proxy'
 import type { BinaryNode } from '@transport/types'
 import { createServerClock } from '@util/clock'
 import { toError } from '@util/primitives'
@@ -225,6 +227,7 @@ export interface WaClientDependencies {
     readonly privacyCoordinator: WaPrivacyCoordinatorRuntime
     readonly profileCoordinator: WaProfileCoordinator
     readonly businessCoordinator: WaBusinessCoordinator
+    readonly businessAgent: ReturnType<typeof createBusinessAgentCoordinator>
     readonly botCoordinator: WaBotCoordinator
     readonly emailCoordinator: WaEmailCoordinator
     readonly receiptQueue: WaReceiptQueue
@@ -259,10 +262,14 @@ function validateProxyOptions(options: WaClientOptions): void {
         readonly ws?: unknown
         readonly mediaUpload?: unknown
         readonly mediaDownload?: unknown
+        readonly businessAgent?: unknown
     }
     assertProxyTransport(proxy?.ws, 'proxy.ws')
     assertProxyTransport(proxy?.mediaUpload, 'proxy.mediaUpload')
     assertProxyTransport(proxy?.mediaDownload, 'proxy.mediaDownload')
+    if (proxy?.businessAgent !== undefined && !isProxyDispatcher(proxy.businessAgent)) {
+        throw new TypeError('proxy.businessAgent must be an undici-style dispatcher')
+    }
 }
 
 export function resolveWaClientBase(options: WaClientOptions, logger: Logger): WaClientBase {
@@ -332,6 +339,7 @@ function createIncomingNodeRuntime(input: {
         dirtyBits: Parameters<typeof handleDirtyBits>[1]
     ) => Promise<void>
     readonly incomingMessageAckOptions: Parameters<typeof handleIncomingMessageAck>[1]
+    readonly businessAgent: ReturnType<typeof createBusinessAgentCoordinator>
 }): ConstructorParameters<typeof WaIncomingNodeCoordinator>[0]['runtime'] {
     const {
         logger,
@@ -358,6 +366,15 @@ function createIncomingNodeRuntime(input: {
         persistSuccessAttributes: (attributes) =>
             authClient.persistSuccessAttributes(attributes, { countsAsLogin: true }),
         emitSuccessNode: (node) => emitEvent('debug_connection_success', { node }),
+        handleBusinessAuthenticationNode: async (node) => {
+            if (!isBusinessAuthenticationNode(node)) return false
+            if (node.tag === 'iq') {
+                nodeOrchestrator.tryResolvePending(node)
+                return true
+            }
+            await input.businessAgent.handleNotification(node)
+            return true
+        },
         updateClockSkewFromSuccess: (serverUnixSeconds) =>
             connectionManager.updateClockSkewFromSuccess(serverUnixSeconds),
         shouldWarmupMediaConn: () =>
@@ -686,6 +703,15 @@ export function buildWaClientDependencies(input: {
         emitPrivacy: (event) => runtime.emitEvent('privacy', event)
     })
 
+    const businessAgent = createBusinessAgentCoordinator({
+        query: (node, timeoutMs) => nodeOrchestrator.query(node, timeoutMs),
+        getCredentials: getCurrentCredentials,
+        isConnected: () => connectionManager?.isConnected() ?? false,
+        logger,
+        sendNode: runtime.sendNode,
+        dispatcher: options.proxy?.businessAgent
+    })
+
     const businessCoordinator = createBusinessCoordinator({
         queryWithContext: runtime.queryWithContext,
         mediaTransfer,
@@ -989,6 +1015,7 @@ export function buildWaClientDependencies(input: {
         nodeTransport,
         getPassiveTasks: () => passiveTasks,
         clearStoredCredentials: runtime.clearStoredState,
+        onConnectionClosed: businessAgent.invalidate,
         onPostPairReconnected: () => {
             runtime.emitEvent('connection', {
                 status: 'open',
@@ -1010,6 +1037,7 @@ export function buildWaClientDependencies(input: {
         isLogout: boolean,
         code: WaConnectionCode | null
     ): Promise<void> => {
+        businessAgent.invalidate()
         abPropsCoordinator.reset()
         offlineResume.reset()
         privacyCoordinator.stopAccountSyncRefresh()
@@ -1024,6 +1052,7 @@ export function buildWaClientDependencies(input: {
     }
 
     const connectWithClientSideEffects = async (reason: WaConnectionOpenReason): Promise<void> => {
+        businessAgent.invalidate()
         runtime.resumeIncomingEvents()
         await connectionManager?.connect(runtime.handleIncomingFrame)
         if (!authClient.getCurrentCredentials()?.meJid) {
@@ -1132,7 +1161,8 @@ export function buildWaClientDependencies(input: {
             clearStoredCredentials: clearStoredCredentialsWithClientSideEffects,
             getCurrentCredentials,
             handleClientDirtyBits,
-            incomingMessageAckOptions
+            incomingMessageAckOptions,
+            businessAgent
         })
     })
 
@@ -1526,6 +1556,7 @@ export function buildWaClientDependencies(input: {
         privacyCoordinator,
         profileCoordinator,
         businessCoordinator,
+        businessAgent,
         botCoordinator,
         emailCoordinator,
         receiptQueue,

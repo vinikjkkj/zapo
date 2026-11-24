@@ -146,6 +146,8 @@ Each package's README has the install + config + integration notes.
 
 ## Documentation
 
+- **[Meta Business Agent (experimental)](BUSINESS_AGENT.md)** - QR-session agent
+  status, eligibility, V2 response settings, audience, conversation replies and reengagement.
 - **[zapo.to](https://zapo.to/)** - guides, full API reference, examples,
   protocol notes ([llms.txt](https://zapo.to/llms.txt) index or
   [llms-full.txt](https://zapo.to/llms-full.txt) for LLM context)

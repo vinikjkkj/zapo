@@ -359,6 +359,7 @@ export class WaComms {
     // eslint-disable-next-line @typescript-eslint/require-await
     private async onSocketClosed(info: SocketCloseInfo): Promise<void> {
         this.connected = false
+        this.config.onConnectionClosed?.()
         this.noiseSession?.onSocketClosed(new Error(`socket closed (${info.code}:${info.reason})`))
         this.noiseSession = null
         this.clearPendingFrames()

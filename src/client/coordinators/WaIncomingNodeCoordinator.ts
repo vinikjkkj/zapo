@@ -67,6 +67,8 @@ interface WaIncomingNodeRuntime {
     readonly handleStreamControlResult: (result: WaStreamControlNodeResult) => Promise<void>
     readonly persistSuccessAttributes: (attributes: WaSuccessPersistAttributes) => Promise<void>
     readonly emitSuccessNode: (node: BinaryNode) => void
+    /** Consumes private SMB authentication before public filters and debug events. */
+    readonly handleBusinessAuthenticationNode?: (node: BinaryNode) => Promise<boolean>
     readonly updateClockSkewFromSuccess: (serverUnixSeconds: number) => void
     readonly shouldWarmupMediaConn: () => boolean
     readonly warmupMediaConn: () => Promise<void>
@@ -159,6 +161,9 @@ export class WaIncomingNodeCoordinator {
         const streamControlResult = parseStreamControlNode(node)
         if (streamControlResult) {
             await this.runtime.handleStreamControlResult(streamControlResult)
+            return
+        }
+        if (await this.runtime.handleBusinessAuthenticationNode?.(node)) {
             return
         }
         if (await this.applyStanzaFilters(node)) {

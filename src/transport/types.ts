@@ -56,6 +56,8 @@ export interface WaSocketHandlers {
 }
 
 export interface WaCommsConfig extends WaSocketConfig {
+    /** Clears connection-bound credentials immediately when a socket closes. */
+    readonly onConnectionClosed?: () => void
     /** Maximum time (ms) the initial WebSocket open is allowed to take. */
     readonly connectTimeoutMs?: number
     /** Base delay (ms) between reconnect attempts after a close. */

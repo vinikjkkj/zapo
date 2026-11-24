@@ -35,9 +35,11 @@ import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } fro
 import type { WaStore } from '@store/types'
 import type { ChatstateMedia, ChatstateState } from '@transport/node/builders/chatstate'
 import type { WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
-import type { BinaryNode, WaProxyTransport } from '@transport/types'
+import type { BinaryNode, WaProxyDispatcher, WaProxyTransport } from '@transport/types'
 
 export interface WaClientProxyOptions {
+    /** Dispatcher for native Business Agent HTTPS requests, independent of the WebSocket proxy. */
+    readonly businessAgent?: WaProxyDispatcher
     readonly ws?: WaProxyTransport
     readonly mediaUpload?: WaProxyTransport
     readonly mediaDownload?: WaProxyTransport
