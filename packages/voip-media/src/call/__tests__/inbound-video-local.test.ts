@@ -40,3 +40,19 @@ test('a frame carries the rotation from the id3 frame-info element, null without
     )
     assert.equal(videoRotation(header(1, 1, new Uint8Array([0xf0, 0x30, 0x01, 0]))), null)
 })
+
+test('requestKeyFrames asks every seen stream, paced at 500 ms, false before any stream', () => {
+    const asked: number[] = []
+    const video = new WaInboundVideo({
+        logger: createNoopLogger(),
+        requestKeyFrame: (ssrc) => asked.push(ssrc)
+    })
+    assert.equal(video.requestKeyFrames(1000), false)
+    video.push(header(0x44, 1), IDR, 0, undefined)
+    video.push(header(0x55, 1), IDR, 0, undefined)
+    asked.length = 0
+    assert.equal(video.requestKeyFrames(1000), true)
+    assert.deepEqual(asked.sort(), [0x44, 0x55])
+    assert.equal(video.requestKeyFrames(1400), false)
+    assert.equal(video.requestKeyFrames(1500), true)
+})

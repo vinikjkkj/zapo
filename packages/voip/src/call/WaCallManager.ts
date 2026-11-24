@@ -404,6 +404,10 @@ export class WaCallManager extends EventEmitter {
         await session.setScreenShare(sharing)
     }
 
+    requestVideoKeyFrame(callId: string): boolean {
+        return this.calls.get(callId)?.requestVideoKeyFrame() ?? false
+    }
+
     /** Sends an emoji reaction. `false` when nothing went on the wire. */
     sendReaction(callId: string, reaction: string): boolean {
         const session = this.getSessionOrThrow(callId)

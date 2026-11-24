@@ -79,6 +79,8 @@ export interface WaCallMediaLink {
     stop(): void
     sendReaction(reaction: string): boolean
     sendVideoFrame(data: Uint8Array, timestampUs: number): number
+    /** Asks the peer for a video key frame; false when it could not go out. */
+    requestVideoKeyFrame(): boolean
     loadAudio(audioPath: string): Promise<void>
     setExternalAudioMode(enabled: boolean): void
     feedLiveAudio(data: Float32Array): number
@@ -201,6 +203,10 @@ export class WaLocalCallMedia implements WaCallMediaLink {
         return this.plane.sendVideoFrame(data, timestampUs)
     }
 
+    requestVideoKeyFrame(): boolean {
+        return this.plane.requestVideoKeyFrame()
+    }
+
     loadAudio(audioPath: string): Promise<void> {
         return this.audio.loadAudioFile(audioPath)
     }
@@ -274,6 +280,11 @@ export class WaRemoteCallMedia implements WaCallMediaLink {
     /** Video rides the media, so the host carrying it is the one that sends it. */
     sendVideoFrame(): number {
         return 0
+    }
+
+    /** Video rides the media, so the host carrying it is the one that asks for key frames. */
+    requestVideoKeyFrame(): boolean {
+        return false
     }
 
     loadAudio(): Promise<void> {

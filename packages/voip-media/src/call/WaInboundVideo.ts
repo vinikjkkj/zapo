@@ -10,6 +10,9 @@ export const MAX_H264_DEPACKETIZERS = 8
 /** Shortest gap between two key frame requests while no key frame has arrived. */
 const KEY_FRAME_REQUEST_INTERVAL_MS = 300
 
+/** Shortest gap between two key frame requests asked from outside the plane. */
+const EXTERNAL_KEY_FRAME_REQUEST_INTERVAL_MS = 500
+
 /**
  * Rotation (0..3) the peer stamps in the low two bits of its id3 frame-info element
  * (one-byte RFC 8285 elements), or null when the packet carries none.
@@ -62,6 +65,7 @@ export class WaInboundVideo {
     /** Inbound video streams reassembled at once: the default, or two per group sender. */
     private maxStreams = MAX_H264_DEPACKETIZERS
     private lastKeyFrameRequestAt = 0
+    private lastExternalKeyFrameRequestAt = 0
 
     constructor(options: WaInboundVideoOptions) {
         this.logger = options.logger
@@ -122,6 +126,23 @@ export class WaInboundVideo {
                 rotation: videoRotation(header)
             })
         }
+    }
+
+    /**
+     * Asks for a key frame on every inbound video stream seen so far, for a consumer that
+     * joins a flowing stream or lost frames after the first key frame. False when no stream
+     * was seen or the last such request left less than 500 ms ago.
+     */
+    requestKeyFrames(now: number): boolean {
+        if (
+            !this.streams.size ||
+            now - this.lastExternalKeyFrameRequestAt < EXTERNAL_KEY_FRAME_REQUEST_INTERVAL_MS
+        ) {
+            return false
+        }
+        this.lastExternalKeyFrameRequestAt = now
+        for (const ssrc of this.streams.keys()) this.requestKeyFrame(ssrc)
+        return true
     }
 
     /** Bounds the video streams reassembled at once; a lower bound drops the oldest past it. */
