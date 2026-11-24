@@ -1,7 +1,7 @@
 import { setBoundedMapEntry } from '../collections.js'
 import { isLogLevelEnabled, type Logger } from '../logger.js'
 import { H264Depacketizer } from '../media/h264.js'
-import type { RtpHeader } from '../media/rtp.js'
+import { type RtpHeader, WA_RTP_EXTENSION_PROFILE } from '../media/rtp.js'
 import type { InboundVideoFrame } from '../types.js'
 
 /** Reassembly buffers kept per inbound video SSRC, at least; the oldest is dropped on overflow. */
@@ -9,6 +9,35 @@ export const MAX_H264_DEPACKETIZERS = 8
 
 /** Shortest gap between two key frame requests while no key frame has arrived. */
 const KEY_FRAME_REQUEST_INTERVAL_MS = 300
+
+/**
+ * Rotation (0..3) the peer stamps in the low two bits of its id3 frame-info element
+ * (one-byte RFC 8285 elements), or null when the packet carries none.
+ */
+export function videoRotation(
+    header: Pick<RtpHeader, 'extension' | 'extensionProfile' | 'extensionData'>
+): number | null {
+    const data = header.extensionData
+    if (!header.extension || !data) return null
+    if (
+        header.extensionProfile !== WA_RTP_EXTENSION_PROFILE &&
+        header.extensionProfile !== 0xbede
+    ) {
+        return null
+    }
+    for (let offset = 0; offset < data.length; ) {
+        const head = data[offset]
+        if (head === 0) {
+            offset++
+            continue
+        }
+        const id = head >> 4
+        if (id === 15) return null
+        if (id === 3) return offset + 1 < data.length ? data[offset + 1] & 3 : null
+        offset += 2 + (head & 0x0f)
+    }
+    return null
+}
 
 /** Reassembly and key frame requests of one inbound video SSRC; a request names one stream. */
 interface InboundVideoStream {
@@ -89,7 +118,8 @@ export class WaInboundVideo {
                 timestamp: frame.timestamp,
                 keyFrame: frame.keyFrame,
                 data: frame.data,
-                senderId
+                senderId,
+                rotation: videoRotation(header)
             })
         }
     }
