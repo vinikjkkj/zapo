@@ -1,3 +1,4 @@
+import { unwrapMessage, unwrapMessageOnce } from '@message/encode/content'
 import type { Proto } from '@proto'
 import { isGroupOrBroadcastJid, toUserJid } from '@protocol/jid'
 import { longToNumber } from '@util/primitives'
@@ -80,6 +81,12 @@ interface ContextInfoCarrier {
     contextInfo?: Proto.IContextInfo | null
 }
 
+/**
+ * Merges `ctx` into the `contextInfo` of the first content submessage. A message
+ * that arrives inside an envelope (`ephemeralMessage`, `audioStickerMessage`,
+ * ...) is written at the inner message, since the envelope has no `contextInfo`.
+ * The input is never mutated: only the path down to the target is copied.
+ */
 export function applyContextInfo(
     message: Proto.IMessage,
     ctx: WaSendContextInfo | null | undefined
@@ -87,6 +94,25 @@ export function applyContextInfo(
     if (!ctx) return message
     const proto = buildContextInfoProto(ctx)
     if (!hasAnyKey(proto)) return message
+    return mergeContextInfo(message, proto)
+}
+
+function mergeContextInfo(message: Proto.IMessage, proto: Proto.IContextInfo): Proto.IMessage {
+    const inner = unwrapMessageOnce(message)
+    if (inner !== null) {
+        for (const key of Object.keys(message)) {
+            const envelope = (message as Record<string, unknown>)[key] as
+                | { message?: Proto.IMessage | null }
+                | null
+                | undefined
+            if (envelope?.message === inner) {
+                return {
+                    ...message,
+                    [key]: { ...envelope, message: mergeContextInfo(inner, proto) }
+                }
+            }
+        }
+    }
 
     const next: Proto.IMessage = { ...message }
 
@@ -99,24 +125,28 @@ export function applyContextInfo(
         next.extendedTextMessage = {}
     }
 
-    const target = pickContextInfoTarget(next)
-    if (!target) {
+    const key = pickContextInfoKey(next)
+    if (key === null) {
         throw new Error('cannot apply contextInfo: no compatible submessage found')
     }
-    target.contextInfo = { ...target.contextInfo, ...proto }
+    const target = (next as Record<string, ContextInfoCarrier>)[key]
+    ;(next as Record<string, unknown>)[key] = {
+        ...target,
+        contextInfo: { ...target.contextInfo, ...proto }
+    }
     return next
 }
 
 /**
  * Reads the disappearing-message TTL (`contextInfo.expiration`) from the first
- * submessage that carries it. Unwraps `ephemeralMessage` if present. Returns
- * `undefined` when no submessage has an `expiration` set.
+ * submessage that carries it, looking inside any envelope. Returns `undefined`
+ * when no submessage has an `expiration` set.
  */
 export function pickIncomingExpirationSeconds(
     message: Proto.IMessage | undefined
 ): number | undefined {
     if (!message) return undefined
-    const inner = message.ephemeralMessage?.message ?? message
+    const inner = unwrapMessage(message)
     for (const key of Object.keys(inner)) {
         const value = (inner as Record<string, unknown>)[key]
         if (
@@ -138,13 +168,14 @@ export function pickIncomingExpirationSeconds(
  * Reads `contextInfo.ephemeralSettingTimestamp` (Unix seconds) from the first
  * submessage that carries it. Peers stamp it on every message in a disappearing
  * chat, which makes it the only continuously-refreshed source for the setting -
- * history sync and `EPHEMERAL_SETTING` are point-in-time.
+ * history sync and `EPHEMERAL_SETTING` are point-in-time. Looks inside any
+ * envelope.
  */
 export function pickIncomingEphemeralSettingTimestamp(
     message: Proto.IMessage | undefined
 ): number | undefined {
     if (!message) return undefined
-    const inner = message.ephemeralMessage?.message ?? message
+    const inner = unwrapMessage(message)
     for (const key of Object.keys(inner)) {
         const value = (inner as Record<string, unknown>)[key]
         if (
@@ -162,7 +193,7 @@ export function pickIncomingEphemeralSettingTimestamp(
     return undefined
 }
 
-function pickContextInfoTarget(message: Proto.IMessage): ContextInfoCarrier | null {
+function pickContextInfoKey(message: Proto.IMessage): string | null {
     for (const key of Object.keys(message)) {
         if (key === 'messageContextInfo') continue
         const value = (message as Record<string, unknown>)[key]
@@ -172,15 +203,21 @@ function pickContextInfoTarget(message: Proto.IMessage): ContextInfoCarrier | nu
             !Array.isArray(value) &&
             !(value instanceof Uint8Array)
         ) {
-            return value
+            return key
         }
     }
     return null
 }
 
-/** Reads the `contextInfo` off a message's first content submessage (null when absent). */
+/**
+ * Reads the `contextInfo` off a message's first content submessage, looking
+ * inside any envelope (null when absent).
+ */
 export function getContextInfo(message: Proto.IMessage): Proto.IContextInfo | null {
-    return pickContextInfoTarget(message)?.contextInfo ?? null
+    const inner = unwrapMessage(message)
+    const key = pickContextInfoKey(inner)
+    if (key === null) return null
+    return (inner as Record<string, ContextInfoCarrier>)[key].contextInfo ?? null
 }
 
 /**

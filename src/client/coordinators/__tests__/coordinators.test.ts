@@ -384,6 +384,77 @@ test('message dispatch keeps the user messageContextInfo on a quoted typed text 
     assert.equal(decoded.messageContextInfo?.messageSecret?.byteLength, 32)
 })
 
+test('message dispatch stamps mediatype=sticker and quotes inside a raw audio sticker wrapper', async () => {
+    const sticker: Proto.IMessage = {
+        stickerMessage: { mimetype: 'image/webp', isLottie: true, audioMessage: {} }
+    }
+    const input: Proto.IMessage = { audioStickerMessage: { message: sticker } }
+    let published: BinaryNode | undefined
+    let sentPlaintext: Uint8Array | undefined
+    const stop = new Error('stop after publish')
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+        meJid: '5511000000000@s.whatsapp.net',
+        buildMessageContent: (content) =>
+            buildMediaMessageContent(
+                { logger: createNoopLogger() } as unknown as WaMediaMessageOptions,
+                content
+            ),
+        signalStore: { getRegistrationInfo: async () => null },
+        fanoutResolver: { resolveGroupParticipantDeviceJids: async () => [] },
+        retryTracker: {
+            track: async (_meta: unknown, publish: () => Promise<unknown>) => publish()
+        },
+        messageClient: {
+            publishNode: async (node: BinaryNode) => {
+                published = node
+                throw stop
+            }
+        },
+        senderKeyManager: {
+            prepareGroupEncryption: async (
+                _groupJid: string,
+                _sender: unknown,
+                plaintext: Uint8Array
+            ) => {
+                sentPlaintext = plaintext
+                return {
+                    distributionMessage: {},
+                    ciphertext: { ciphertext: new Uint8Array(1) },
+                    keyId: 1
+                }
+            }
+        }
+    })
+
+    await assert.rejects(
+        () =>
+            coordinator.sendMessage('120363000000000001@g.us', input, {
+                expirationSeconds: 60,
+                quote: {
+                    remoteJid: '120363000000000001@g.us',
+                    id: 'QUOTED',
+                    fromMe: false,
+                    participant: '5511888888888@s.whatsapp.net'
+                }
+            }),
+        stop
+    )
+
+    assert.equal(published?.attrs.type, 'media')
+    const enc = (published?.content as BinaryNode[]).find((child) => child.tag === 'enc')
+    assert.equal(enc?.attrs.mediatype, 'sticker')
+
+    const decoded = proto.Message.decode(unpadPkcs7(sentPlaintext!))
+    assert.equal(
+        decoded.audioStickerMessage?.message?.stickerMessage?.contextInfo?.stanzaId,
+        'QUOTED'
+    )
+    assert.equal(decoded.audioStickerMessage?.message?.stickerMessage?.contextInfo?.expiration, 60)
+    assert.equal(decoded.audioStickerMessage?.message?.stickerMessage?.isLottie, true)
+    assert.deepEqual(input, { audioStickerMessage: { message: sticker } })
+    assert.equal(sticker.stickerMessage?.contextInfo, undefined)
+})
+
 test('message dispatch publishes a form_message flow with a bare native_flow name', async () => {
     let published: BinaryNode | undefined
     const stop = new Error('stop after publish')

@@ -125,6 +125,20 @@ test('resolveMediaPayload unwraps ephemeral/viewOnce/documentWithCaption wrapper
     assert.equal(wrappedViewOnce?.mediaType, 'gif')
 })
 
+test('resolveMediaPayload reads the sticker inside lottie and audio sticker wrappers', () => {
+    const sticker = { stickerMessage: { directPath: '/st', mediaKey: key, mimetype: 'image/webp' } }
+    for (const message of [
+        { lottieStickerMessage: { message: sticker } },
+        { audioStickerMessage: { message: sticker } },
+        { ephemeralMessage: { message: { audioStickerMessage: { message: sticker } } } }
+    ]) {
+        const payload = resolveMediaPayload(message)
+        assert.equal(payload?.mediaType, 'sticker')
+        assert.equal(payload?.directPath, '/st')
+        assert.equal(payload?.mimetype, 'image/webp')
+    }
+})
+
 test('resolveMediaPayload converts protobuf Long fileLength via toNumber', () => {
     const payload = resolveMediaPayload({
         imageMessage: {

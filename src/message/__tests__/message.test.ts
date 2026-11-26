@@ -326,6 +326,28 @@ test('content helpers unwrap deeply nested wrappers for edit and media attrs', (
         }),
         'gif'
     )
+    assert.equal(
+        resolveEncMediaType({
+            ephemeralMessage: {
+                message: {
+                    audioStickerMessage: { message: { stickerMessage: { audioMessage: {} } } }
+                }
+            }
+        }),
+        'sticker'
+    )
+})
+
+test('lottie and audio sticker envelopes resolve to type=media with mediatype=sticker', () => {
+    const lottie = { lottieStickerMessage: { message: { stickerMessage: { isLottie: true } } } }
+    const audio = { audioStickerMessage: { message: { stickerMessage: { audioMessage: {} } } } }
+    assert.equal(resolveMessageTypeAttr(lottie), 'media')
+    assert.equal(resolveMessageTypeAttr(audio), 'media')
+    assert.equal(resolveEncMediaType(lottie), 'sticker')
+    assert.equal(resolveEncMediaType(audio), 'sticker')
+    assert.equal(resolveEncMediaType({ ephemeralMessage: { message: lottie } }), 'sticker')
+    assert.equal(resolveEditAttr(audio), null)
+    assert.deepEqual(resolveMetaAttrs(lottie), null)
 })
 
 test('resolveEditAttr maps protobuf to correct edit attribute values', () => {

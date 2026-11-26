@@ -10,7 +10,8 @@ import {
     resolveEncMediaType,
     resolveMessageTypeAttr,
     resolveMetaAttrs,
-    resolveOutboundMessageAttrs
+    resolveOutboundMessageAttrs,
+    unwrapMessage
 } from '@message/encode/content'
 import { unwrapDeviceSentMessage, wrapDeviceSentMessage } from '@message/encode/device-sent'
 import { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
@@ -83,6 +84,57 @@ test('AI rich-response family resolves to text so the stanza is not dropped', ()
         resolveEncMediaType({ botForwardedMessage: { message: { imageMessage: {} } } }),
         'image'
     )
+})
+
+test('lottie and audio sticker wrappers resolve to a sticker media stanza', () => {
+    const sticker: Proto.IMessage = { stickerMessage: { isLottie: true, mimetype: 'image/webp' } }
+    const lottie: Proto.IMessage = { lottieStickerMessage: { message: sticker } }
+    const audio: Proto.IMessage = { audioStickerMessage: { message: sticker } }
+
+    assert.equal(unwrapMessage(lottie), sticker)
+    assert.equal(unwrapMessage(audio), sticker)
+    assert.equal(resolveEncMediaType(lottie), 'sticker')
+    assert.equal(resolveEncMediaType(audio), 'sticker')
+    assert.equal(resolveMessageTypeAttr(lottie), 'media')
+    assert.equal(resolveMessageTypeAttr(audio), 'media')
+    assert.equal(resolveOutboundMessageAttrs(audio).mediatype, 'sticker')
+    assert.equal(resolveOutboundMessageAttrs(lottie).typeAttr, 'media')
+})
+
+test('lottie and audio sticker wrappers keep the sticker mediatype inside other envelopes', () => {
+    const sticker: Proto.IMessage = { stickerMessage: {} }
+    assert.equal(
+        resolveEncMediaType({
+            ephemeralMessage: { message: { lottieStickerMessage: { message: sticker } } }
+        }),
+        'sticker'
+    )
+    assert.equal(
+        resolveEncMediaType({
+            ephemeralMessage: { message: { audioStickerMessage: { message: sticker } } }
+        }),
+        'sticker'
+    )
+    assert.equal(
+        resolveEncMediaType({
+            deviceSentMessage: { message: { audioStickerMessage: { message: sticker } } }
+        }),
+        'sticker'
+    )
+    assert.equal(
+        resolveEncMediaType({
+            audioStickerMessage: { message: { ephemeralMessage: { message: sticker } } }
+        }),
+        'sticker'
+    )
+})
+
+test('an empty lottie or audio sticker wrapper still carries the sticker mediatype', () => {
+    const empty: Proto.IMessage = { audioStickerMessage: {} }
+    assert.equal(unwrapMessage(empty), empty)
+    assert.equal(resolveEncMediaType(empty), 'sticker')
+    assert.equal(resolveEncMediaType({ lottieStickerMessage: {} }), 'sticker')
+    assert.equal(resolveEncMediaType({ audioStickerMessage: { message: null } }), 'sticker')
 })
 
 test('getContentType picks the payload key, including the unsuffixed ones', () => {
@@ -270,7 +322,14 @@ test('resolveOutboundMessageAttrs matches the individual resolvers', () => {
         { ephemeralMessage: { message: { viewOnceMessageV2: { message: { videoMessage: {} } } } } },
         { deviceSentMessage: { message: { extendedTextMessage: { text: 'ds' } } } },
         { groupStatusMessageV2: { message: { imageMessage: { url: 'x' } } } },
-        { albumMessage: { expectedImageCount: 2 } }
+        { albumMessage: { expectedImageCount: 2 } },
+        { lottieStickerMessage: { message: { stickerMessage: { isLottie: true } } } },
+        { audioStickerMessage: { message: { stickerMessage: { audioMessage: {} } } } },
+        {
+            ephemeralMessage: {
+                message: { audioStickerMessage: { message: { stickerMessage: {} } } }
+            }
+        }
     ]
     for (const message of corpus) {
         const combined = resolveOutboundMessageAttrs(message)
