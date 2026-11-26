@@ -1,5 +1,12 @@
 # zapo-js
 
+## 1.12.2
+
+### Patch Changes
+
+- Unwrap `lottieStickerMessage` and `audioStickerMessage`. A sticker sent in either envelope went out without `mediatype="sticker"` on the `<enc>`; both now resolve to `sticker`, as in WA Web. `unwrapMessage` descends into them, so a raw lottie or audio sticker posted to a newsletter now goes out as `sticker` media, and `resolveMediaPayload` finds the inner sticker for download.
+- Keep the quote and the disappearing timer on messages sent inside an envelope. `applyContextInfo` wrote the context onto the wrapper (`ephemeralMessage`, `viewOnceMessage`, `documentWithCaptionMessage`, the sticker wrappers and the rest), which has no `contextInfo`, so both were dropped; it now writes into the inner message and no longer mutates the caller's message. `pickIncomingExpirationSeconds`, `pickIncomingEphemeralSettingTimestamp` and `getContextInfo` also look inside every envelope, not only `ephemeralMessage`.
+
 ## 1.12.1
 
 ### Patch Changes
