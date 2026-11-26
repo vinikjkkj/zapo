@@ -148,7 +148,7 @@ test('applyContextInfo writes into the sticker inside a lottie sticker wrapper',
     })
 })
 
-test('applyContextInfo goes through every kind of envelope and keeps its siblings', () => {
+test('applyContextInfo goes through every kind of envelope, keeps its siblings and the readers see it', () => {
     const cases: readonly { readonly label: string; readonly input: Proto.IMessage }[] = [
         {
             label: 'ephemeralMessage',
@@ -178,10 +178,26 @@ test('applyContextInfo goes through every kind of envelope and keeps its sibling
                     message: { imageMessage: { url: 'u' } }
                 }
             }
+        },
+        {
+            label: 'botInvokeMessage',
+            input: { botInvokeMessage: { message: { imageMessage: { url: 'u' } } } }
+        },
+        {
+            label: 'groupStatusMessage',
+            input: { groupStatusMessage: { message: { imageMessage: { url: 'u' } } } }
+        },
+        {
+            label: 'groupStatusMessageV2',
+            input: { groupStatusMessageV2: { message: { imageMessage: { url: 'u' } } } }
+        },
+        {
+            label: 'botForwardedMessage',
+            input: { botForwardedMessage: { message: { imageMessage: { url: 'u' } } } }
         }
     ]
     for (const { label, input } of cases) {
-        const out = applyContextInfo(input, { quotedMessageId: 'q-3' })
+        const out = applyContextInfo(input, { quotedMessageId: 'q-3', expirationSeconds: 900 })
         const [envelopeKey] = Object.keys(input)
         const envelopeIn = (input as Record<string, Record<string, unknown>>)[envelopeKey]
         const envelopeOut = (out as Record<string, Record<string, unknown>>)[envelopeKey]
@@ -189,10 +205,12 @@ test('applyContextInfo goes through every kind of envelope and keeps its sibling
         assert.equal(envelopeOut.destinationJid, envelopeIn.destinationJid, label)
         assert.deepEqual(
             envelopeOut.message,
-            { imageMessage: { url: 'u', contextInfo: { stanzaId: 'q-3' } } },
+            { imageMessage: { url: 'u', contextInfo: { stanzaId: 'q-3', expiration: 900 } } },
             label
         )
         assert.deepEqual(envelopeIn.message, { imageMessage: { url: 'u' } }, label)
+        assert.equal(pickIncomingExpirationSeconds(out), 900, label)
+        assert.deepEqual(getContextInfo(out), { stanzaId: 'q-3', expiration: 900 }, label)
     }
 })
 
