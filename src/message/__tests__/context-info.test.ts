@@ -4,8 +4,12 @@ import test from 'node:test'
 import {
     applyContextInfo,
     buildContextInfoProto,
+    getContextInfo,
+    pickIncomingEphemeralSettingTimestamp,
+    pickIncomingExpirationSeconds,
     resolveSendContextInfo
 } from '@message/context-info'
+import type { Proto } from '@proto'
 
 test('buildContextInfoProto maps friendly fields to proto fields', () => {
     const proto = buildContextInfoProto({
@@ -82,6 +86,239 @@ test('applyContextInfo is a no-op when ctx is null/empty', () => {
     assert.equal(applyContextInfo(original, null), original)
     assert.equal(applyContextInfo(original, undefined), original)
     assert.equal(applyContextInfo(original, {}), original)
+})
+
+const QUOTE_AND_TTL = {
+    quotedMessageId: 'q-1',
+    quotedParticipant: 'peer@lid',
+    expirationSeconds: 86_400
+} as const
+
+test('applyContextInfo does not mutate the submessage it writes into', () => {
+    const image = { url: 'u', mimetype: 'image/jpeg' }
+    const input: Proto.IMessage = { imageMessage: image }
+    const out = applyContextInfo(input, { quotedMessageId: 'q-1' })
+    assert.notEqual(out, input)
+    assert.notEqual(out.imageMessage, image)
+    assert.deepEqual(image, { url: 'u', mimetype: 'image/jpeg' })
+    assert.deepEqual(out.imageMessage, {
+        url: 'u',
+        mimetype: 'image/jpeg',
+        contextInfo: { stanzaId: 'q-1' }
+    })
+})
+
+test('applyContextInfo writes the quote and TTL into the sticker inside an audio sticker wrapper', () => {
+    const sticker = { mimetype: 'image/webp', isLottie: true }
+    const input: Proto.IMessage = { audioStickerMessage: { message: { stickerMessage: sticker } } }
+    const out = applyContextInfo(input, QUOTE_AND_TTL)
+    assert.deepEqual(out, {
+        audioStickerMessage: {
+            message: {
+                stickerMessage: {
+                    mimetype: 'image/webp',
+                    isLottie: true,
+                    contextInfo: { stanzaId: 'q-1', participant: 'peer@lid', expiration: 86_400 }
+                }
+            }
+        }
+    })
+    assert.deepEqual(input, {
+        audioStickerMessage: {
+            message: { stickerMessage: { mimetype: 'image/webp', isLottie: true } }
+        }
+    })
+    assert.equal('contextInfo' in sticker, false)
+})
+
+test('applyContextInfo writes into the sticker inside a lottie sticker wrapper', () => {
+    const out = applyContextInfo(
+        { lottieStickerMessage: { message: { stickerMessage: { isLottie: true } } } },
+        { quotedMessageId: 'q-2', expirationSeconds: 604_800 }
+    )
+    assert.deepEqual(out, {
+        lottieStickerMessage: {
+            message: {
+                stickerMessage: {
+                    isLottie: true,
+                    contextInfo: { stanzaId: 'q-2', expiration: 604_800 }
+                }
+            }
+        }
+    })
+})
+
+test('applyContextInfo goes through every kind of envelope, keeps its siblings and the readers see it', () => {
+    const cases: readonly { readonly label: string; readonly input: Proto.IMessage }[] = [
+        {
+            label: 'ephemeralMessage',
+            input: { ephemeralMessage: { message: { imageMessage: { url: 'u' } } } }
+        },
+        {
+            label: 'viewOnceMessage',
+            input: { viewOnceMessage: { message: { imageMessage: { url: 'u' } } } }
+        },
+        {
+            label: 'viewOnceMessageV2',
+            input: { viewOnceMessageV2: { message: { imageMessage: { url: 'u' } } } }
+        },
+        {
+            label: 'documentWithCaptionMessage',
+            input: { documentWithCaptionMessage: { message: { imageMessage: { url: 'u' } } } }
+        },
+        {
+            label: 'groupMentionedMessage',
+            input: { groupMentionedMessage: { message: { imageMessage: { url: 'u' } } } }
+        },
+        {
+            label: 'deviceSentMessage',
+            input: {
+                deviceSentMessage: {
+                    destinationJid: 'peer@lid',
+                    message: { imageMessage: { url: 'u' } }
+                }
+            }
+        },
+        {
+            label: 'botInvokeMessage',
+            input: { botInvokeMessage: { message: { imageMessage: { url: 'u' } } } }
+        },
+        {
+            label: 'groupStatusMessage',
+            input: { groupStatusMessage: { message: { imageMessage: { url: 'u' } } } }
+        },
+        {
+            label: 'groupStatusMessageV2',
+            input: { groupStatusMessageV2: { message: { imageMessage: { url: 'u' } } } }
+        },
+        {
+            label: 'botForwardedMessage',
+            input: { botForwardedMessage: { message: { imageMessage: { url: 'u' } } } }
+        }
+    ]
+    for (const { label, input } of cases) {
+        const out = applyContextInfo(input, { quotedMessageId: 'q-3', expirationSeconds: 900 })
+        const [envelopeKey] = Object.keys(input)
+        const envelopeIn = (input as Record<string, Record<string, unknown>>)[envelopeKey]
+        const envelopeOut = (out as Record<string, Record<string, unknown>>)[envelopeKey]
+        assert.equal('contextInfo' in envelopeOut, false, label)
+        assert.equal(envelopeOut.destinationJid, envelopeIn.destinationJid, label)
+        assert.deepEqual(
+            envelopeOut.message,
+            { imageMessage: { url: 'u', contextInfo: { stanzaId: 'q-3', expiration: 900 } } },
+            label
+        )
+        assert.deepEqual(envelopeIn.message, { imageMessage: { url: 'u' } }, label)
+        assert.equal(pickIncomingExpirationSeconds(out), 900, label)
+        assert.deepEqual(getContextInfo(out), { stanzaId: 'q-3', expiration: 900 }, label)
+    }
+})
+
+test('applyContextInfo reaches a message wrapped in several envelopes', () => {
+    const input: Proto.IMessage = {
+        messageContextInfo: { deviceListMetadataVersion: 2 },
+        ephemeralMessage: {
+            message: { audioStickerMessage: { message: { stickerMessage: { isLottie: true } } } }
+        }
+    }
+    const out = applyContextInfo(input, { quotedMessageId: 'q-4' })
+    assert.deepEqual(out, {
+        messageContextInfo: { deviceListMetadataVersion: 2 },
+        ephemeralMessage: {
+            message: {
+                audioStickerMessage: {
+                    message: {
+                        stickerMessage: { isLottie: true, contextInfo: { stanzaId: 'q-4' } }
+                    }
+                }
+            }
+        }
+    })
+    assert.deepEqual(input.ephemeralMessage?.message?.audioStickerMessage?.message, {
+        stickerMessage: { isLottie: true }
+    })
+})
+
+test('applyContextInfo merges into the contextInfo already on a wrapped sticker', () => {
+    const out = applyContextInfo(
+        {
+            lottieStickerMessage: {
+                message: {
+                    stickerMessage: { contextInfo: { mentionedJid: ['x@s.whatsapp.net'] } }
+                }
+            }
+        },
+        { quotedMessageId: 'q-5' }
+    )
+    assert.deepEqual(out.lottieStickerMessage?.message?.stickerMessage?.contextInfo, {
+        mentionedJid: ['x@s.whatsapp.net'],
+        stanzaId: 'q-5'
+    })
+})
+
+test('applyContextInfo promotes a wrapped conversation to extendedTextMessage', () => {
+    const input: Proto.IMessage = { ephemeralMessage: { message: { conversation: 'hello' } } }
+    const out = applyContextInfo(input, { isSpoiler: true })
+    assert.deepEqual(out, {
+        ephemeralMessage: {
+            message: { extendedTextMessage: { text: 'hello', contextInfo: { isSpoiler: true } } }
+        }
+    })
+    assert.deepEqual(input, { ephemeralMessage: { message: { conversation: 'hello' } } })
+})
+
+test('applyContextInfo returns the same wrapped message when there is nothing to apply', () => {
+    const input: Proto.IMessage = {
+        audioStickerMessage: { message: { stickerMessage: {} } }
+    }
+    assert.equal(applyContextInfo(input, null), input)
+    assert.equal(applyContextInfo(input, {}), input)
+})
+
+const WRAPPED_STICKER_CONTEXT: Proto.IContextInfo = {
+    stanzaId: 'q-6',
+    expiration: 3_600,
+    ephemeralSettingTimestamp: 1_751_808_692
+}
+
+test('readers see the contextInfo of a sticker inside a lottie or audio wrapper', () => {
+    const sticker = { stickerMessage: { contextInfo: WRAPPED_STICKER_CONTEXT } }
+    for (const message of [
+        { lottieStickerMessage: { message: sticker } },
+        { audioStickerMessage: { message: sticker } },
+        { ephemeralMessage: { message: { lottieStickerMessage: { message: sticker } } } },
+        { ephemeralMessage: { message: { audioStickerMessage: { message: sticker } } } }
+    ] satisfies Proto.IMessage[]) {
+        const label = Object.keys(message)[0]
+        assert.equal(pickIncomingExpirationSeconds(message), 3_600, label)
+        assert.equal(pickIncomingEphemeralSettingTimestamp(message), 1_751_808_692, label)
+        assert.deepEqual(
+            getContextInfo(message),
+            { stanzaId: 'q-6', expiration: 3_600, ephemeralSettingTimestamp: 1_751_808_692 },
+            label
+        )
+    }
+})
+
+test('readers look inside view-once and device-sent envelopes too', () => {
+    const inner = { imageMessage: { contextInfo: { expiration: 900, stanzaId: 'q-7' } } }
+    for (const message of [
+        { viewOnceMessage: { message: inner } },
+        { deviceSentMessage: { destinationJid: 'peer@lid', message: inner } }
+    ] satisfies Proto.IMessage[]) {
+        assert.equal(pickIncomingExpirationSeconds(message), 900)
+        assert.deepEqual(getContextInfo(message), { expiration: 900, stanzaId: 'q-7' })
+    }
+})
+
+test('readers return nothing for a wrapped sticker without contextInfo', () => {
+    const message: Proto.IMessage = {
+        audioStickerMessage: { message: { stickerMessage: { isLottie: true } } }
+    }
+    assert.equal(pickIncomingExpirationSeconds(message), undefined)
+    assert.equal(pickIncomingEphemeralSettingTimestamp(message), undefined)
+    assert.equal(getContextInfo(message), null)
+    assert.equal(getContextInfo({}), null)
 })
 
 test('resolveSendContextInfo returns null when nothing was provided', () => {

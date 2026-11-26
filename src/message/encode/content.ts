@@ -218,21 +218,35 @@ export function wrapAsViewOnce(message: Proto.IMessage): Proto.IMessage {
     return message
 }
 
+/** Inner message of a single envelope layer, or `null` when `msg` is not wrapped. */
+export function unwrapMessageOnce(msg: Proto.IMessage): Proto.IMessage | null {
+    return (
+        msg.ephemeralMessage?.message ??
+        msg.groupMentionedMessage?.message ??
+        msg.botInvokeMessage?.message ??
+        msg.deviceSentMessage?.message ??
+        msg.viewOnceMessage?.message ??
+        msg.viewOnceMessageV2?.message ??
+        msg.documentWithCaptionMessage?.message ??
+        msg.groupStatusMessage?.message ??
+        msg.groupStatusMessageV2?.message ??
+        msg.botForwardedMessage?.message ??
+        msg.lottieStickerMessage?.message ??
+        msg.audioStickerMessage?.message ??
+        null
+    )
+}
+
+/**
+ * Descends every envelope layer (`ephemeralMessage`, `viewOnceMessage`,
+ * `lottieStickerMessage`, `audioStickerMessage`, ...) and returns the message
+ * that carries the content.
+ */
 export function unwrapMessage(message: Proto.IMessage): Proto.IMessage {
     let msg = message
     for (;;) {
-        const inner =
-            msg.ephemeralMessage?.message ??
-            msg.groupMentionedMessage?.message ??
-            msg.botInvokeMessage?.message ??
-            msg.deviceSentMessage?.message ??
-            msg.viewOnceMessage?.message ??
-            msg.viewOnceMessageV2?.message ??
-            msg.documentWithCaptionMessage?.message ??
-            msg.groupStatusMessage?.message ??
-            msg.groupStatusMessageV2?.message ??
-            msg.botForwardedMessage?.message
-        if (!inner) return msg
+        const inner = unwrapMessageOnce(msg)
+        if (inner === null) return msg
         msg = inner
     }
 }
@@ -422,6 +436,7 @@ function resolveEncMediaTypeFrom(msg: Proto.IMessage): string | null {
     if (msg.imageMessage) return WA_ENC_MEDIA_TYPES.IMAGE
     if (msg.stickerMessage) return WA_ENC_MEDIA_TYPES.STICKER
     if (msg.stickerPackMessage) return WA_ENC_MEDIA_TYPES.STICKER_PACK
+    if (msg.lottieStickerMessage || msg.audioStickerMessage) return WA_ENC_MEDIA_TYPES.STICKER
     if (msg.locationMessage) {
         return msg.locationMessage.isLive
             ? WA_ENC_MEDIA_TYPES.LIVE_LOCATION

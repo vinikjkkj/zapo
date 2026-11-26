@@ -40,6 +40,22 @@ test('resolveOutboundStanzaShape keeps a group buttons message flat', () => {
     })
 })
 
+test('resolveOutboundStanzaShape tags lottie and audio stickers as media/sticker, wrapped or not', () => {
+    const sticker: Proto.IMessage = { stickerMessage: { isLottie: true } }
+    for (const isGroup of [false, true]) {
+        const expected = { type: 'media', mediatype: 'sticker' }
+        assert.deepEqual(shapeOf({ lottieStickerMessage: { message: sticker } }, isGroup), expected)
+        assert.deepEqual(shapeOf({ audioStickerMessage: { message: sticker } }, isGroup), expected)
+        assert.deepEqual(
+            shapeOf(
+                { ephemeralMessage: { message: { audioStickerMessage: { message: sticker } } } },
+                isGroup
+            ),
+            expected
+        )
+    }
+})
+
 test('resolveOutboundStanzaShape passes through a message without a <biz> companion', () => {
     assert.deepEqual(shapeOf({ imageMessage: {} }, true), { type: 'media', mediatype: 'image' })
     assert.deepEqual(shapeOf({ conversation: 'hi' }, false), {
