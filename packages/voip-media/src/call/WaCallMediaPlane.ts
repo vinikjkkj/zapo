@@ -721,6 +721,17 @@ export class WaCallMediaPlane {
     }
 
     /**
+     * Asks the peer for a key frame on every inbound video stream seen so far, for a
+     * consumer that joins a flowing stream or lost frames after the first key frame.
+     * Returns false when no stream was seen, the request cannot go out, or the last one
+     * left less than 500 ms ago.
+     */
+    requestVideoKeyFrame(): boolean {
+        if (!this.srtcpContext || !this.videoRtpSession) return false
+        return this.inboundVideo.requestKeyFrames(Date.now())
+    }
+
+    /**
      * Sends one emoji reaction in-band on the media socket. Returns whether the first
      * packet left; a `false` does not lose it, the retransmission carries it.
      */

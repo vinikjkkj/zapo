@@ -1355,6 +1355,10 @@ export class WaCallMediaSession {
         this.subscriptions.stop()
     }
 
+    requestVideoKeyFrame(): boolean {
+        return this.media.requestVideoKeyFrame()
+    }
+
     /**
      * Sends one emoji reaction in-band on the media socket. Returns whether the first
      * packet left; a `false` does not lose it, the retransmission carries it.

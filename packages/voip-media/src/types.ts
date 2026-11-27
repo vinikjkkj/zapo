@@ -49,6 +49,13 @@ export interface InboundVideoFrame {
     readonly data: Uint8Array
     /** The group sender whose stream this is; absent on a 1:1 call or an unlisted stream. */
     readonly senderId?: string
+    /**
+     * Rotation (0..3) the sender stamped in the low two bits of the id3 frame-info
+     * RTP extension of the packet that completed this frame; null when it carried
+     * none. The official clients convey the camera pose this way on calls they
+     * originate, where the signaling `device_orientation` stays 0.
+     */
+    readonly rotation?: number | null
 }
 
 export const SRTP_AUTH_TAG_LEN = 4

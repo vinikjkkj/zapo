@@ -109,6 +109,10 @@ class PlaneMediaLink implements WaCallMediaLink {
         return this.plane.sendVideoFrame(data, timestampUs)
     }
 
+    requestVideoKeyFrame(): boolean {
+        return this.plane.requestVideoKeyFrame()
+    }
+
     loadAudio(): Promise<void> {
         return Promise.resolve()
     }

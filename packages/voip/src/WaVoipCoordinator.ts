@@ -229,6 +229,16 @@ export class WaVoipCoordinator {
     }
 
     /**
+     * Ask the peer for a video key frame on every inbound video stream of `callId`, so a
+     * consumer that joins a flowing call or lost frames recovers without waiting for the
+     * peer's periodic one. Returns `false` when no session or inbound video exists, the
+     * media runs remotely, or the previous request left less than 500 ms ago.
+     */
+    requestVideoKeyFrame(callId: string): boolean {
+        return this.manager.requestVideoKeyFrame(callId)
+    }
+
+    /**
      * Sends an emoji reaction on a call, as the glyph itself. Returns `false` when nothing
      * went on the wire: the call is not active, or its app-data stream is not open yet.
      */

@@ -72,6 +72,13 @@ export class RecordingMediaLink implements WaCallMediaLink {
         return 0
     }
 
+    keyFrameRequests = 0
+
+    requestVideoKeyFrame(): boolean {
+        this.keyFrameRequests++
+        return true
+    }
+
     loadAudio(): Promise<void> {
         return Promise.resolve()
     }
