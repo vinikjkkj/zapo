@@ -6,6 +6,7 @@ import {
     MLOW_FRAME_SIZE,
     MLOW_MAX_PACKET_BYTES,
     MLOW_SAMPLE_RATE,
+    MLOW_SET_USE_SMPL_CTL,
     type MlowEncoder,
     type MlowModule,
     type MlowRepacketizer
@@ -66,6 +67,8 @@ export class WaMlowEncoder {
     private readonly logger: Logger
     private packetLossPercent: number
     private red = false
+    /** Encoding standard Opus for a peer that sends it; see {@link setPlainOpus}. */
+    private plainOpus = false
     private secondary: Uint8Array | null = null
 
     /** Reused PCM staging buffer for the encoder, one full frame wide. */
@@ -142,14 +145,41 @@ export class WaMlowEncoder {
             pcm[i] = Math.round(sample * 32_767)
         }
         const length = this.encoder.encodeInto(pcm, target)
-        if (this.red) {
+        if (this.redActive) {
             this.encodeSecondary()
         }
         return length
     }
 
+    /** RED copies are SMPL in-band RED: none while encoding standard Opus. */
     get redActive(): boolean {
-        return this.red
+        return this.red && !this.plainOpus
+    }
+
+    /** Whether frames come out as standard Opus (60 ms SILK) rather than SMPL. */
+    get plainOpusActive(): boolean {
+        return this.plainOpus
+    }
+
+    /**
+     * Encodes standard Opus instead of SMPL, for a peer whose own stream is standard Opus and
+     * may not decode SMPL. Frames stay 60 ms; they go out one per packet, since the repacketizer
+     * builds SMPL multiframes. False when the encoder refuses the switch.
+     */
+    setPlainOpus(plain: boolean): boolean {
+        if (plain === this.plainOpus) return true
+        try {
+            this.encoder.encoderCtl(MLOW_SET_USE_SMPL_CTL, plain ? 0 : 1)
+        } catch (err) {
+            this.logger.warn('mlow encoder codec switch failed', {
+                plainOpus: plain,
+                message: toError(err).message
+            })
+            return false
+        }
+        this.plainOpus = plain
+        this.secondary = null
+        return true
     }
 
     get lastSecondary(): Uint8Array | null {
