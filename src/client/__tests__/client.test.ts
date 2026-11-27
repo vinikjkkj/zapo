@@ -939,6 +939,7 @@ function createClearStoredStateHarness(logoutStoreClear?: {
     readonly privacyToken?: boolean
 }) {
     const cleared: string[] = []
+    let agentInvalidations = 0
     const fakeClient = {
         options: {
             logoutStoreClear
@@ -949,6 +950,11 @@ function createClearStoredStateHarness(logoutStoreClear?: {
         },
         logger: createNoopLogger(),
         deps: {
+            businessAgent: {
+                invalidate: () => {
+                    agentInvalidations += 1
+                }
+            },
             receiptQueue: {
                 take: () => []
             },
@@ -1031,7 +1037,7 @@ function createClearStoredStateHarness(logoutStoreClear?: {
             }
         }
     }
-    return { fakeClient, cleared }
+    return { fakeClient, cleared, agentInvalidations: () => agentInvalidations }
 }
 
 test('clearStoredState clears non-mailbox domains by default and preserves mailbox archive', async () => {
@@ -1389,4 +1395,10 @@ test('history.sink is skipped when history.enabled is false, and the primary is 
 
     assert.equal(calls, 0)
     assert.deepEqual(result.timeline, ['receipt'])
+})
+
+test('clearStoredState invalidates native Business authentication', async () => {
+    const harness = createClearStoredStateHarness()
+    await getClearStoredStateMethod().call(harness.fakeClient)
+    assert.equal(harness.agentInvalidations(), 1)
 })

@@ -1,3 +1,16 @@
+export { WaBusinessAgentError } from '@client/business-agent/errors'
+export type {
+    WaBusinessAgentAbility,
+    WaBusinessAgentAudienceRule,
+    WaBusinessAgentConversationUpdate,
+    WaBusinessAgentCoordinator,
+    WaBusinessAgentMutationResult,
+    WaBusinessAgentReengagementUpdate,
+    WaBusinessAgentReplyStatus,
+    WaBusinessAgentSettings,
+    WaBusinessAgentSettingsAvailability,
+    WaBusinessAgentSettingsUpdate
+} from '@client/business-agent/types'
 export { WaClient } from '@client/WaClient'
 export type {
     WaAppStateMessageKey,

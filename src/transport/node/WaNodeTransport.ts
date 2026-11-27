@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events'
 import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
 import { decodeBinaryNodeStanza, encodeBinaryNodeStanza } from '@transport/binary'
+import { isBusinessAuthenticationNode } from '@transport/node/builders/business-agent'
 import { formatBinaryNodeAsXml } from '@transport/node/xml'
 import type { BinaryNode } from '@transport/types'
 import type { WaComms } from '@transport/WaComms'
@@ -40,11 +41,16 @@ export class WaNodeTransport extends EventEmitter {
             tag: node.tag,
             id: node.attrs.id,
             type: node.attrs.type,
-            xml: this.shouldIncludeTraceXml() ? formatBinaryNodeAsXml(node) : undefined
+            xml:
+                this.shouldIncludeTraceXml() && !isBusinessAuthenticationNode(node)
+                    ? formatBinaryNodeAsXml(node)
+                    : undefined
         })
         const frame = encodeBinaryNodeStanza(node)
-        this.emit('node_out', node, frame)
-        this.emit('frame_out', frame)
+        if (!isBusinessAuthenticationNode(node)) {
+            this.emit('node_out', node, frame)
+            this.emit('frame_out', frame)
+        }
         await comms.sendFrame(frame)
     }
 
@@ -57,11 +63,11 @@ export class WaNodeTransport extends EventEmitter {
         frame: Uint8Array,
         onNode: (node: BinaryNode) => Promise<void> | void
     ): Promise<void> {
-        this.emit('frame_in', frame)
         let node: BinaryNode
         try {
             node = await decodeBinaryNodeStanza(frame)
         } catch (error) {
+            this.emit('frame_in', frame)
             const normalized = toError(error)
             if (normalized.message === 'stream end stanza is not a binary node') {
                 return
@@ -72,12 +78,18 @@ export class WaNodeTransport extends EventEmitter {
             this.emit('decode_error', normalized, frame)
             return
         }
-        this.emit('node_in', node, frame)
+        if (!isBusinessAuthenticationNode(node)) {
+            this.emit('frame_in', frame)
+            this.emit('node_in', node, frame)
+        }
         this.logger.trace('node transport node in', {
             tag: node.tag,
             id: node.attrs.id,
             type: node.attrs.type,
-            xml: this.shouldIncludeTraceXml() ? formatBinaryNodeAsXml(node) : undefined
+            xml:
+                this.shouldIncludeTraceXml() && !isBusinessAuthenticationNode(node)
+                    ? formatBinaryNodeAsXml(node)
+                    : undefined
         })
         await onNode(node)
     }

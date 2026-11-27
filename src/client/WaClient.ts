@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 
 import type { WaAppStateSyncClient } from '@appstate/sync/WaAppStateSyncClient'
 import type { WaAuthClient } from '@auth/WaAuthClient'
+import type { WaBusinessAgentCoordinator } from '@client/business-agent/types'
 import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { WaBotCoordinator } from '@client/coordinators/WaBotCoordinator'
 import type { WaBroadcastListCoordinator } from '@client/coordinators/WaBroadcastListCoordinator'
@@ -522,6 +523,7 @@ class WaClientImpl extends EventEmitter {
             return this.connectPromise
         }
 
+        if (!this.deps.connectionManager.isConnected()) this.deps.businessAgent.invalidate()
         if (!this.disposePlugins) {
             this.installPlugins()
         }
@@ -559,6 +561,7 @@ class WaClientImpl extends EventEmitter {
      * your own backoff.
      */
     public async disconnect(): Promise<void> {
+        this.deps.businessAgent.invalidate()
         this.deps.privacyCoordinator.stopAccountSyncRefresh()
         await this.pauseIncomingEventsAndWaitDrain()
         const writeBehindFlush = await this.writeBehind.flush(
@@ -672,6 +675,15 @@ class WaClientImpl extends EventEmitter {
     public get business(): WaBusinessCoordinator {
         return this.deps.businessCoordinator
     }
+    /**
+     * Experimental Business-only Meta Business Agent controls via the QR session.
+     * Requires an eligible account with the agent already available.
+     * @example
+     * const settings = await client.businessAgent.getResponseSettings()
+     */
+    public get businessAgent(): WaBusinessAgentCoordinator {
+        return this.deps.businessAgent.api
+    }
     /** Bot coordinator: Meta-AI bot profiles, prompt/chunk decryption. */
     public get bot(): WaBotCoordinator {
         return this.deps.botCoordinator
@@ -719,6 +731,7 @@ class WaClientImpl extends EventEmitter {
     }
 
     private async clearStoredState(): Promise<void> {
+        this.deps.businessAgent.invalidate()
         await this.pauseIncomingEventsAndWaitDrain()
         const writeBehindDestroy = await this.writeBehind.destroy(
             this.options.writeBehind?.flushTimeoutMs

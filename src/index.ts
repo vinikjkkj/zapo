@@ -1,3 +1,17 @@
+export { WA_BUSINESS_AGENT } from '@protocol/business-agent'
+export { WaBusinessAgentError } from '@client/business-agent/errors'
+export type {
+    WaBusinessAgentAbility,
+    WaBusinessAgentAudienceRule,
+    WaBusinessAgentConversationUpdate,
+    WaBusinessAgentCoordinator,
+    WaBusinessAgentMutationResult,
+    WaBusinessAgentReengagementUpdate,
+    WaBusinessAgentReplyStatus,
+    WaBusinessAgentSettings,
+    WaBusinessAgentSettingsAvailability,
+    WaBusinessAgentSettingsUpdate
+} from '@client/business-agent/types'
 export { WaClient } from '@client'
 export { defineWaClientPlugin } from '@client/plugins'
 export type { WaClientDependencies } from '@client/WaClientFactory'

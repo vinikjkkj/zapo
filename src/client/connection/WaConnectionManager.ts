@@ -21,6 +21,7 @@ interface WaConnectionManagerOptions {
     readonly getPassiveTasks: () => WaPassiveTasksCoordinator | null
     readonly clearStoredCredentials: () => Promise<void>
     readonly onPostPairReconnected: () => void
+    readonly onConnectionClosed?: () => void
 }
 
 export class WaConnectionManager {
@@ -33,6 +34,7 @@ export class WaConnectionManager {
     private readonly getPassiveTasks: () => WaPassiveTasksCoordinator | null
     private readonly clearStoredCredentialsCallback: () => Promise<void>
     private readonly onPostPairReconnected: () => void
+    private readonly onConnectionClosed: (() => void) | undefined
     private comms: WaComms | null
     private clockSkewMs: number | null
     private mediaConnCache: WaMediaConn | null
@@ -54,6 +56,7 @@ export class WaConnectionManager {
         this.getPassiveTasks = options.getPassiveTasks
         this.clearStoredCredentialsCallback = options.clearStoredCredentials
         this.onPostPairReconnected = options.onPostPairReconnected
+        this.onConnectionClosed = options.onConnectionClosed
         this.comms = null
         this.clockSkewMs = null
         this.mediaConnCache = null
@@ -349,7 +352,10 @@ export class WaConnectionManager {
             disableNoiseCertificateChainVerification:
                 this.options.dangerous?.disableNoiseCertificateChainVerification
         })
-        const comms = new WaComms(commsConfig, this.logger)
+        const comms = new WaComms(
+            { ...commsConfig, onConnectionClosed: this.onConnectionClosed },
+            this.logger
+        )
         this.pendingComms = comms
 
         this.mediaConnCache = null

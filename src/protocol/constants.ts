@@ -1,3 +1,4 @@
+export { WA_BUSINESS_AGENT } from '@protocol/business-agent'
 export {
     getWaBrowserDisplayName,
     getWaCompanionPlatformId,
